@@ -1,0 +1,45 @@
+# Apache .htaccess configuration for LDCDentClinicSys
+
+RewriteEngine On
+
+# Security: prevent directory listing
+Options -Indexes
+AddDefaultCharset UTF-8
+
+# Hide PHP/system paths from browser output when mod_php is available
+<IfModule mod_php.c>
+    php_flag display_errors Off
+    php_flag display_startup_errors Off
+    php_value expose_php 0
+</IfModule>
+
+# Serve existing files/directories directly (important for assets and uploads)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Deny direct access to internal app folders from URL (only on production/hostinger)
+RewriteCond %{HTTP_HOST} !^(?:localhost|127\.0\.0\.1)(?::\d+)?$ [NC]
+RewriteRule ^(?:views|controllers)/ - [R=404,L,NC]
+
+# Public API routes -> controllers (without exposing /controllers in URL)
+RewriteRule ^api/(.+)$ controllers/$1 [L,QSA]
+
+# Public routes -> internal views
+RewriteRule ^$ views/index.php [L]
+RewriteCond %{DOCUMENT_ROOT}/views/$1.php -f
+RewriteRule ^([a-zA-Z0-9_-]+)/?$ views/$1.php [L,QSA]
+
+# Fallback to front controller
+RewriteRule ^ index.php [L]
+
+# Prevent direct access to sensitive files
+<FilesMatch "^(config\.php|\.htaccess)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>

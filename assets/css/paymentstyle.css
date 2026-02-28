@@ -1,0 +1,859 @@
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2980b9;
+    --accent-color: #f5e2b3;
+    --light-color: #f8f9fa;
+    --dark-color: #343a40;
+    --success-color: #2ecc71;
+    --warning-color: #f39c12;
+    --border-color: #e0e0e0;
+    --shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f5f7fa;
+    color: var(--dark-color);
+    line-height: 1.6;
+    padding-bottom: 40px;
+}
+
+.payment-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.header-section {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.header-section h1 {
+    font-size: 2.2rem;
+    color: var(--dark-color);
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.header-section p {
+    color: #666;
+    font-size: 1.1rem;
+}
+
+.content-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+}
+
+.summary-section, .payment-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.section-header {
+    padding: 25px 30px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: #f8fafc;
+}
+
+.section-header h2 {
+    font-size: 1.5rem;
+    color: var(--dark-color);
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+.section-header p {
+    color: #666;
+    font-size: 0.95rem;
+}
+
+.info-section {
+    padding: 25px 30px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.info-section:last-child {
+    border-bottom: none;
+}
+
+.section-title {
+    font-size: 1.1rem;
+    color: var(--dark-color);
+    margin-bottom: 15px;
+    font-weight: 600;
+    position: relative;
+    padding-left: 15px;
+}
+
+.section-title::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 5px;
+    height: 16px;
+    width: 4px;
+    background-color: var(--primary-color);
+    border-radius: 2px;
+}
+
+.info-table {
+    width: 100%;
+    margin-bottom: 15px;
+    border-collapse: collapse;
+}
+
+.table-row {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.table-row:last-child {
+    border-bottom: none;
+}
+
+.table-cell {
+    flex: 1;
+    padding: 10px 0;
+}
+
+.gender-info {
+    padding: 5px 0;
+}
+
+.contact-details {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.contact-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.contact-label {
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 3px;
+    font-size: 0.9rem;
+}
+
+.contact-value {
+    color: var(--dark-color);
+}
+
+.patient-details {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.patient-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+.patient-row:last-child {
+    border-bottom: none;
+}
+
+.patient-label {
+    font-weight: 600;
+    color: var(--dark-color);
+    min-width: 100px;
+    margin-right: 10px;
+}
+
+.patient-value {
+    color: var(--dark-color);
+    font-weight: 500;
+}
+
+.appointment-details {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
+    font-weight: 500;
+    color: #555;
+}
+
+.detail-value {
+    color: var(--dark-color);
+    font-weight: 500;
+}
+
+.payment-method-section {
+    padding: 25px 30px;
+}
+
+.payment-method-selector {
+    margin-bottom: 25px;
+}
+
+.payment-method-selector select {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    background-color: white;
+    transition: all 0.3s;
+}
+
+.payment-method-selector select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+}
+
+.payment-details {
+    margin-top: 20px;
+}
+
+.payment-option {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.payment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background-color: #f8fafc;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.payment-logo {
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: var(--dark-color);
+}
+
+.payment-logo i {
+    margin-right: 10px;
+    font-size: 1.3rem;
+    color: var(--primary-color);
+}
+
+.payment-qr {
+    text-align: center;
+}
+
+.payment-qr p {
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.qr-code {
+    width: 150px;
+    height: 150px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.qr-code img {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.account-info {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: center;
+    background-color: #f8fafc;
+}
+
+.account-info p {
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.account-number {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: var(--dark-color);
+}
+
+.payment-form {
+    padding: 20px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--dark-color);
+    font-size: 0.95rem;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    transition: all 0.3s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+}
+
+.form-hint {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.85rem;
+    color: #666;
+    font-style: italic;
+}
+
+.file-upload {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.file-upload input[type="file"] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+
+.file-text {
+    display: block;
+    padding: 12px 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: white;
+    color: #666;
+}
+
+.confirmation-checkbox {
+    display: flex;
+    align-items: flex-start;
+    margin: 25px 0;
+    padding: 15px;
+    background-color: #f8fafc;
+    border-radius: 8px;
+}
+
+.confirmation-checkbox input {
+    margin-right: 10px;
+    margin-top: 3px;
+}
+
+.confirmation-checkbox label {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #555;
+    cursor: pointer;
+}
+
+.pay-button {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    background-color: var(--success-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.pay-button:hover {
+    background-color: #27ae60;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.pay-button:active {
+    transform: translateY(0);
+}
+
+.pay-button:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.fee-notice {
+    padding: 20px 30px;
+    background-color: #f5e2b3;
+    border-top: 1px solid var(--border-color);
+    margin-top: 20px;
+    margin: 20px;
+    border-radius: 10px;
+    border: 1px solid black;
+}
+
+.fee-notice p {
+    margin-bottom: 5px;
+    font-size: 0.95rem;
+}
+
+.fee-notice p:last-child {
+    margin-bottom: 0;
+    color: #666;
+}
+
+/* Doctor / Clinic Availability Calendar */
+.availability-calendar {
+    margin-top: 20px;
+    padding: 20px 22px 18px;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.availability-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.availability-header .cal-month {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--dark-color);
+}
+
+.cal-nav {
+    border: none;
+    background: white;
+    color: var(--dark-color);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cal-nav:hover {
+    background: var(--primary-color);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+}
+
+.cal-cell {
+    font-size: 0.75rem;
+}
+
+.cal-head {
+    text-align: center;
+    font-weight: 600;
+    color: #64748b;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.cal-empty {
+    min-height: 68px;
+}
+
+.cal-day {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 6px 6px 8px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 68px;
+    transition: all 0.2s ease;
+}
+
+.cal-day .day-number {
+    font-weight: 600;
+    color: #0f172a;
+    font-size: 0.8rem;
+}
+
+.cal-day .day-status-text {
+    font-size: 0.68rem;
+    color: #64748b;
+}
+
+.cal-day .day-status-bars {
+    display: flex;
+    justify-content: space-between;
+    gap: 3px;
+    margin-top: 4px;
+}
+
+.cal-day .bar {
+    flex: 1;
+    border-radius: 20px;
+    padding: 2px 0;
+    font-size: 0.6rem;
+    text-align: center;
+    color: #fff;
+}
+
+.available-bar {
+    background: #22c55e;
+}
+
+.booked-bar {
+    background: #0ea5e9;
+}
+
+.blocked-bar {
+    background: #ef4444;
+}
+
+.cal-day.status-available {
+    border-color: rgba(34, 197, 94, 0.5);
+    background: #f0fdf4;
+}
+
+.cal-day.status-limited {
+    border-color: rgba(234, 179, 8, 0.7);
+    background: #fffbeb;
+}
+
+.cal-day.status-full {
+    border-color: rgba(239, 68, 68, 0.75);
+    background: #fef2f2;
+}
+
+.cal-day.cal-today {
+    box-shadow: 0 0 0 1px var(--primary-color);
+}
+
+.cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+    font-size: 0.7rem;
+    color: #64748b;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+}
+
+.legend-available {
+    background: #22c55e;
+}
+
+.legend-limited {
+    background: #eab308;
+}
+
+.legend-full {
+    background: #ef4444;
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+    .content-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .payment-header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .payment-container {
+        padding: 15px;
+    }
+    
+    .header-section h1 {
+        font-size: 1.8rem;
+    }
+    
+    .section-header, .info-section, .payment-method-section {
+        padding: 20px;
+    }
+    
+    .payment-form {
+        padding: 15px;
+    }
+    
+    .qr-code {
+        width: 120px;
+        height: 120px;
+    }
+    
+    /* Calendar responsive adjustments for tablets */
+    .availability-calendar {
+        padding: 15px 18px 14px;
+    }
+    
+    .cal-grid {
+        gap: 5px;
+    }
+    
+    .cal-day {
+        min-height: 60px;
+        padding: 5px 4px 6px;
+    }
+    
+    .cal-day .day-number {
+        font-size: 0.75rem;
+    }
+    
+    .cal-day .day-status-text {
+        font-size: 0.65rem;
+    }
+    
+    .cal-day .bar {
+        font-size: 0.55rem;
+        padding: 1px 0;
+    }
+    
+    .cal-empty {
+        min-height: 60px;
+    }
+    
+    .cal-legend {
+        font-size: 0.65rem;
+        gap: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header-section h1 {
+        font-size: 1.6rem;
+    }
+    
+    .section-header h2 {
+        font-size: 1.3rem;
+    }
+    
+    .detail-row {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .confirmation-checkbox {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .confirmation-checkbox input {
+        margin-bottom: 10px;
+    }
+    
+    /* Calendar responsive adjustments for mobile phones */
+    .availability-calendar {
+        padding: 12px 14px 12px;
+        margin-top: 15px;
+    }
+    
+    .availability-header {
+        margin-bottom: 12px;
+    }
+    
+    .availability-header .cal-month {
+        font-size: 0.9rem;
+    }
+    
+    .cal-nav {
+        width: 28px;
+        height: 28px;
+        font-size: 0.9rem;
+    }
+    
+    .cal-grid {
+        gap: 4px;
+    }
+    
+    .cal-cell {
+        font-size: 0.7rem;
+    }
+    
+    .cal-head {
+        font-size: 0.7rem;
+        padding-bottom: 5px;
+    }
+    
+    .cal-empty {
+        min-height: 50px;
+    }
+    
+    .cal-day {
+        min-height: 50px;
+        padding: 4px 3px 5px;
+        border-radius: 6px;
+    }
+    
+    .cal-day .day-number {
+        font-size: 0.7rem;
+        line-height: 1.2;
+    }
+    
+    .cal-day .day-status-text {
+        font-size: 0.6rem;
+        line-height: 1.2;
+        margin-top: 1px;
+    }
+    
+    .cal-day .day-status-bars {
+        gap: 2px;
+        margin-top: 3px;
+    }
+    
+    .cal-day .bar {
+        font-size: 0.5rem;
+        padding: 1px 0;
+        border-radius: 15px;
+        min-width: 0;
+    }
+    
+    .cal-legend {
+        font-size: 0.6rem;
+        gap: 6px;
+        margin-top: 12px;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .legend-item {
+        gap: 3px;
+    }
+    
+    .legend-dot {
+        width: 8px;
+        height: 8px;
+    }
+}
+
+/* Extra small devices (very small phones) */
+@media (max-width: 360px) {
+    .availability-calendar {
+        padding: 10px 12px 10px;
+    }
+    
+    .cal-grid {
+        gap: 3px;
+    }
+    
+    .cal-day {
+        min-height: 45px;
+        padding: 3px 2px 4px;
+    }
+    
+    .cal-day .day-number {
+        font-size: 0.65rem;
+    }
+    
+    .cal-day .day-status-text {
+        font-size: 0.55rem;
+    }
+    
+    .cal-day .bar {
+        font-size: 0.45rem;
+    }
+    
+    .cal-empty {
+        min-height: 45px;
+    }
+    
+    .cal-head {
+        font-size: 0.65rem;
+    }
+    
+    .availability-header .cal-month {
+        font-size: 0.85rem;
+    }
+    
+    .cal-nav {
+        width: 26px;
+        height: 26px;
+        font-size: 0.85rem;
+    }
+}
+
+/* Landscape orientation adjustments for tablets */
+@media (max-width: 1024px) and (orientation: landscape) {
+    .cal-day {
+        min-height: 55px;
+    }
+    
+    .cal-empty {
+        min-height: 55px;
+    }
+}
