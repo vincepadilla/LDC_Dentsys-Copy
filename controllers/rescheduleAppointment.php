@@ -1,15 +1,20 @@
 <?php
+session_start();
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+header('Content-Type: application/json');
+
+require_once __DIR__ . '/../libraries/PhpMailer/src/Exception.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/PHPMailer.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/SMTP.php';
+
+require_once __DIR__ . '/../database/config.php';
+
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-require '../libraries/PhpMailer/src/Exception.php';
-require '../libraries/PhpMailer/src/PHPMailer.php';
-require '../libraries/PhpMailer/src/SMTP.php';
-
-include_once("../database/config.php");
-session_start();
-
-header('Content-Type: application/json');
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
 
@@ -25,6 +30,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
     $new_date = $_POST['new_date_resched'] ?? null;
     $new_time_slot = $_POST['new_time_slot'] ?? null;
     $reschedule_reason = trim($_POST['reschedule_reason'] ?? '');
+    // Source of reschedule: 'admin' from admin panel, otherwise default to 'user'
+    $reschedule_source = $_POST['reschedule_source'] ?? 'user';
     
     // Time Slot Mapping (unchanged)
     $timeMap = [
@@ -47,8 +54,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
         exit();
     }
     
-    // Validate reason
-    if (empty($reschedule_reason)) {
+    // Validate reason ONLY when rescheduled by admin (patient self-reschedule keeps old behavior)
+    if ($reschedule_source === 'admin' && empty($reschedule_reason)) {
         echo json_encode(['success' => false, 'message' => 'Please provide a reason for rescheduling.']);
         exit();
     }
@@ -76,16 +83,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
     $stmtCheck->close();
 
     // UPDATE appointment record - using "s" for appointment_id (VARCHAR, not integer)
+    // Also store the latest reschedule reason so it can be shown in the patient's account.
     $stmtUpdate = $con->prepare("
         UPDATE appointments
         SET appointment_date = ?, 
             appointment_time = ?, 
             time_slot = ?,
-            status = 'Pending'
+            status = 'Pending',
+            reschedule_reason = ?
         WHERE appointment_id = ?
     ");
-    // Changed from "sssi" to "ssss" - appointment_id is VARCHAR, not integer
-    $stmtUpdate->bind_param("ssss", $new_date, $new_time, $new_time_slot, $appointment_id);
+    // Changed from "sssi" to "sssss" - appointment_id and reschedule_reason are VARCHAR
+    $stmtUpdate->bind_param("sssss", $new_date, $new_time, $new_time_slot, $reschedule_reason, $appointment_id);
 
     if (!$stmtUpdate->execute()) {
         echo json_encode(['success' => false, 'message' => 'Failed to update appointment: ' . $stmtUpdate->error]);
@@ -152,7 +161,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
         $mail->isHTML(true);
         $mail->Subject = 'Appointment Rescheduled';
 
-        $reasonText = !empty($reschedule_reason) ? "<p><strong>Reason for Rescheduling:</strong> " . htmlspecialchars($reschedule_reason) . "</p>" : "";
+        // Only include a detailed reason section when the reschedule was done by the admin
+        $reasonText = ($reschedule_source === 'admin' && !empty($reschedule_reason))
+            ? "<p><strong>Reason for Rescheduling:</strong> " . htmlspecialchars($reschedule_reason) . "</p>"
+            : "";
         
         $mail->Body = "
             <h3>Hi {$patient_name},</h3>

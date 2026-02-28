@@ -657,6 +657,12 @@ tr:hover {
     color: #6b7280;
 }
 
+/* Backward compatibility: older rows may still show "processed" */
+.status-processed {
+    background-color: rgba(107, 114, 128, 0.2);
+    color: #6b7280;
+}
+
 /* Mobile Card View */
 .mobile-card-view {
     display: none;

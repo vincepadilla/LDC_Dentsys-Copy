@@ -768,6 +768,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
 <?php include_once('../layouts/footer.php'); ?>
 
 <script>
+
+(function () {
+  const ids = ["gcashAmount", "mayaAmount"];
+
+  ids.forEach(id => {
+    const input = document.getElementById(id);
+    if (!input) return;
+
+    // create / get an error <small> right after the input
+    let error = input.parentElement.querySelector(".amountError");
+    if (!error) {
+      error = document.createElement("small");
+      error.className = "amountError";
+      error.style.color = "red";
+      input.parentElement.appendChild(error);
+    }
+
+    // block letters and symbols: e, E, +, -
+    input.addEventListener("keydown", (e) => {
+      if (["e", "E", "+", "-"].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+
+    // validate min 500
+    input.addEventListener("input", () => {
+      const value = parseFloat(input.value);
+
+      if (input.value !== "" && (isNaN(value) || value < 500)) {
+        error.textContent = "Minimum payment amount is ₱500";
+        input.setCustomValidity("Minimum payment amount is ₱500");
+      } else {
+        error.textContent = "";
+        input.setCustomValidity("");
+      }
+    });
+  });
+})();
 const paymentMethodSelect = document.getElementById('paymentMethod');
 
 const gcashFields = ['gcashaccName', 'gcashNum', 'gcashAmount', 'gcashrefNum', 'proofImage'];

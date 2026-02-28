@@ -1,12 +1,22 @@
 <?php
 session_start();
-include_once("../database/config.php");
-define("TITLE", "My Account");
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 include_once('../layouts/header.php');
+
+require_once __DIR__ . '/../libraries/PhpMailer/src/Exception.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/PHPMailer.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/SMTP.php';
+
+require_once __DIR__ . '/../database/config.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 // ✅ Check if user is logged in
 if (!isset($_SESSION['userID'])) {
-    header("Location: /login");
+    header("Location: /views/login.php");
     exit();
 }
 
@@ -42,7 +52,8 @@ if (!empty($user['patient_id'])) {
         SELECT a.appointment_id, a.appointment_date, a.appointment_time, 
                COALESCE(s.sub_service, s.service_category) as service_display, 
                s.sub_service, s.service_category, a.status, a.created_at,
-               p.method as payment_method, p.status as payment_status
+               a.reschedule_reason,
+               p.payment_id, p.method as payment_method, p.status as payment_status
         FROM appointments a
         INNER JOIN services s ON a.service_id = s.service_id
         LEFT JOIN payment p ON a.appointment_id = p.appointment_id
@@ -133,10 +144,13 @@ if (!empty($walkin_appointment)) {
         'service_display' => $service_display,
         'sub_service' => $walkin_appointment['sub_service'] ?? null,
         'service_category' => $walkin_appointment['service'] ?? null,
-        'status' => 'Walk-in',
+        // Use the actual walk-in status from the database so that
+        // any updates (e.g., Completed) are reflected in account.php
+        'status' => $walkin_appointment['status'] ?? 'Walk-in',
         'created_at' => $walkin_appointment['created_at'] ?? null,
         'payment_method' => 'Cash',
         'payment_status' => 'paid',
+        'reschedule_reason' => null,
         '_is_walkin' => true,
         'walkin_id' => $walkin_appointment['walkin_id'],
     ]];
@@ -707,24 +721,66 @@ if (isset($_SESSION['password_error'])) {
                         $status = $recent_appointment['status'];
                         $payment_method = $recent_appointment['payment_method'] ?? null;
                         $payment_status = $recent_appointment['payment_status'] ?? null;
+                        $payment_id = $recent_appointment['payment_id'] ?? null;
                         $isWalkInAppointment = !empty($recent_appointment['_is_walkin']) || ($status === 'Walk-in');
+
+                        // make sure refund_requests table exists so our later lookup doesn't error
+                        $createReqTable = "CREATE TABLE IF NOT EXISTS refund_requests (
+                                          id varchar(10) NOT NULL,
+                                          payment_id varchar(10) NOT NULL,
+                                          appointment_id varchar(10) NOT NULL,
+                                          user_id varchar(10) NOT NULL,
+                                          status enum('pending','processed','refunded') NOT NULL DEFAULT 'pending',
+                                          created_at timestamp NOT NULL DEFAULT current_timestamp(),
+                                          PRIMARY KEY (id),
+                                          UNIQUE KEY payment_id (payment_id)
+                                      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
+                        mysqli_query($con, $createReqTable);
+                        @mysqli_query($con, "ALTER TABLE refund_requests MODIFY status ENUM('pending','processed','refunded') NOT NULL DEFAULT 'pending'");
+
+                        // check if a refund request has already been submitted for this payment
+                        $alreadyRequested = false;
+                        $requestStatus = '';
+                        $requestDate = null;
+                        if (!empty($payment_id)) {
+                            $stmt = $con->prepare("SELECT status, created_at FROM refund_requests WHERE payment_id = ? LIMIT 1");
+                            if ($stmt) {
+                                $stmt->bind_param("s", $payment_id);
+                                $stmt->execute();
+                                $res = $stmt->get_result();
+                                if ($res && ($row = $res->fetch_assoc())) {
+                                    $alreadyRequested = true;
+                                    $requestStatus = $row['status'];
+                                    $requestDate = $row['created_at'];
+                                }
+                                $stmt->close();
+                            }
+                        }
                         
                         // Check if cash payment and not paid yet (check both lowercase and uppercase for safety)
                         $isCashUnpaid = ($payment_method == 'Cash' && (strtolower($payment_status) == 'pending' || $payment_status == null));
                         
-                        // Calculate deadline - check if appointment is tomorrow
+                        // Calculate date-related helpers
                         $appointment_date = $recent_appointment['appointment_date'];
                         $deadline_date = null;
                         $deadline_formatted = '';
                         $isTomorrow = false;
                         $today = new DateTime('today');
-                        
-                        if ($isCashUnpaid && $appointment_date) {
+                        $appointmentDateObj = null;
+                        $daysBeforeAppointment = null;
+
+                        if ($appointment_date && $appointment_date !== 'Walk-In' && $appointment_date !== 'Walk-in') {
                             $appointmentDateObj = new DateTime($appointment_date);
+                            $interval = $today->diff($appointmentDateObj);
+                            $daysBeforeAppointment = (int)$interval->format('%r%a'); // positive if appointment is in the future
+                        }
+
+                        // Calculate deadline - check if appointment is tomorrow (for unpaid cash)
+                        if ($isCashUnpaid && $appointmentDateObj) {
                             $tomorrow = clone $today;
                             $tomorrow->modify('+1 day');
                             $isTomorrow = ($appointmentDateObj->format('Y-m-d') === $tomorrow->format('Y-m-d'));
-                            
+
                             if ($isTomorrow) {
                                 // For tomorrow appointments, deadline is today
                                 $deadline_formatted = $today->format('F j, Y');
@@ -735,6 +791,18 @@ if (isset($_SESSION['password_error'])) {
                                 $deadline_formatted = $deadlineDateObj->format('F j, Y');
                             }
                         }
+
+                        // Determine if this cancelled appointment is eligible for a refund request
+                        $paymentStatusLower = strtolower($payment_status ?? '');
+                        $eligibleForRefundRequest = (
+                            $status === 'Cancelled' &&
+                            !$isWalkInAppointment &&
+                            !empty($payment_id) &&
+                            $paymentStatusLower === 'paid' &&
+                            $daysBeforeAppointment !== null &&
+                            $daysBeforeAppointment >= 2 &&
+                            !$alreadyRequested
+                        );
                         
                         $statusClass = match($status) {
                             'Pending' => 'status-pending',
@@ -790,11 +858,26 @@ if (isset($_SESSION['password_error'])) {
                                     echo "<p style='color: #856404; margin: 0; line-height: 1.6;'><strong>⚠️ Appointment Slot Reserved!</strong></p>";
                                     
                                     echo "<p style='color: #856404; margin: 10px 0 0 0; line-height: 1.6;'><strong>📱 On your appointment date (" . date('F j, Y', strtotime($appointment_date)) . "):</strong></p>";
-                                    echo "<p style='color: #856404; margin: 5px 0 0 0; line-height: 1.6;'>Please visit the clinic and present your QR code (received via email) to the cashier for verification and payment processing.</p>";
+                                    echo "<p style='color: #856404; margin: 5px 0 0 0; line-height: 1.6;'>Please visit the clinic and present your Appointment ID (in the confirmation email) to the cashier for payment.</p>";
                                     echo "<p style='color: #856404; margin: 5px 0 0 0; line-height: 1.6;'>Appointment ID: " . htmlspecialchars($recent_appointment['appointment_id']) . " (Status: Pending - Cash Payment Required)</p>";
                                     echo "</div>";
                                 } elseif ($status == "Pending") {
-                                    echo "<p>Your appointment has been scheduled. Please wait for confirmation.</p>";
+                                    // Show the "scheduled / cancel until ..." note only for the original booking.
+                                    // If admin/clinic rescheduled and left a note (`reschedule_reason`), hide that note here
+                                    // and let the "Note from clinic" section below be the main message.
+                                    if (empty($recent_appointment['reschedule_reason'])) {
+                                        echo "<p>Your appointment has been scheduled. Please wait for confirmation.</p>";
+                                        
+                                        if ($appointmentDateObj) {
+                                            $cancelDeadline = clone $appointmentDateObj;
+                                            $cancelDeadline->modify('-1 day');
+                                            echo "<p><strong>Note:</strong> You can cancel this appointment until " . $cancelDeadline->format('F j, Y') . " (1 day before your appointment date).</p>";
+                                        } else {
+                                            echo "<p><strong>Note:</strong> Cancellations must be made at least 1 day before your appointment date.</p>";
+                                        }
+                                    } else {
+                                        echo "<p>Your appointment has been rescheduled. Please wait for confirmation.</p>";
+                                    }
                                 } elseif ($status == "Confirmed") {
                                     echo "<p>Your appointment has been confirmed.</p>";
                                 } elseif ($status == "Walk-In") {
@@ -803,19 +886,50 @@ if (isset($_SESSION['password_error'])) {
                                     echo "<p>Your appointment has been completed.</p>";
                                 } elseif ($status == "Cancelled") {
                                     echo "<p>Your appointment has been cancelled.</p>";
+
+                                    if ($alreadyRequested) {
+                                        echo "<p class=\"text-success\"><strong>Refund request has already been submitted" .
+                                             ($requestStatus ? " (" . htmlspecialchars(ucfirst($requestStatus)) . ")" : "") .
+                                             ".</strong></p>";
+                                        if ($requestDate) {
+                                            echo "<p>Requested on " . date('F j, Y g:i A', strtotime($requestDate)) . "</p>";
+                                        }
+                                    } elseif ($eligibleForRefundRequest) {
+                                        echo "<p><strong>Note:</strong> This appointment was cancelled at least 2 days before the scheduled date. You may request a refund for your payment below.</p>";
+                                    }
                                 } elseif ($status == "Reschedule") {
                                     echo "<p>Your appointment has been rescheduled. Please wait for confirmation.</p>";
+                                }
+
+                                // If an admin provided a reschedule note, show it to the patient
+                                if (!empty($recent_appointment['reschedule_reason'])) {
+                                    echo "<p><strong>Note from clinic:</strong> " . htmlspecialchars($recent_appointment['reschedule_reason']) . "</p>";
+                                    echo "<p>If you are not available for this new schedule, you can reschedule again from this page.</p>";
                                 }
                                 ?>
                             </div>
                             
                             <div class="appointment-actions">
                                 <?php if ($status == 'Cancelled'): ?>
-                                    <!-- Only show Reschedule button for Cancelled appointments -->
+                                    <!-- For Cancelled appointments, allow reschedule and optional refund request -->
                                     <a href="reschedule.php?id=<?= $recent_appointment['appointment_id']; ?>" 
                                        class="btn btn-primary">
                                         Reschedule
                                     </a>
+
+                                    <?php if ($eligibleForRefundRequest): ?>
+                                        <button type="button"
+                                            class="btn btn-secondary refund-btn"
+                                            data-appointment-id="<?= htmlspecialchars($recent_appointment['appointment_id']); ?>"
+                                            data-payment-id="<?= htmlspecialchars($payment_id); ?>"
+                                            onclick="requestRefund(this)">
+                                            Request Refund
+                                        </button>
+                                    <?php elseif ($alreadyRequested): ?>
+                                        <button type="button" class="btn btn-secondary" disabled>
+                                            Refund Requested
+                                        </button>
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <!-- Show all buttons for non-cancelled appointments -->
                                     <a href="../controllers/printAppointmentReceipt.php?id=<?= urlencode($recent_appointment['appointment_id']); ?>" 
@@ -860,7 +974,7 @@ if (isset($_SESSION['password_error'])) {
     <div class="edit-modal-content">
         <span class="close" onclick="closeEditModal()">&times;</span>
         <h3>EDIT ACCOUNT INFORMATION</h3>
-        <form id="updateAccountForm" action="../controllers/updateAccount.php" method="POST">
+        <form action="../controllers/updateAccount.php" method="POST">
             <div class="form-row">
                 <div class="form-group">
                     <label>Username:</label>
@@ -914,7 +1028,7 @@ if (isset($_SESSION['password_error'])) {
             
             <div class="modal-actions">
                 <button type="button" class="btn btn-cancel" onclick="closeEditModal()">Cancel</button>
-                <button type="submit" class="btn-submit" id="updateAccountBtn">UPDATE ACCOUNT</button>
+                <button type="submit" class="btn-submit">UPDATE ACCOUNT</button>
             </div>
         </form>
     </div>
@@ -1316,60 +1430,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
         });
     }
-
-    // Handle Update Account Form
-    const updateAccountForm = document.getElementById('updateAccountForm');
-    if (updateAccountForm) {
-        updateAccountForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const submitButton = document.getElementById('updateAccountBtn');
-            const originalButtonText = submitButton.innerHTML;
-            
-            // Disable submit button and show loading
-            submitButton.disabled = true;
-            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
-            
-            // Create FormData object
-            const formData = new FormData(updateAccountForm);
-            
-            // Submit via AJAX
-            fetch('../controllers/updateAccount.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.text())
-            .then(text => {
-                // Check if response contains success message or alert
-                if (text.includes('Account updated successfully')) {
-                    // Show success notification with animation
-                    showNotification('success', 'Account Updated!', 'Your account information has been updated successfully.');
-                    
-                    // Close modal and reload after short delay
-                    setTimeout(() => {
-                        closeEditModal();
-                        location.reload();
-                    }, 2000);
-                } else if (text.includes('Failed to update')) {
-                    showNotification('error', 'Update Failed', 'Failed to update account. Please try again.');
-                    submitButton.disabled = false;
-                    submitButton.innerHTML = originalButtonText;
-                } else {
-                    showNotification('error', 'Error', 'An unexpected error occurred.');
-                    submitButton.disabled = false;
-                    submitButton.innerHTML = originalButtonText;
-                }
-            })
-            .catch(error => {
-                submitButton.disabled = false;
-                submitButton.innerHTML = originalButtonText;
-                console.error('Error:', error);
-                showNotification('error', 'Error', 'An error occurred while updating your account. Please try again.');
-            });
-            
-            return false;
-        });
-    }
 });
 
 // ==================== NOTIFICATION SYSTEM ====================
@@ -1495,10 +1555,11 @@ function cancelAppointment(appointmentId) {
     // Show loading state
     showNotification('info', 'Processing...', 'Please wait while we cancel your appointment.', '<i class="fas fa-spinner fa-spin"></i>', 2000);
     
-    fetch(`../controllers/cancelAppointment.php?id=${appointmentId}`, {
+    fetch(`../controllers/cancelAppointment.php?id=${encodeURIComponent(appointmentId)}`, {
         method: 'GET',
         headers: {
-            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
         }
     })
     .then(response => {
@@ -1528,6 +1589,63 @@ function cancelAppointment(appointmentId) {
     });
 }
 // ==================== END CANCEL APPOINTMENT ====================
+
+// ==================== REFUND REQUEST AJAX ====================
+function requestRefund(button) {
+    const appointmentId = button.getAttribute('data-appointment-id');
+    const paymentId = button.getAttribute('data-payment-id');
+
+    if (!appointmentId || !paymentId) {
+        showNotification('error', 'Refund Error', 'Missing appointment or payment information for refund request.');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('appointment_id', appointmentId);
+    formData.append('payment_id', paymentId);
+
+    showNotification('info', 'Submitting Refund Request', 'Please wait while we send your refund request to the clinic.', '<i class="fas fa-spinner fa-spin"></i>', 3000);
+
+    fetch('../controllers/requestRefund.php', {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData
+    })
+    .then(response => {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return response.json();
+        }
+        return response.text().then(text => {
+            try {
+                return JSON.parse(text);
+            } catch {
+                return { success: false, message: text || 'Unexpected response from server.' };
+            }
+        });
+    })
+    .then(data => {
+        if (data.success) {
+            showNotification('success', 'Refund Request Sent', data.message || 'Your refund request has been sent to the clinic.');
+            // disable button and give feedback
+            button.disabled = true;
+            button.textContent = 'Refund Requested';
+            // reload page after short delay so eligibility and UI update
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        } else {
+            showNotification('error', 'Refund Request Failed', data.message || 'Unable to submit your refund request. Please try again later.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('error', 'Error', 'An error occurred while submitting your refund request. Please try again.');
+    });
+}
+// ==================== END REFUND REQUEST AJAX ====================
 
 </script>
 

@@ -904,9 +904,6 @@ $result = mysqli_query($con, $sql);
             return;
         }
         
-        const formData = new FormData();
-        formData.append('appointment_id', appointmentId);
-        
         const originalHTML = button.innerHTML;
         const originalText = button.textContent.trim();
         button.disabled = true;
@@ -916,43 +913,50 @@ $result = mysqli_query($con, $sql);
         } else {
             button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         }
+        
         fetch('../controllers/confirmAppointment.php', {
             method: 'POST',
-            body: formData
-            })
-            .then(async (response) => {
-            const text = await response.text(); // always read body first
-
-            // Try parse JSON (even if server sent text/html)
-            let data = null;
-            try { data = JSON.parse(text); } catch { /* ignore */ }
-
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'appointment_id=' + encodeURIComponent(appointmentId)
+        })
+        .then(response => {
             if (!response.ok) {
-                // show the server message if available
-                const msg = (data && data.message) ? data.message : text || `HTTP ${response.status}`;
-                throw new Error(msg);
+                throw new Error('Network response was not ok');
             }
-
-            // if parsed JSON is ok, use it; else fallback
-            return data ?? { success: true };
-            })
-            .then(data => {
-            if (data.success || data.status === 'success') {
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+                return response.json();
+            } else {
+                return response.text().then(text => {
+                    // Try to parse as JSON if possible
+                    try {
+                        return JSON.parse(text);
+                    } catch {
+                        return { success: true };
+                    }
+                });
+            }
+        })
+        .then(data => {
+            if (data.success || data.status === 'success' || !data.message) {
                 showNotification('success', 'Appointment Confirmed', `Appointment #${appointmentId} has been confirmed.`);
-                setTimeout(() => location.reload(), 1500);
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
             } else {
                 showNotification('error', 'Error', data.message || 'Failed to confirm appointment. Please try again.');
                 button.disabled = false;
                 button.innerHTML = originalHTML;
             }
-            })
-            .catch(error => {
-            console.error('Confirm error:', error);
-            showNotification('error', 'Error', error.message || 'An error occurred while confirming the appointment.');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('error', 'Error', 'An error occurred while confirming the appointment. Please try again.');
             button.disabled = false;
             button.innerHTML = originalHTML;
-            }); 
-       
+        });
     }
     
     // Mark No-Show

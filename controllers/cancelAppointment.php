@@ -1,24 +1,49 @@
 <?php
+
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+require_once __DIR__ . '/../libraries/PhpMailer/src/Exception.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/PHPMailer.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/SMTP.php';
+
+session_start();
+require_once __DIR__ . '/../database/config.php';
+
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-require '../PhpMailer/src/Exception.php';
-require '../PhpMailer/src/PHPMailer.php';
-require '../PhpMailer/src/SMTP.php';
+// Detect AJAX request (used by account.php and allAppointments.php)
+$isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+          strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-session_start();
-include_once('config.php');
+function sendJsonResponse(bool $success, string $message, array $extra = []): void {
+    header('Content-Type: application/json');
+    echo json_encode(array_merge([
+        'success' => $success,
+        'message' => $message,
+    ], $extra));
+    exit();
+}
 
 // Check if user is logged in
 if (!isset($_SESSION['userID'])) {
-    header("Location: login.php");
+    if ($isAjax) {
+        sendJsonResponse(false, 'You are not logged in.');
+    }
+    header("Location: ../views/login.php");
     exit();
 }
 
 $appointment_id = $_GET['id'] ?? null;
 
 if (!$appointment_id) {
-    echo "<script>alert('Invalid appointment ID.'); window.location.href='account.php';</script>";
+    $msg = 'Invalid appointment ID.';
+    if ($isAjax) {
+        sendJsonResponse(false, $msg);
+    }
+    echo "<script>alert('{$msg}'); window.location.href='../views/account.php';</script>";
     exit();
 }
 
@@ -35,24 +60,52 @@ $appointmentQuery = $con->prepare("
     LEFT JOIN multidisciplinary_dental_team d ON a.team_id = d.team_id
     WHERE a.appointment_id = ? AND p.user_id = ?
 ");
+
+if (!$appointmentQuery) {
+    $msg = 'Failed to prepare appointment lookup.';
+    if ($isAjax) {
+        sendJsonResponse(false, $msg);
+    }
+    echo "<script>alert('{$msg}'); window.location.href='../views/account.php';</script>";
+    exit();
+}
+
 $appointmentQuery->bind_param("ss", $appointment_id, $user_id);
 $appointmentQuery->execute();
 $appointmentResult = $appointmentQuery->get_result();
 $appointment = $appointmentResult->fetch_assoc();
 
 if (!$appointment) {
-    echo "<script>alert('Appointment not found or you do not have permission to cancel this appointment.'); window.location.href='account.php';</script>";
+    $msg = 'Appointment not found or you do not have permission to cancel this appointment.';
+    if ($isAjax) {
+        sendJsonResponse(false, $msg);
+    }
+    echo "<script>alert('{$msg}'); window.location.href='../views/account.php';</script>";
     exit();
 }
 
 // Check if appointment is already cancelled
 if ($appointment['status'] === 'Cancelled') {
-    echo "<script>alert('This appointment is already cancelled.'); window.location.href='account.php';</script>";
+    $msg = 'This appointment is already cancelled.';
+    if ($isAjax) {
+        sendJsonResponse(true, $msg, ['alreadyCancelled' => true]);
+    }
+    echo "<script>alert('{$msg}'); window.location.href='../views/account.php';</script>";
     exit();
 }
 
 // Cancel appointment - using appointments table with VARCHAR appointment_id
 $updateAppointment = $con->prepare("UPDATE appointments SET status = 'Cancelled' WHERE appointment_id = ?");
+
+if (!$updateAppointment) {
+    $msg = 'Failed to prepare cancel statement.';
+    if ($isAjax) {
+        sendJsonResponse(false, $msg);
+    }
+    echo "<script>alert('{$msg}'); window.history.back();</script>";
+    exit();
+}
+
 $updateAppointment->bind_param("s", $appointment_id);
 
 if ($updateAppointment->execute()) {
@@ -60,18 +113,22 @@ if ($updateAppointment->execute()) {
     
     // Find and update payment status if already paid (using payment table, not tbl_payment)
     $paymentQuery = $con->prepare("SELECT status FROM payment WHERE appointment_id = ?");
-    $paymentQuery->bind_param("s", $appointment_id);
-    $paymentQuery->execute();
-    $paymentResult = $paymentQuery->get_result();
+    if ($paymentQuery) {
+        $paymentQuery->bind_param("s", $appointment_id);
+        $paymentQuery->execute();
+        $paymentResult = $paymentQuery->get_result();
 
-    if ($paymentResult->num_rows > 0) {
-        $payment = $paymentResult->fetch_assoc();
-        
-        if ($payment['status'] === 'paid' || $payment['status'] === 'pending') {
-            $refund = $con->prepare("UPDATE payment SET status = 'refund' WHERE appointment_id = ?");
-            $refund->bind_param("s", $appointment_id);
-            $refund->execute();
-            $paymentRefunded = true;
+        if ($paymentResult->num_rows > 0) {
+            $payment = $paymentResult->fetch_assoc();
+            
+            if ($payment['status'] === 'paid' || $payment['status'] === 'pending') {
+                $refund = $con->prepare("UPDATE payment SET status = 'refund' WHERE appointment_id = ?");
+                if ($refund) {
+                    $refund->bind_param("s", $appointment_id);
+                    $refund->execute();
+                    $paymentRefunded = true;
+                }
+            }
         }
     }
 
@@ -142,22 +199,37 @@ if ($updateAppointment->execute()) {
 
         $mail->send();
 
-        // Show appropriate success message
-        if ($paymentRefunded) {
-            echo "<script>alert('Appointment cancelled, payment refunded, and confirmation email sent.'); window.location.href='account.php';</script>";
-        } else {
-            echo "<script>alert('Appointment cancelled and confirmation email sent.'); window.location.href='account.php';</script>";
+        $successMessage = $paymentRefunded
+            ? 'Appointment cancelled, payment refunded, and confirmation email sent.'
+            : 'Appointment cancelled and confirmation email sent.';
+
+        if ($isAjax) {
+            sendJsonResponse(true, $successMessage, ['paymentRefunded' => $paymentRefunded]);
         }
 
+        echo "<script>alert('{$successMessage}'); window.location.href='../views/account.php';</script>";
     } catch (Exception $e) {
         // Appointment was cancelled but email failed
         if ($paymentRefunded) {
-            echo "<script>alert('Appointment cancelled and payment refunded, but email notification failed to send. Error: " . addslashes($mail->ErrorInfo) . "'); window.location.href='account.php';</script>";
+            $msg = 'Appointment cancelled and payment refunded, but email notification failed to send.';
         } else {
-            echo "<script>alert('Appointment cancelled, but email notification failed to send. Error: " . addslashes($mail->ErrorInfo) . "'); window.location.href='account.php';</script>";
+            $msg = 'Appointment cancelled, but email notification failed to send.';
         }
+
+        if ($isAjax) {
+            sendJsonResponse(true, $msg, [
+                'paymentRefunded' => $paymentRefunded,
+                'emailError' => $mail->ErrorInfo,
+            ]);
+        }
+
+        echo "<script>alert('" . addslashes($msg . ' Error: ' . $mail->ErrorInfo) . "'); window.location.href='../views/account.php';</script>";
     }
 } else {
-    echo "<script>alert('Error cancelling appointment.'); window.history.back();</script>";
+    $msg = 'Error cancelling appointment.';
+    if ($isAjax) {
+        sendJsonResponse(false, $msg);
+    }
+    echo "<script>alert('{$msg}'); window.history.back();</script>";
 }
 ?>

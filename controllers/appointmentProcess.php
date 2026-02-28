@@ -577,119 +577,166 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // For Cash: Create payment record linked to reserved appointment
             // Appointment status is "Reserved" - will be changed to "Pending" when payment is confirmed
             $payment_id = generateID('PY', 'payment', 'payment_id', $con);
-            $insertPayment = "INSERT INTO payment 
+            $paymentStatus = 'pending'; // Explicitly set status to pending
+            
+            // Use prepared statement for better security and reliability
+            $insertPaymentStmt = $con->prepare("INSERT INTO payment 
                 (payment_id, appointment_id, method, account_name, account_number, amount, reference_no, proof_image, status)
-                VALUES 
-                ('$payment_id', '$appointment_id', '$paymentMethod', '', '', '$paymentAmount', '', '', 'pending')";
-
-            if (mysqli_query($con, $insertPayment)) {
-                // Send ticket email to patient with confirm/cancel links
-                try {
-                    require_once '../libraries/PhpMailer/src/Exception.php';
-                    require_once '../libraries/PhpMailer/src/PHPMailer.php';
-                    require_once '../libraries/PhpMailer/src/SMTP.php';
-                    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
-                    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                    $host = $_SERVER['HTTP_HOST'] ?? '';
-                    $baseUrl = $host ? $protocol . '://' . $host : '';
-                    $confirmLink = $baseUrl . '/controllers/ticket_action.php?action=confirm&appointment_id=' . urlencode($appointment_id) . '&ticket=' . urlencode($ticketCode);
-                    $cancelLink = $baseUrl . '/controllers/ticket_action.php?action=cancel&appointment_id=' . urlencode($appointment_id) . '&ticket=' . urlencode($ticketCode);
-
-                    $mail->isSMTP();
-                    $mail->Host = 'smtp.gmail.com';
-                    $mail->SMTPAuth = true;
-                    $mail->Username = 'padillavincehenrick@gmail.com';
-                    $mail->Password = 'glxd csoa ispj bvjg';
-                    $mail->SMTPSecure = 'tls';
-                    $mail->Port = 587;
-
-                    $mail->setFrom('padillavincehenrick@gmail.com', 'Dental Clinic');
-                    $mail->addAddress($email, trim($fname . ' ' . $lname));
-                    $mail->isHTML(true);
-                    $mail->Subject = 'Your Appointment Ticket Code';
-                    // Generate QR image for email (QR contains the appointment_id for direct scanner lookup)
-                    // Using higher resolution (300x300) for better scanner readability
-                    $qrImgUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" . urlencode($appointment_id);
-
-                    $mail->Body =
-                        "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>" .
-                            "<h2 style='margin: 0 0 10px 0;'>Hello " . htmlspecialchars($fname) . "</h2>" .
-                            "<p style='margin: 0 0 10px 0;'>Your appointment has been reserved. Your ticket code is: <strong>" . htmlspecialchars($ticketCode) . "</strong></p>" .
-                            "<p style='margin: 0 0 14px 0;'><strong>Appointment:</strong> " . htmlspecialchars($date) . " at " . htmlspecialchars($time) . "</p>" .
-
-                            "<div style='margin: 16px 0; padding: 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; text-align: center;'>" .
-                                "<div style='font-weight: 700; margin-bottom: 8px;'>Your QR Code</div>" .
-                                "<img src='" . htmlspecialchars($qrImgUrl) . "' alt='Appointment QR Code' style='width: 300px; height: 300px; border: 8px solid #ffffff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); display: block; margin: 0 auto;' />" .
-                                "<div style='font-size: 12px; color: #6b7280; margin-top: 10px;'>Show this QR code on your appointment day for scanning and payment.</div>" .
-                            "</div>" .
-
-                            "<p style='margin: 0 0 10px 0;'>On your appointment day, the cashier/dentist will scan this QR code in the clinic to verify your ticket and then process payment.</p>" .
-                            "<p style='margin: 0 0 10px 0;'>If you will attend, you can confirm now: <a href='" . $confirmLink . "'>Confirm Appointment</a></p>" .
-                            "<p style='margin: 0 0 10px 0;'>If you wish to cancel, click: <a href='" . $cancelLink . "'>Cancel Appointment</a></p>" .
-                        "</div>";
-
-                    $mail->send();
-                } catch (Exception $ex) {
-                    error_log('Ticket email send failed: ' . ($mail->ErrorInfo ?? $ex->getMessage()));
-                }
-
-                // Check if appointment is tomorrow
-                $appointmentDate = new DateTime($date);
-                $today = new DateTime('today');
-                $tomorrow = clone $today;
-                $tomorrow->modify('+1 day');
-                $isTomorrow = ($appointmentDate->format('Y-m-d') === $tomorrow->format('Y-m-d'));
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            
+            if ($insertPaymentStmt) {
+                $emptyStr = '';
+                $insertPaymentStmt->bind_param("sssssdsss", 
+                    $payment_id, 
+                    $appointment_id, 
+                    $paymentMethod, 
+                    $emptyStr, 
+                    $emptyStr, 
+                    $paymentAmount, 
+                    $emptyStr, 
+                    $emptyStr, 
+                    $paymentStatus
+                );
                 
-                // For tomorrow appointments with cash: require immediate payment
-                // For other appointments with cash: maintain 2-day deadline
-                if ($isTomorrow) {
-                    $todayFormatted = $today->format('F j, Y');
-                    showSuccessNotificationPage(
-                        'Appointment Slot Reserved for Tomorrow!',
-                        "IMPORTANT: You must pay TODAY ($todayFormatted) at the branch, otherwise your reservation will be cancelled.<br><br>Your Ticket Code: $ticketCode<br>Present this code at reception on your appointment day.",
-                        $appointment_id,
-                        '../views/account.php',
-                        4000
-                    );
-                } else {
-                    // Calculate deadline date (2 days before appointment)
-                    $deadlineDate = clone $appointmentDate;
-                    $deadlineDate->modify('-2 days');
-                    $deadlineFormatted = $deadlineDate->format('F j, Y');
+                if ($insertPaymentStmt->execute()) {
+                    $insertPaymentStmt->close();
+                    // Send ticket email to patient with confirm/cancel links
+                    try {
+                        require_once '../libraries/PhpMailer/src/Exception.php';
+                        require_once '../libraries/PhpMailer/src/PHPMailer.php';
+                        require_once '../libraries/PhpMailer/src/SMTP.php';
+                        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+                        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                        $host = $_SERVER['HTTP_HOST'] ?? '';
+                        $baseUrl = $host ? $protocol . '://' . $host : '';
+                        $confirmLink = $baseUrl . '/controllers/ticket_action.php?action=confirm&appointment_id=' . urlencode($appointment_id) . '&ticket=' . urlencode($ticketCode);
+                        $cancelLink = $baseUrl . '/controllers/ticket_action.php?action=cancel&appointment_id=' . urlencode($appointment_id) . '&ticket=' . urlencode($ticketCode);
+
+                        $mail->isSMTP();
+                        $mail->Host = 'smtp.gmail.com';
+                        $mail->SMTPAuth = true;
+                        $mail->Username = 'padillavincehenrick@gmail.com';
+                        $mail->Password = 'glxd csoa ispj bvjg';
+                        $mail->SMTPSecure = 'tls';
+                        $mail->Port = 587;
+
+                        $mail->setFrom('padillavincehenrick@gmail.com', 'Dental Clinic');
+                        $mail->addAddress($email, trim($fname . ' ' . $lname));
+                        $mail->isHTML(true);
+                        $mail->Subject = 'Your Appointment Ticket Code';
+                        // Generate QR image for email (QR contains the appointment_id for direct scanner lookup)
+                        // Using higher resolution (300x300) for better scanner readability
+                        $qrImgUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" . urlencode($appointment_id);
+
+                        $mail->Body =
+                            "<div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>" .
+                                "<h2 style='margin: 0 0 10px 0;'>Hello " . htmlspecialchars($fname) . "</h2>" .
+                                "<p style='margin: 0 0 10px 0;'>Your appointment has been reserved. Your ticket code is: <strong>" . htmlspecialchars($ticketCode) . "</strong></p>" .
+                                "<p style='margin: 0 0 14px 0;'><strong>Appointment:</strong> " . htmlspecialchars($date) . " at " . htmlspecialchars($time) . "</p>" .
+
+                                "<div style='margin: 16px 0; padding: 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; text-align: center;'>" .
+                                    "<div style='font-weight: 700; margin-bottom: 8px;'>Your QR Code</div>" .
+                                    "<img src='" . htmlspecialchars($qrImgUrl) . "' alt='Appointment QR Code' style='width: 300px; height: 300px; border: 8px solid #ffffff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); display: block; margin: 0 auto;' />" .
+                                    "<div style='font-size: 12px; color: #6b7280; margin-top: 10px;'>Show this QR code on your appointment day for scanning and payment.</div>" .
+                                "</div>" .
+
+                                "<p style='margin: 0 0 10px 0;'>On your appointment day, the cashier/dentist will scan this QR code in the clinic to verify your ticket and then process payment.</p>" .
+                                "<p style='margin: 0 0 10px 0;'>If you will attend, you can confirm now: <a href='" . $confirmLink . "'>Confirm Appointment</a></p>" .
+                                "<p style='margin: 0 0 10px 0;'>If you wish to cancel, click: <a href='" . $cancelLink . "'>Cancel Appointment</a></p>" .
+                            "</div>";
+
+                        $mail->send();
+                    } catch (Exception $ex) {
+                        error_log('Ticket email send failed: ' . ($mail->ErrorInfo ?? $ex->getMessage()));
+                    }
+
+                    // Check if appointment is tomorrow
+                    $appointmentDate = new DateTime($date);
+                    $today = new DateTime('today');
+                    $tomorrow = clone $today;
+                    $tomorrow->modify('+1 day');
+                    $isTomorrow = ($appointmentDate->format('Y-m-d') === $tomorrow->format('Y-m-d'));
                     
-                    showSuccessNotificationPage(
-                        'Appointment Slot Reserved!',
-                        "Please pay at least 2 days before your appointment date ($date) at the branch. Deadline: $deadlineFormatted<br><br>Your Ticket Code: $ticketCode<br>Present this code at reception on your appointment day.",
-                        $appointment_id,
-                        '../views/account.php',
-                        4000
-                    );
+                    // For tomorrow appointments with cash: require immediate payment
+                    // For other appointments with cash: maintain 2-day deadline
+                    if ($isTomorrow) {
+                        $todayFormatted = $today->format('F j, Y');
+                        showSuccessNotificationPage(
+                            'Appointment Slot Reserved for Tomorrow!',
+                            "IMPORTANT: You must pay TODAY ($todayFormatted) at the branch, otherwise your reservation will be cancelled.<br><br>Your Ticket Code: $ticketCode<br>Present this code at reception on your appointment day.",
+                            $appointment_id,
+                            '../views/account.php',
+                            4000
+                        );
+                    } else {
+                        // Calculate deadline date (2 days before appointment)
+                        $deadlineDate = clone $appointmentDate;
+                        $deadlineDate->modify('-2 days');
+                        $deadlineFormatted = $deadlineDate->format('F j, Y');
+                        
+                        showSuccessNotificationPage(
+                            'Appointment Slot Reserved!',
+                            "Please pay at least 2 days before your appointment date ($date) at the branch. Deadline: $deadlineFormatted<br><br>Your Ticket Code: $ticketCode<br>Present this code at reception on your appointment day.",
+                            $appointment_id,
+                            '../views/account.php',
+                            4000
+                        );
+                    }
+                } else {
+                    $insertPaymentStmt->close();
+                    error_log('Cash payment insert error: ' . $insertPaymentStmt->error);
+                    echo "<script>alert('Error saving reservation. Try again.');
+                    window.location.href='../views/index.php#appointment';</script>";
+                    exit();
                 }
             } else {
-                error_log('Payment error: ' . mysqli_error($con));
-                echo "<script>alert('Error saving reservation. Try again.');
+                error_log('Cash payment prepare error: ' . $con->error);
+                echo "<script>alert('Error preparing payment statement. Try again.');
                 window.location.href='../views/index.php#appointment';</script>";
+                exit();
             }
         } else {
             // For GCash and PayMaya: Normal flow with appointment
             $payment_id = generateID('PY', 'payment', 'payment_id', $con);
-            $insertPayment = "INSERT INTO payment 
+            $paymentStatus = 'pending'; // Explicitly set status to pending
+            
+            // Use prepared statement for better security and reliability
+            $insertPaymentStmt = $con->prepare("INSERT INTO payment 
                 (payment_id, appointment_id, method, account_name, account_number, amount, reference_no, proof_image, status)
-                VALUES 
-                ('$payment_id', '$appointment_id', '$paymentMethod', '$paymentAccName', '$paymentNumber', '$paymentAmount', '$paymentRefNum', '$proofImagePath', 'pending')";
-
-            if (mysqli_query($con, $insertPayment)) {
-                // Show success notification with check animation
-                showSuccessNotificationPage(
-                    'Appointment Successfully Booked!',
-                    'Your appointment has been confirmed and is pending payment verification.',
-                    $appointment_id,
-                    '../views/account.php',
-                    3000
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            
+            if ($insertPaymentStmt) {
+                $insertPaymentStmt->bind_param("sssssdsss", 
+                    $payment_id, 
+                    $appointment_id, 
+                    $paymentMethod, 
+                    $paymentAccName, 
+                    $paymentNumber, 
+                    $paymentAmount, 
+                    $paymentRefNum, 
+                    $proofImagePath, 
+                    $paymentStatus
                 );
+                
+                if ($insertPaymentStmt->execute()) {
+                    $insertPaymentStmt->close();
+                    // Show success notification with check animation
+                    showSuccessNotificationPage(
+                        'Appointment Successfully Booked!',
+                        'Your appointment has been confirmed and is pending payment verification.',
+                        $appointment_id,
+                        '../views/account.php',
+                        3000
+                    );
+                } else {
+                    $insertPaymentStmt->close();
+                    error_log('Payment insert error: ' . $insertPaymentStmt->error);
+                    echo "<script>alert('Error saving payment. Try again.');
+                    window.location.href='../views/index.php#appointment';</script>";
+                }
             } else {
-                error_log('Payment error: ' . mysqli_error($con));
-                echo "<script>alert('Error saving payment. Try again.');
+                error_log('Payment prepare error: ' . $con->error);
+                echo "<script>alert('Error preparing payment statement. Try again.');
                 window.location.href='../views/index.php#appointment';</script>";
             }
         }

@@ -1213,7 +1213,7 @@ foreach ($defaults as $key => $defaultValue) {
 
             if (paymentMode === 'walkin') {
                 // Route Walk-In Payment to walkin.php and allow submission without date/time
-                appointmentForm.action = "/walkin";
+                appointmentForm.action = "/views/walkin.php";
 
                 const dateEl = document.getElementById('popup_date');
                 const timeEl = document.getElementById('popup_time');
@@ -1222,7 +1222,7 @@ foreach ($defaults as $key => $defaultValue) {
                 // No further validation here; backend walk-in flow will handle details.
             } else {
                 // Digital Payment: keep existing payment.php flow
-                appointmentForm.action = "/payment";
+                appointmentForm.action = "/views/payment.php";
             }
         });
     }

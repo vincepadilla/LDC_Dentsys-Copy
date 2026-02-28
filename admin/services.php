@@ -92,7 +92,7 @@ $servicesResult = mysqli_query($con, $servicesSql);
                             <td><?php echo htmlspecialchars($row['service_category']); ?></td>
                             <td><?php echo htmlspecialchars($row['sub_service']); ?></td>
                             <td><?php echo htmlspecialchars($row['description']); ?></td>
-                            <td>â‚±<?php echo number_format($row['price'], 2); ?></td>
+                            <td>₱<?php echo number_format($row['price'], 2); ?></td>
                             <td>
                                 <div class="action-btns">
                                     <button class="action-btn btn-primary" title="Edit" onclick="editServicebtn('<?php echo $row['service_id']; ?>')">
@@ -149,7 +149,7 @@ $servicesResult = mysqli_query($con, $servicesSql);
                         </div>
                         <div class="service-card-field">
                             <div class="service-card-label">Price</div>
-                            <div class="service-card-value price">â‚±<?php echo number_format($row['price'], 2); ?></div>
+                            <div class="service-card-value price">₱<?php echo number_format($row['price'], 2); ?></div>
                         </div>
                     </div>
                     <div class="service-card-actions">
@@ -202,28 +202,36 @@ $servicesResult = mysqli_query($con, $servicesSql);
             <h3>Add a service offering</h3>
             <p>Capture fresh treatments or pricing updates with clarity.</p>
         </div>
-        <form action="../controllers/addServices.php" method="POST" class="modal-form">
+        <form action="../controllers/addServices.php" method="POST" class="modal-form" id="addServiceForm">
             <div class="form-grid">
-                <label class="form-label" for="service_category">Service Category</label>
-                <select name="service_category" id="service_category" required class="form-control">
-                    <option value="" disabled selected>Select a category</option>
-                    <option value="General Dentistry">General Dentistry</option>
-                    <option value="Onthodontics">Onthodontics</option>
-                    <option value="Oral Surgery">Oral Surgery</option>
-                    <option value="Endodontics">Endodontics</option>
-                    <option value="Prosthodontics">Prosthodontics</option>
-                </select>
+                <div class="form-group full-width">
+                    <label class="form-label" for="service_category">Service Category <span class="required">*</span></label>
+                    <select name="service_category" id="service_category" required class="form-control">
+                        <option value="" disabled selected>Select a category</option>
+                        <option value="General Dentistry">General Dentistry</option>
+                        <option value="Orthodontics">Orthodontics</option>
+                        <option value="Oral Surgery">Oral Surgery</option>
+                        <option value="Endodontics">Endodontics</option>
+                        <option value="Prosthodontics Treatments (Pustiso)">Prosthodontics Treatments (Pustiso)</option>
+                    </select>
+                </div>
 
-                <label class="form-label" for="sub_service">Sub Service</label>
-                <input type="text" name="sub_service" id="sub_service" class="form-control" placeholder="e.g., Teeth whitening">
+                <div class="form-group">
+                    <label class="form-label" for="sub_service">Sub Service</label>
+                    <input type="text" name="sub_service" id="sub_service" class="form-control" placeholder="e.g., Teeth whitening, Root canal treatment">
+                </div>
 
-                <label class="form-label" for="description">Description</label>
-                <textarea name="description" id="description" required class="form-control" rows="3" placeholder="Describe the service in two sentences"></textarea>
+                <div class="form-group">
+                    <label class="form-label" for="price">Price (₱) <span class="required">*</span></label>
+                    <div class="input-with-unit">
+                        <span class="currency-symbol">₱</span>
+                        <input type="number" name="price" id="price" step="0.01" min="0" required class="form-control" placeholder="0.00">
+                    </div>
+                </div>
 
-                <label class="form-label" for="price">Price (â‚±)</label>
-                <div class="input-with-unit">
-                    <span>₱</span>
-                    <input type="number" name="price" id="price" step="0.01" required class="form-control" placeholder="0.00">
+                <div class="form-group full-width">
+                    <label class="form-label" for="description">Description <span class="required">*</span></label>
+                    <textarea name="description" id="description" required class="form-control" rows="2" placeholder="Describe the service in detail"></textarea>
                 </div>
             </div>
             <div class="modal-actions">
@@ -250,25 +258,34 @@ $servicesResult = mysqli_query($con, $servicesSql);
         <form id="editServiceForm" method="POST" action="../controllers/updateService.php" class="modal-form">
             <input type="hidden" name="service_id" id="editServiceId">
             <div class="form-grid">
-                <label class="form-label" for="editServiceCategory">Service Category</label>
-                <select name="service_category" id="editServiceCategory" required class="form-control">
-                    <option value="General Dentistry">General Dentistry</option>
-                    <option value="Orthodontics">Onthodontics</option>
-                    <option value="Oral Surgery">Oral Surgery</option>
-                    <option value="Endodontics">Endodontics</option>
-                    <option value="Prosthodontics Treatments (Pustiso)">Prosthodontics Treatments (Pustiso)</option>
-                </select>
+                <div class="form-group full-width">
+                    <label class="form-label" for="editServiceCategory">Service Category <span class="required">*</span></label>
+                    <select name="service_category" id="editServiceCategory" required class="form-control">
+                        <option value="" disabled>Select a category</option>
+                        <option value="General Dentistry">General Dentistry</option>
+                        <option value="Orthodontics">Orthodontics</option>
+                        <option value="Oral Surgery">Oral Surgery</option>
+                        <option value="Endodontics">Endodontics</option>
+                        <option value="Prosthodontics Treatments (Pustiso)">Prosthodontics Treatments (Pustiso)</option>
+                    </select>
+                </div>
 
-                <label class="form-label" for="editSubService">Sub Service</label>
-                <input type="text" name="sub_service" id="editSubService" class="form-control">
+                <div class="form-group">
+                    <label class="form-label" for="editSubService">Sub Service</label>
+                    <input type="text" name="sub_service" id="editSubService" class="form-control" placeholder="e.g., Teeth whitening, Root canal treatment">
+                </div>
 
-                <label class="form-label" for="editDescription">Description</label>
-                <textarea name="description" id="editDescription" required class="form-control" rows="3"></textarea>
+                <div class="form-group">
+                    <label class="form-label" for="editPrice">Price (₱) <span class="required">*</span></label>
+                    <div class="input-with-unit">
+                        <span class="currency-symbol">₱</span>
+                        <input type="number" name="price" id="editPrice" step="0.01" min="0" required class="form-control" placeholder="0.00">
+                    </div>
+                </div>
 
-                <label class="form-label" for="editPrice">Price (â‚±)</label>
-                <div class="input-with-unit">
-                    <span>₱</span>
-                    <input type="number" name="price" id="editPrice" step="0.01" required class="form-control">
+                <div class="form-group full-width">
+                    <label class="form-label" for="editDescription">Description <span class="required">*</span></label>
+                    <textarea name="description" id="editDescription" required class="form-control" rows="2" placeholder="Describe the service in detail"></textarea>
                 </div>
             </div>
             <div class="modal-actions">
@@ -572,15 +589,33 @@ $servicesResult = mysqli_query($con, $servicesSql);
 
     // Modal functions
     function closeAddModal() {
-        document.getElementById('addServiceModal').style.display = 'none';
+        const modal = document.getElementById('addServiceModal');
+        const form = document.getElementById('addServiceForm');
+        if (form) {
+            form.reset();
+            // Clear any validation states
+            form.querySelectorAll('.form-control').forEach(input => {
+                input.classList.remove('is-invalid', 'is-valid');
+            });
+        }
+        modal.style.display = 'none';
     }
 
     function closeEditModal() {
-        document.getElementById('editServiceModal').style.display = 'none';
+        const modal = document.getElementById('editServiceModal');
+        const form = document.getElementById('editServiceForm');
+        if (form) {
+            // Clear any validation states
+            form.querySelectorAll('.form-control').forEach(input => {
+                input.classList.remove('is-invalid', 'is-valid');
+            });
+        }
+        modal.style.display = 'none';
     }
 
     function editServicebtn(serviceId) {
-        document.getElementById('editServiceModal').style.display = 'block';
+        const modal = document.getElementById('editServiceModal');
+        modal.style.display = 'flex';
         
         fetch('../controllers/getServices.php?id=' + encodeURIComponent(serviceId))
             .then(response => {
@@ -598,10 +633,30 @@ $servicesResult = mysqli_query($con, $servicesSql);
                 
                 // Fill modal fields
                 document.getElementById('editServiceId').value = data.service_id;
-                document.getElementById('editServiceCategory').value = data.service_category;
-                document.getElementById('editSubService').value = data.sub_service;
-                document.getElementById('editDescription').value = data.description;
-                document.getElementById('editPrice').value = data.price;
+                
+                // Set category - handle both old and new category names
+                const categorySelect = document.getElementById('editServiceCategory');
+                const categoryValue = data.service_category || '';
+                categorySelect.value = categoryValue;
+                
+                // If category doesn't match, try to find a close match
+                if (!categorySelect.value && categoryValue) {
+                    const options = Array.from(categorySelect.options);
+                    const match = options.find(opt => 
+                        opt.value.toLowerCase().includes(categoryValue.toLowerCase()) ||
+                        categoryValue.toLowerCase().includes(opt.value.toLowerCase())
+                    );
+                    if (match) {
+                        categorySelect.value = match.value;
+                    }
+                }
+                
+                document.getElementById('editSubService').value = data.sub_service || '';
+                document.getElementById('editDescription').value = data.description || '';
+                
+                // Format price to 2 decimal places
+                const price = parseFloat(data.price) || 0;
+                document.getElementById('editPrice').value = price.toFixed(2);
             })
             .catch(error => {
                 console.error('Error fetching service:', error);
@@ -617,20 +672,80 @@ $servicesResult = mysqli_query($con, $servicesSql);
         
         if (openServiceBtn) {
             openServiceBtn.addEventListener('click', function () {
-                serviceModal.style.display = 'block';
+                serviceModal.style.display = 'flex';
+                // Focus on first input for better UX
+                setTimeout(() => {
+                    const firstInput = serviceModal.querySelector('#service_category');
+                    if (firstInput) firstInput.focus();
+                }, 100);
             });
         }
 
         // Close modals when clicking outside
         window.addEventListener('click', function (event) {
             if (event.target === serviceModal) {
-                serviceModal.style.display = 'none';
+                closeAddModal();
             }
             const editServiceModal = document.getElementById('editServiceModal');
             if (editServiceModal && event.target === editServiceModal) {
-                editServiceModal.style.display = 'none';
+                closeEditModal();
             }
         });
+
+        // Add form validation feedback
+        const addForm = document.getElementById('addServiceForm');
+        if (addForm) {
+            addForm.addEventListener('submit', function(e) {
+                // Basic validation
+                const price = document.getElementById('price');
+                if (price && parseFloat(price.value) < 0) {
+                    e.preventDefault();
+                    showNotification('error', 'Invalid Price', 'Price cannot be negative.');
+                    price.focus();
+                    return false;
+                }
+            });
+
+            // Real-time validation feedback
+            addForm.querySelectorAll('.form-control').forEach(input => {
+                input.addEventListener('blur', function() {
+                    if (this.hasAttribute('required') && !this.value.trim()) {
+                        this.classList.add('is-invalid');
+                        this.classList.remove('is-valid');
+                    } else if (this.value.trim()) {
+                        this.classList.add('is-valid');
+                        this.classList.remove('is-invalid');
+                    }
+                });
+            });
+        }
+
+        const editForm = document.getElementById('editServiceForm');
+        if (editForm) {
+            editForm.addEventListener('submit', function(e) {
+                // Basic validation
+                const price = document.getElementById('editPrice');
+                if (price && parseFloat(price.value) < 0) {
+                    e.preventDefault();
+                    showNotification('error', 'Invalid Price', 'Price cannot be negative.');
+                    price.focus();
+                    return false;
+                }
+            });
+
+            // Real-time validation feedback
+            editForm.querySelectorAll('.form-control').forEach(input => {
+                input.addEventListener('blur', function() {
+                    if (this.hasAttribute('required') && !this.value.trim()) {
+                        this.classList.add('is-invalid');
+                        this.classList.remove('is-valid');
+                    } else if (this.value.trim()) {
+                        this.classList.add('is-valid');
+                        this.classList.remove('is-invalid');
+                    }
+                });
+            });
+        }
 
         // Initialize pagination
         setTimeout(() => {

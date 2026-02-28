@@ -2,11 +2,11 @@
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-require '../libraries/PhpMailer/src/Exception.php';
-require '../libraries/PhpMailer/src/PHPMailer.php';
-require '../libraries/PhpMailer/src/SMTP.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/Exception.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/PHPMailer.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/SMTP.php';
 
-include_once("../database/config.php");
+include_once __DIR__ . '/../database/config.php';
 
 header('Content-Type: application/json');
 
@@ -25,8 +25,21 @@ if (!function_exists('generateID')) {
     }
 }
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
-    $appointment_id = $_POST['appointment_id'];
+// Get appointment_id from POST or JSON body
+$appointment_id = null;
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    if (isset($_POST['appointment_id']) && trim($_POST['appointment_id']) !== '') {
+        $appointment_id = trim($_POST['appointment_id']);
+    } else {
+        // Try JSON body (e.g. when Content-Type is application/json)
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (is_array($input) && isset($input['appointment_id']) && trim($input['appointment_id']) !== '') {
+            $appointment_id = trim($input['appointment_id']);
+        }
+    }
+}
+
+if ($appointment_id) {
 
     // Get appointment details with joins to patient_information, services, and multidisciplinary_dental_team
     $stmt = $con->prepare("SELECT a.*, 
@@ -50,12 +63,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
         $stmtUpdate->bind_param("s", $appointment_id);
 
         if ($stmtUpdate->execute()) {
-            // Prepare patient name and service details
-            $patient_name = trim($appointment['first_name'] . ' ' . $appointment['last_name']);
-            $service = !empty($appointment['sub_service']) ? $appointment['sub_service'] : $appointment['service_category'];
-            $dentist = trim($appointment['dentist_first'] . ' ' . $appointment['dentist_last']);
-            $email = $appointment['email'];
-            $user_id = $appointment['user_id'];
+            // Prepare patient name and service details (null-safe for LEFT JOIN)
+            $first = $appointment['first_name'] ?? '';
+            $last = $appointment['last_name'] ?? '';
+            $patient_name = trim($first . ' ' . $last);
+            $service = !empty($appointment['sub_service']) ? $appointment['sub_service'] : ($appointment['service_category'] ?? 'Dental Service');
+            $dentistFirst = $appointment['dentist_first'] ?? '';
+            $dentistLast = $appointment['dentist_last'] ?? '';
+            $dentist = trim($dentistFirst . ' ' . $dentistLast);
+            $email = $appointment['email'] ?? '';
+            $user_id = $appointment['user_id'] ?? null;
             
             // === NOTIFICATION INSERT ===
             if (!empty($user_id)) {
@@ -74,52 +91,50 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
                 mysqli_query($con, $insertNotification);
             }
             
-            // Send email
-            $mail = new PHPMailer(true);
-            try {
-                $mail->isSMTP();
-                $mail->Host = 'smtp.gmail.com';
-                $mail->SMTPAuth = true;
-                $mail->Username = 'mlanderodentalclinic@gmail.com';
-                $mail->Password = 'xrfp cpvv ckdv jmht'; 
-                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                $mail->Port = 587;
+            // Send email (only if patient has email)
+            $emailSent = false;
+            if (!empty($email)) {
+                $mail = new PHPMailer(true);
+                try {
+                    $mail->isSMTP();
+                    $mail->Host = 'smtp.gmail.com';
+                    $mail->SMTPAuth = true;
+                    $mail->Username = 'mlanderodentalclinic@gmail.com';
+                    $mail->Password = 'xrfp cpvv ckdv jmht'; 
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    $mail->Port = 587;
 
-                $mail->setFrom('mlanderodentalclinic@gmail.com', 'Landero Dental Clinic');
-                $mail->addAddress($email, $patient_name);
-                $mail->isHTML(true);
-                $mail->Subject = 'Appointment Confirmed';
+                    $mail->setFrom('mlanderodentalclinic@gmail.com', 'Landero Dental Clinic');
+                    $mail->addAddress($email, $patient_name);
+                    $mail->isHTML(true);
+                    $mail->Subject = 'Appointment Confirmed';
 
-                $mail->Body = "
-                    <h3>Hi {$patient_name},</h3>
-                    <p>Your appointment has been <strong>confirmed</strong>.</p>
-                    <p><strong>Service:</strong> {$service}<br>
-                    <strong>Dentist:</strong> {$dentist}<br>
-                    <strong>Date:</strong> " . date('F j, Y', strtotime($appointment['appointment_date'])) . "<br>
-                    <strong>Time:</strong> {$appointment['appointment_time']}<br>
-                    <strong>Branch:</strong> {$appointment['branch']}</p>
-                    <p>Thank you for choosing our clinic!</p>
-                ";
+                    $branch = $appointment['branch'] ?? 'Main Branch';
+                    $mail->Body = "
+                        <h3>Hi {$patient_name},</h3>
+                        <p>Your appointment has been <strong>confirmed</strong>.</p>
+                        <p><strong>Service:</strong> {$service}<br>
+                        <strong>Dentist:</strong> {$dentist}<br>
+                        <strong>Date:</strong> " . date('F j, Y', strtotime($appointment['appointment_date'])) . "<br>
+                        <strong>Time:</strong> {$appointment['appointment_time']}<br>
+                        <strong>Branch:</strong> {$branch}</p>
+                        <p>Thank you for choosing our clinic!</p>
+                    ";
 
-                $mail->send();
-
-                // Return JSON success response
-                echo json_encode([
-                    'success' => true,
-                    'status' => 'success',
-                    'message' => 'Appointment confirmed and email sent successfully.'
-                ]);
-                exit();
-            } catch (Exception $e) {
-                // Appointment was confirmed but email failed - still return success
-                error_log("Email sending failed: " . $mail->ErrorInfo);
-                echo json_encode([
-                    'success' => true,
-                    'status' => 'success',
-                    'message' => 'Appointment confirmed, but email failed to send.'
-                ]);
-                exit();
+                    $mail->send();
+                    $emailSent = true;
+                } catch (Exception $e) {
+                    error_log("Email sending failed: " . $mail->ErrorInfo);
+                }
             }
+
+            // Return JSON success response
+            echo json_encode([
+                'success' => true,
+                'status' => 'success',
+                'message' => $emailSent ? 'Appointment confirmed and email sent successfully.' : 'Appointment confirmed successfully.'
+            ]);
+            exit();
         } else {
             echo json_encode([
                 'success' => false,

@@ -552,12 +552,26 @@ body {
 
 .modal-panel {
     background: #fff;
-    width: min(520px, 100%);
+    width: min(900px, 95%);
+    max-height: 95vh;
     border-radius: 18px;
-    padding: 30px;
+    padding: 35px;
     box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
     position: relative;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .modal-close {
@@ -583,7 +597,7 @@ body {
 }
 
 .modal-heading {
-    margin-bottom: 24px;
+    margin-bottom: 28px;
 }
 
 .modal-heading h3 {
@@ -616,8 +630,18 @@ body {
 
 .modal-form .form-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px 20px;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 24px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group.full-width {
+    grid-column: 1 / -1;
 }
 
 .form-label {
@@ -625,7 +649,16 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #6b7280;
-    margin-bottom: 6px;
+    margin-bottom: 0;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.form-label .required {
+    color: #EF4444;
+    font-weight: 700;
 }
 
 .form-control {
@@ -635,7 +668,8 @@ body {
     border: 1px solid #d1d5db;
     font-size: 15px;
     background: #f8fafc;
-    transition: border 0.2s ease, box-shadow 0.2s ease;
+    transition: border 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    font-family: inherit;
 }
 
 .form-control:focus {
@@ -645,19 +679,101 @@ body {
     background: #fff;
 }
 
+.form-control::placeholder {
+    color: #9ca3af;
+    opacity: 1;
+}
+
+.form-control:invalid:not(:placeholder-shown) {
+    border-color: #EF4444;
+}
+
+.form-control:valid:not(:placeholder-shown) {
+    border-color: #10B981;
+}
+
+select.form-control {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 40px;
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 70px;
+    font-family: inherit;
+}
+
+/* Form validation states */
+.form-control.is-valid {
+    border-color: #10B981;
+    background: #f0fdf4;
+}
+
+.form-control.is-valid:focus {
+    border-color: #10B981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+    background: #fff;
+}
+
+.form-control.is-invalid {
+    border-color: #EF4444;
+    background: #fef2f2;
+}
+
+.form-control.is-invalid:focus {
+    border-color: #EF4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+    background: #fff;
+}
+
+.input-with-unit:has(.is-invalid) {
+    border-color: #EF4444;
+    background: #fef2f2;
+}
+
+.input-with-unit:has(.is-invalid):focus-within {
+    border-color: #EF4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+    background: #fff;
+}
+
+.input-with-unit:has(.is-valid) {
+    border-color: #10B981;
+    background: #f0fdf4;
+}
+
+.input-with-unit:has(.is-valid):focus-within {
+    border-color: #10B981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+    background: #fff;
+}
+
 .input-with-unit {
     display: flex;
     align-items: center;
     gap: 10px;
-    background: #fff;
+    background: #f8fafc;
     border-radius: 10px;
     border: 1px solid #d1d5db;
-    padding: 6px 12px;
+    padding: 6px 14px;
+    transition: border 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
-.input-with-unit span {
+.input-with-unit:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(72, 166, 167, 0.15);
+    background: #fff;
+}
+
+.input-with-unit .currency-symbol {
     font-size: 16px;
     color: #0f172a;
+    font-weight: 600;
+    flex-shrink: 0;
 }
 
 .input-with-unit input {
@@ -666,31 +782,126 @@ body {
     background: transparent;
     padding: 0;
     flex: 1;
+    font-size: 15px;
+}
+
+.input-with-unit input:focus {
+    outline: none;
+}
+
+.input-with-unit input::placeholder {
+    color: #9ca3af;
 }
 
 .modal-actions {
-    margin-top: 20px;
+    margin-top: 28px;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 12px;
     flex-wrap: wrap;
+    padding-top: 20px;
+    border-top: 1px solid #e5e7eb;
 }
 
 .btn-wide {
-    flex: 1;
-    min-width: 165px;
+    flex: 0 1 auto;
+    min-width: 180px;
+}
+
+/* Button Styles */
+.btn-success {
+    background: #10B981;
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+}
+
+.btn-success:hover {
+    background: #059669;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.btn-success:active {
+    transform: translateY(0);
+}
+
+.btn-success i {
+    font-size: 14px;
 }
 
 .btn-link {
-    border: none;
-    background: transparent;
-    color: #475569;
+    border: 2px solid #6b7280;
+    background: #f3f4f6;
+    color: #374151;
     font-weight: 600;
-    padding: 10px 0;
+    padding: 12px 28px;
+    border-radius: 10px;
     cursor: pointer;
-    transition: color 0.2s ease;
+    transition: all 0.2s ease;
+    font-size: 15px;
+    min-width: 120px;
 }
 
 .btn-link:hover {
-    color: var(--primary-color);
+    background: #e5e7eb;
+    border-color: #4b5563;
+    color: #111827;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-link:active {
+    transform: translateY(0);
+}
+
+/* Modal form validation styles */
+.modal-form:invalid .btn-success {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Responsive modal improvements */
+@media (max-width: 1024px) {
+    .modal-panel {
+        width: min(95%, 800px);
+        padding: 30px;
+    }
+}
+
+@media (max-width: 768px) {
+    .modal-panel {
+        width: calc(100% - 20px);
+        padding: 20px;
+        max-height: 90vh;
+    }
+
+    .modal-form .form-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .form-group.full-width {
+        grid-column: 1;
+    }
+
+    .modal-actions {
+        flex-direction: column-reverse;
+        gap: 10px;
+    }
+
+    .btn-wide,
+    .btn-link {
+        width: 100%;
+        min-width: auto;
+    }
 }

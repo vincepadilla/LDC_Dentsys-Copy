@@ -2,6 +2,13 @@
 session_start();
 include_once("../database/config.php");
 
+// Base path for controller URLs (works when admin is in subfolder)
+$basePath = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/\\');
+if (empty($basePath) || $basePath === '\\') {
+    $basePath = '';
+}
+$viewProofImageUrl = $basePath . '/controllers/viewProofImage.php';
+
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     header("Location: login.php");
     exit();
@@ -42,6 +49,54 @@ $statusResult = mysqli_query($con, $statusQuery);
 $paymentStatuses = [];
 while ($statusRow = mysqli_fetch_assoc($statusResult)) {
     $paymentStatuses[] = $statusRow['status'];
+}
+
+// Ensure refund_requests table exists
+$createRefundTable = "CREATE TABLE IF NOT EXISTS refund_requests (
+  id varchar(10) NOT NULL,
+  payment_id varchar(10) NOT NULL,
+  appointment_id varchar(10) NOT NULL,
+  user_id varchar(10) NOT NULL,
+  status enum('pending','processed','refunded') NOT NULL DEFAULT 'pending',
+  created_at timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (id),
+  UNIQUE KEY payment_id (payment_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
+mysqli_query($con, $createRefundTable);
+// Ensure existing DBs can store "refunded" (safe to run repeatedly)
+@mysqli_query($con, "ALTER TABLE refund_requests MODIFY status ENUM('pending','processed','refunded') NOT NULL DEFAULT 'pending'");
+
+// Get refund requests data
+$refundSql = "SELECT rr.id, rr.payment_id, rr.appointment_id, rr.user_id, rr.status, rr.created_at,
+                     p.amount, p.method, p.status as payment_status,
+                     pi.first_name, pi.last_name, pi.email,
+                     a.appointment_date, a.appointment_time,
+                     s.service_category, s.sub_service
+              FROM refund_requests rr
+              LEFT JOIN payment p ON rr.payment_id = p.payment_id
+              LEFT JOIN patient_information pi ON rr.user_id = pi.user_id
+              LEFT JOIN appointments a ON rr.appointment_id = a.appointment_id
+              LEFT JOIN services s ON a.service_id = s.service_id
+              ORDER BY rr.created_at DESC";
+$refundResult = mysqli_query($con, $refundSql);
+
+// Walk-in Transactions (Completed only)
+// Try with created_at first; if the column doesn't exist in some DBs, fallback gracefully.
+$walkinTxSql = "SELECT w.walkin_id, w.patient_id, w.service, w.sub_service, w.dentist_name, w.branch, w.status, w.created_at,
+                       p.first_name, p.last_name
+                FROM walkin_appointments w
+                LEFT JOIN patient_information p ON w.patient_id = p.patient_id
+                WHERE w.status IN ('Completed','Complete')
+                ORDER BY w.walkin_id DESC";
+$walkinTxResult = mysqli_query($con, $walkinTxSql);
+if (!$walkinTxResult) {
+    $walkinTxSql = "SELECT w.walkin_id, w.patient_id, w.service, w.sub_service, w.dentist_name, w.branch, w.status,
+                           p.first_name, p.last_name
+                    FROM walkin_appointments w
+                    LEFT JOIN patient_information p ON w.patient_id = p.patient_id
+                    WHERE w.status IN ('Completed','Complete')
+                    ORDER BY w.walkin_id DESC";
+    $walkinTxResult = mysqli_query($con, $walkinTxSql);
 }
 ?>
 <!DOCTYPE html>
@@ -132,6 +187,54 @@ while ($statusRow = mysqli_fetch_assoc($statusResult)) {
         .btn-primary-confirmedPayment:hover {
             background: #27ae60;
         }
+
+        /* Tab Styles */
+        .tabs-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            padding: 12px 24px;
+            border: none;
+            background: #f3f4f6;
+            color: #6b7280;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tab-button:hover {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .tab-button.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .tab-content {
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -147,6 +250,27 @@ while ($statusRow = mysqli_fetch_assoc($statusResult)) {
         </a>
         <h2><i class="fa-solid fa-money-bill"></i> PAYMENT TRANSACTIONS</h2>
 
+        <!-- Tabs -->
+        <div class="tabs-container" style="margin-bottom: 20px; border-bottom: 2px solid #e5e7eb;">
+            <button class="tab-button active" onclick="switchTab('payments')" id="tab-payments">
+                <i class="fas fa-credit-card"></i> Appointment Transactions
+            </button>
+            <button class="tab-button" onclick="switchTab('refunds')" id="tab-refunds">
+                <i class="fas fa-undo"></i> Refund Requests
+                <?php 
+                $pendingCount = mysqli_num_rows(mysqli_query($con, "SELECT id FROM refund_requests WHERE status = 'pending'"));
+                if ($pendingCount > 0): 
+                ?>
+                    <span class="badge" style="background: #EF4444; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-left: 5px;"><?php echo $pendingCount; ?></span>
+                <?php endif; ?>
+            </button>
+            <button class="tab-button" onclick="switchTab('walkins')" id="tab-walkins">
+                <i class="fas fa-person-walking"></i> Walk-in Transactions
+            </button>
+        </div>
+
+        <!-- Payments Tab Content -->
+        <div id="payments-tab" class="tab-content">
         <div class="filter-container">
             <div class="filter-group">
                 <label for="filter-payment-date-category"><i class="fas fa-calendar-day"></i> Date Category:</label>
@@ -191,7 +315,6 @@ while ($statusRow = mysqli_fetch_assoc($statusResult)) {
             <table id="payment-table">
                 <thead>
                     <tr>
-                        <th>Payment ID</th>
                         <th>Appointment ID</th>
                         <th>Method</th>
                         <th>Account Name</th>
@@ -218,7 +341,6 @@ while ($statusRow = mysqli_fetch_assoc($statusResult)) {
                             data-status="<?php echo htmlspecialchars($paymentStatus); ?>"
                             data-method="<?php echo htmlspecialchars($paymentMethod); ?>"
                             data-search="<?php echo htmlspecialchars($searchText); ?>">
-                            <td><?php echo htmlspecialchars($row['payment_id']); ?></td>
                             <td><?php echo htmlspecialchars($row['appointment_id']); ?></td>
                             <td><?php echo htmlspecialchars($row['method']); ?></td>
                             <td>
@@ -451,6 +573,134 @@ while ($statusRow = mysqli_fetch_assoc($statusResult)) {
                 </button>
             </div>
         </div>
+        </div>
+        <!-- End Payments Tab Content -->
+
+        <!-- Refund Requests Tab Content -->
+        <div id="refunds-tab" class="tab-content" style="display: none;">
+            <div class="table-responsive">
+                <table id="refund-table">
+                    <thead>
+                        <tr>
+                            <th>Payment ID</th>
+                            <th>Appointment ID</th>
+                            <th>Patient Name</th>
+                            <th>Service</th>
+                            <th>Amount</th>
+                            <th>Request Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php 
+                        if(mysqli_num_rows($refundResult) > 0) {
+                            mysqli_data_seek($refundResult, 0);
+                            while ($row = mysqli_fetch_assoc($refundResult)) { 
+                        ?>
+                            <tr class="refund-row">
+                                <td><?php echo htmlspecialchars($row['payment_id']); ?></td>
+                                <td><?php echo htmlspecialchars($row['appointment_id']); ?></td>
+                                <td><?php echo htmlspecialchars(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')); ?></td>
+                                <td><?php echo htmlspecialchars($row['sub_service'] ?? $row['service_category'] ?? 'N/A'); ?></td>
+                                <td>₱<?php echo number_format($row['amount'], 2); ?></td>
+                                <td><?php echo date('M j, Y g:i A', strtotime($row['created_at'])); ?></td>
+                                <td>
+                                    <span class="status status-<?php echo htmlspecialchars(strtolower($row['status'] ?? 'pending')); ?>">
+                                        <?php echo htmlspecialchars(ucfirst($row['status'] ?? 'Pending')); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="action-btns">
+                                        <?php if ($row['status'] === 'pending'): ?>
+                                        <button type="button" class="action-btn btn-success" title="Process Refund"
+                                            data-refund-id="<?php echo $row['id']; ?>"
+                                            data-payment-id="<?php echo $row['payment_id']; ?>"
+                                            onclick="processRefund(this)">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                        <?php endif; ?>
+                                        <button type="button" class="action-btn btn-primary" title="View Details"
+                                            data-refund-id="<?php echo $row['id']; ?>"
+                                            onclick="viewRefundDetails(this)">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php 
+                            }
+                        } else { 
+                        ?>
+                            <tr>
+                                <td colspan="9" class="no-data">
+                                    <i class="fas fa-exclamation-circle fa-2x"></i>
+                                    <p>No refund requests found</p>
+                                </td>
+                            </tr>
+                        <?php } ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <!-- End Refund Requests Tab Content -->
+
+        <!-- Walk-in Transactions Tab Content -->
+        <div id="walkins-tab" class="tab-content" style="display: none;">
+            <div class="table-responsive">
+                <table id="walkin-tx-table">
+                    <thead>
+                        <tr>
+                            <th>Walk-in ID</th>
+                            <th>Patient Name</th>
+                            <th>Service</th>
+                            <th>Dentist</th>
+                            <th>Branch</th>
+                            <th>Method</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php
+                        if ($walkinTxResult && mysqli_num_rows($walkinTxResult) > 0) {
+                            while ($w = mysqli_fetch_assoc($walkinTxResult)) {
+                                $patientName = trim(($w['first_name'] ?? '') . ' ' . ($w['last_name'] ?? ''));
+                                $service = $w['sub_service'] ?? ($w['service'] ?? 'N/A');
+                                $dateVal = $w['created_at'] ?? null;
+                        ?>
+                            <tr class="walkin-tx-row">
+                                <td><?php echo htmlspecialchars($w['walkin_id']); ?></td>
+                                <td><?php echo htmlspecialchars($patientName ?: 'N/A'); ?></td>
+                                <td><?php echo htmlspecialchars($service); ?></td>
+                                <td><?php echo htmlspecialchars($w['dentist_name'] ?? 'N/A'); ?></td>
+                                <td><?php echo htmlspecialchars($w['branch'] ?? 'N/A'); ?></td>
+                                <td>Cash</td>
+                                <td>₱<?php echo number_format(500, 2); ?></td>
+                                <td>
+                                    <span class="status status-<?php echo htmlspecialchars(strtolower($w['status'] ?? 'completed')); ?>">
+                                        <?php echo htmlspecialchars($w['status'] ?? 'Completed'); ?>
+                                    </span>
+                                </td>
+                                <td><?php echo !empty($dateVal) ? date('M j, Y g:i A', strtotime($dateVal)) : 'N/A'; ?></td>
+                            </tr>
+                        <?php
+                            }
+                        } else {
+                        ?>
+                            <tr>
+                                <td colspan="9" class="no-data">
+                                    <i class="fas fa-exclamation-circle fa-2x"></i>
+                                    <p>No completed walk-in transactions found</p>
+                                </td>
+                            </tr>
+                        <?php } ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <!-- End Walk-in Transactions Tab Content -->
     </div>
 </div>
 
@@ -488,6 +738,34 @@ while ($statusRow = mysqli_fetch_assoc($statusResult)) {
                 </button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Refund Details Modal -->
+<div id="refundDetailsModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width: 760px;">
+        <h3><i class="fas fa-undo"></i> PAYMENT DETAILS</h3>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px;">
+            <div><strong>Payment ID:</strong> <span id="rd_payment_id">-</span></div>
+            <div><strong>Method:</strong> <span id="rd_method">-</span></div>
+            <div><strong>Account Name:</strong> <span id="rd_account_name">N/A</span></div>
+            <div><strong>Account Number:</strong> <span id="rd_account_number">N/A</span></div>
+            <div><strong>Amount:</strong> <span id="rd_amount">-</span></div>
+            <div style="grid-column: 1 / -1;">
+                <strong>Proof:</strong>
+                <span id="rd_proof_text">-</span>
+                <button type="button" class="view-image-btn" id="rd_view_proof_btn" style="margin-left:10px; display:none;">
+                    View PDF
+                </button>
+            </div>
+        </div>
+
+        <div style="margin-top: 16px; display:flex; justify-content:flex-end; gap:10px;">
+            <button type="button" onclick="closeRefundDetailsModal()" class="modal-close-btn">
+                <i class="fas fa-times"></i> Close
+            </button>
+        </div>
     </div>
 </div>
 
@@ -729,15 +1007,22 @@ while ($statusRow = mysqli_fetch_assoc($statusResult)) {
         });
     });
 
-    // View Proof Image as PDF
+    // View Proof Image - show in modal (image) or open PDF in new tab
     function viewProofPDF(paymentId) {
         if (!paymentId) {
             alert('Payment ID is missing. Cannot view proof image.');
             return;
         }
-        // Open PDF in new tab
-        const pdfUrl = '../controllers/viewProofImage.php?payment_id=' + encodeURIComponent(paymentId);
-        window.open(pdfUrl, '_blank');
+        const baseUrl = '<?php echo htmlspecialchars($viewProofImageUrl); ?>';
+        const imageUrl = baseUrl + '?payment_id=' + encodeURIComponent(paymentId) + '&format=image';
+        const modal = document.getElementById("imageModal");
+        const modalImg = document.getElementById("modalImage");
+        if (modal && modalImg) {
+            modalImg.src = imageUrl;
+            modal.style.display = "flex";
+        } else {
+            window.open(baseUrl + '?payment_id=' + encodeURIComponent(paymentId), '_blank', 'noopener,noreferrer');
+        }
     }
 
     // View Image (kept for backward compatibility if needed)
@@ -1119,6 +1404,140 @@ while ($statusRow = mysqli_fetch_assoc($statusResult)) {
         } else {
             window.location.href = '../views/admin.php';
         }
+    }
+
+    // Tab switching function
+    function switchTab(tabName) {
+        // Hide all tab contents
+        document.getElementById('payments-tab').style.display = 'none';
+        document.getElementById('refunds-tab').style.display = 'none';
+        document.getElementById('walkins-tab').style.display = 'none';
+        
+        // Remove active class from all tabs
+        document.getElementById('tab-payments').classList.remove('active');
+        document.getElementById('tab-refunds').classList.remove('active');
+        document.getElementById('tab-walkins').classList.remove('active');
+        
+        // Show selected tab content
+        if (tabName === 'payments') {
+            document.getElementById('payments-tab').style.display = 'block';
+            document.getElementById('tab-payments').classList.add('active');
+        } else if (tabName === 'refunds') {
+            document.getElementById('refunds-tab').style.display = 'block';
+            document.getElementById('tab-refunds').classList.add('active');
+        } else if (tabName === 'walkins') {
+            document.getElementById('walkins-tab').style.display = 'block';
+            document.getElementById('tab-walkins').classList.add('active');
+        }
+    }
+
+    // Process refund function
+    function processRefund(button) {
+        const refundId = button.getAttribute('data-refund-id');
+        const paymentId = button.getAttribute('data-payment-id');
+        
+        if (!confirm('Are you sure you want to approve this refund? This will mark the refund as refunded and update the payment status to refunded.')) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('refund_id', refundId);
+        formData.append('payment_id', paymentId);
+
+        showNotification('info', 'Processing...', 'Processing refund request...', '<i class="fas fa-spinner fa-spin"></i>', 2000);
+
+        fetch('../controllers/processRefund.php', {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('success', 'Refund Processed', data.message || 'Refund has been processed successfully.');
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                showNotification('error', 'Error', data.message || 'Failed to process refund.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('error', 'Error', 'An error occurred while processing the refund.');
+        });
+    }
+
+    // View refund details function
+    function viewRefundDetails(button) {
+        const refundId = button.getAttribute('data-refund-id');
+        
+        fetch('../controllers/getRefundDetails.php?id=' + encodeURIComponent(refundId))
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                openRefundDetailsModal(data.refund);
+            } else {
+                showNotification('error', 'Error', data.message || 'Failed to load refund details.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('error', 'Error', 'An error occurred while loading refund details.');
+        });
+    }
+
+    function openRefundDetailsModal(refund) {
+        document.getElementById('rd_payment_id').textContent = refund.payment_id || '-';
+        document.getElementById('rd_method').textContent = refund.method || '-';
+        document.getElementById('rd_amount').textContent = (refund.amount !== null && refund.amount !== undefined) ? ('₱' + parseFloat(refund.amount).toFixed(2)) : '-';
+        document.getElementById('rd_account_name').textContent = refund.account_name || 'N/A';
+        document.getElementById('rd_account_number').textContent = refund.account_number || 'N/A';
+
+        const proofText = document.getElementById('rd_proof_text');
+        const proofBtn = document.getElementById('rd_view_proof_btn');
+        proofBtn.style.display = 'none';
+        proofBtn.onclick = null;
+
+        if (refund.has_proof && refund.payment_id) {
+            proofText.textContent = 'Available';
+            proofBtn.style.display = 'inline-block';
+            proofBtn.onclick = function () { openProofPdfTab(refund.payment_id); };
+        } else {
+            proofText.textContent = 'No Image';
+        }
+
+        document.getElementById('refundDetailsModal').style.display = 'flex';
+    }
+
+    // Open proof as PDF in a new tab (viewProofImage.php defaults to PDF when format is omitted)
+    function openProofPdfTab(paymentId) {
+        if (!paymentId) return;
+        const baseUrl = '<?php echo htmlspecialchars($viewProofImageUrl); ?>';
+        window.open(baseUrl + '?payment_id=' + encodeURIComponent(paymentId), '_blank', 'noopener,noreferrer');
+    }
+
+    function closeRefundDetailsModal() {
+        const modal = document.getElementById('refundDetailsModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    // Close refund details modal when clicking outside
+    window.addEventListener("click", function(event) {
+        const refundModal = document.getElementById("refundDetailsModal");
+        if (event.target === refundModal) {
+            closeRefundDetailsModal();
+        }
+    });
+
+    // Check if URL has refund_payment_id parameter to switch to refunds tab
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('refund_payment_id')) {
+        document.addEventListener('DOMContentLoaded', function () {
+            switchTab('refunds');
+        });
     }
 </script>
 

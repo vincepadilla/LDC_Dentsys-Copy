@@ -33,8 +33,9 @@ if (!$payment || empty($payment['proof_image'])) {
     die('Payment or proof image not found');
 }
 
-// Normalize the image path - extract just the filename
+// Normalize the image path - extract filename and resolve to absolute path
 $proof_image = trim($payment['proof_image']);
+$proof_image = str_replace('\\', '/', $proof_image); // Normalize backslashes (Windows)
 
 // Remove all relative path prefixes (../ or ./) recursively
 while (preg_match('#^\.\.?/#', $proof_image)) {
@@ -45,24 +46,28 @@ while (preg_match('#^\.\.?/#', $proof_image)) {
 $proof_image = ltrim($proof_image, '/');
 
 // Extract just the filename - get everything after the last slash or after 'uploads/'
-if (strpos($proof_image, 'uploads/') !== false) {
-    // Get everything after the last 'uploads/'
+if (stripos($proof_image, 'uploads/') !== false) {
     $parts = explode('uploads/', $proof_image);
     $filename = trim(end($parts));
-    // Remove any leading slashes from filename
     $filename = ltrim($filename, '/');
 } else {
-    // No uploads/ found, get just the filename (after last slash)
     $filename = basename($proof_image);
 }
 
-// Build the actual file path (relative to controllers folder)
-$image_path = '../uploads/' . $filename;
+// Build absolute file path using __DIR__ (controllers folder)
+$uploadsDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR;
+$image_path = $uploadsDir . $filename;
 
 // Check if file exists
 if (!file_exists($image_path)) {
-    http_response_code(404);
-    die('Proof image file not found: ' . htmlspecialchars($image_path));
+    // Fallback: try with just filename in uploads root
+    $altPath = $uploadsDir . basename($filename);
+    if (file_exists($altPath)) {
+        $image_path = $altPath;
+    } else {
+        http_response_code(404);
+        die('Proof image file not found');
+    }
 }
 
 // Get image info
@@ -70,6 +75,17 @@ $image_info = getimagesize($image_path);
 if ($image_info === false) {
     http_response_code(500);
     die('Invalid image file or unsupported format');
+}
+
+// If format=image, output raw image for modal display
+$format = isset($_GET['format']) ? strtolower(trim($_GET['format'])) : 'pdf';
+if ($format === 'image') {
+    $mime = $image_info['mime'];
+    header('Content-Type: ' . $mime);
+    header('Content-Length: ' . filesize($image_path));
+    header('Cache-Control: private, max-age=3600');
+    readfile($image_path);
+    exit;
 }
 
 // Check if image format is supported by FPDF (JPEG, PNG, GIF)
@@ -176,4 +192,9 @@ $pdf->Image($image_path, $x, $y, $display_width, $display_height);
 
 // Output PDF (I = inline, opens in browser)
 $pdf->Output('I', 'Payment_Proof_' . $payment['payment_id'] . '.pdf');
+
+if (!empty($tmp_for_pdf) && file_exists($tmp_for_pdf)) {
+    @unlink($tmp_for_pdf);
+}
+exit;
 ?>
