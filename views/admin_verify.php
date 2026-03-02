@@ -20,7 +20,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['verify'])) {
         $verified = true;
 
         // Redirect to admin selection page
-        header("Refresh: 2; url=admin_selection.php");
+        header("Refresh: 2; url=admin.php");
     } else {
         $error = "Invalid verification code. Please try again.";
     }

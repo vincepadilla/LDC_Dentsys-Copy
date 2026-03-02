@@ -925,28 +925,41 @@ $result = mysqli_query($con, $sql);
             if (!response.ok) {
                 throw new Error('Network response was not ok');
             }
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-                return response.json();
-            } else {
-                return response.text().then(text => {
-                    // Try to parse as JSON if possible
+            return response.text().then(text => {
+                // Trim whitespace and try to parse as JSON
+                text = text.trim();
+                // Try to extract JSON from response (in case there's extra output)
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
                     try {
-                        return JSON.parse(text);
-                    } catch {
-                        return { success: true };
+                        const parsed = JSON.parse(jsonMatch[0]);
+                        return parsed;
+                    } catch (e) {
+                        console.warn('Failed to parse extracted JSON:', e);
                     }
-                });
-            }
+                }
+                // If no JSON found or parsing failed, try to parse the whole text
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('Failed to parse response as JSON. Response:', text);
+                    throw new Error('Invalid JSON response from server');
+                }
+            });
         })
         .then(data => {
-            if (data.success || data.status === 'success' || !data.message) {
+            // Check for success - be explicit about boolean true
+            const isSuccess = data && (data.success === true || data.status === 'success');
+            
+            if (isSuccess) {
                 showNotification('success', 'Appointment Confirmed', `Appointment #${appointmentId} has been confirmed.`);
                 setTimeout(() => {
                     location.reload();
                 }, 1500);
             } else {
-                showNotification('error', 'Error', data.message || 'Failed to confirm appointment. Please try again.');
+                // If data.success is explicitly false, show the error message
+                const errorMsg = (data && data.message) ? data.message : 'Failed to confirm appointment. Please try again.';
+                showNotification('error', 'Error', errorMsg);
                 button.disabled = false;
                 button.innerHTML = originalHTML;
             }

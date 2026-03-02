@@ -110,6 +110,184 @@ if (empty($_SESSION['admin_verified'])) {
         .back-button i {
             font-size: 14px;
         }
+
+        /* Clinic Control layout refinement */
+        .main-content .container {
+            max-width: 1040px;
+            margin: 0 auto;
+            padding: 24px 20px 40px;
+        }
+
+        .main-content h2 {
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            color: #111827;
+            margin-bottom: 6px;
+        }
+
+        .main-content h2 i {
+            margin-right: 8px;
+            color: var(--primary-color);
+        }
+
+        /* Modern card look for the Active Closures section */
+        #clinicClosureList {
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 18px 18px 20px;
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+            border: 1px solid rgba(148, 163, 184, 0.4);
+        }
+
+        #clinicClosureList h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #111827;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #clinicClosureList h3 i {
+            color: #6366f1;
+        }
+
+        /* Improved button look (local override) */
+        .main-content .btn {
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            padding: 9px 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.14);
+            transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+        }
+
+        .main-content .btn i {
+            font-size: 0.95rem;
+        }
+
+        .main-content .btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.03);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+        }
+
+        .main-content .btn:active {
+            transform: translateY(0);
+            box-shadow: 0 4px 10px rgba(15, 23, 42, 0.14);
+        }
+
+        /* Shared modal styling (overlay + content) */
+        .clinic-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.45);
+            z-index: 9999;
+            padding: 16px;
+            backdrop-filter: blur(2px);
+        }
+
+        .clinic-modal .clinic-modal-content {
+            width: 100%;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.55);
+            box-shadow: 0 22px 45px rgba(15, 23, 42, 0.35);
+            background: #ffffff;
+        }
+
+        .clinic-modal .clinic-modal-body {
+            padding: 18px 20px 20px;
+            overflow-y: auto;
+        }
+
+        .clinic-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px 10px;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+            background: linear-gradient(to right, #eff6ff, #f5f3ff);
+        }
+
+        .clinic-modal-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #111827;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .clinic-modal-title i {
+            color: #4f46e5;
+        }
+
+        .clinic-modal-close {
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            color: #6b7280;
+            font-size: 1.1rem;
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.12s ease, color 0.12s ease, transform 0.05s ease;
+        }
+
+        .clinic-modal-close:hover {
+            background: rgba(15, 23, 42, 0.04);
+            color: #111827;
+        }
+
+        .clinic-modal-close:active {
+            transform: translateY(1px);
+        }
+
+        /* Form fields inside modals */
+        .clinic-modal-body label strong {
+            font-size: 0.9rem;
+            color: #111827;
+        }
+
+        .clinic-modal-body input[type="date"],
+        .clinic-modal-body select,
+        .clinic-modal-body textarea {
+            border-radius: 10px !important;
+            border: 1px solid #d1d5db !important;
+            font-size: 0.9rem !important;
+        }
+
+        .clinic-modal-body textarea {
+            resize: vertical;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .main-content .container {
+                padding: 18px 14px 28px;
+            }
+
+            .clinic-modal .clinic-modal-content {
+                max-width: 100%;
+                border-radius: 14px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -172,10 +350,18 @@ if (empty($_SESSION['admin_verified'])) {
 </div>
 
 <!-- Block Entire Day Modal -->
-<div id="blockDayModal" class="modal" style="display:none;">
-    <div class="modal-content" style="max-width: 600px;">
-        <span class="close" onclick="closeBlockDayModal()">&times;</span>
-        <h3><i class="fas fa-calendar-times"></i> Block Entire Day</h3>
+<div id="blockDayModal" class="modal clinic-modal" style="display:none;">
+    <div class="modal-content clinic-modal-content" style="max-width: 600px;">
+        <div class="clinic-modal-header">
+            <div class="clinic-modal-title">
+                <i class="fas fa-calendar-times"></i>
+                Block Entire Day
+            </div>
+            <button type="button" class="clinic-modal-close" onclick="closeBlockDayModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="clinic-modal-body">
         <form id="blockDayForm" onsubmit="handleBlockDaySubmit(event)">
             <div style="margin-bottom: 15px;">
                 <label for="blockDayDate"><strong>Select Date:</strong></label>
@@ -226,80 +412,98 @@ if (empty($_SESSION['admin_verified'])) {
                 <button type="submit" class="btn btn-danger">Block Day</button>
             </div>
         </form>
+        </div>
     </div>
 </div>
 
 <!-- Holiday Management Modal -->
-<div id="holidayModal" class="modal" style="display:none;">
-    <div class="modal-content" style="max-width: 700px;">
-        <span class="close" onclick="closeHolidayModal()">&times;</span>
-        <h3><i class="fas fa-calendar-star"></i> Manage Holidays</h3>
-        <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-            <button class="btn btn-primary" onclick="showAddHolidayForm()">
-                <i class="fas fa-plus"></i> Add Holiday
+<div id="holidayModal" class="modal clinic-modal" style="display:none;">
+    <div class="modal-content clinic-modal-content" style="max-width: 700px;">
+        <div class="clinic-modal-header">
+            <div class="clinic-modal-title">
+                <i class="fas fa-calendar-star"></i>
+                Manage Holidays
+            </div>
+            <button type="button" class="clinic-modal-close" onclick="closeHolidayModal()">
+                <i class="fas fa-times"></i>
             </button>
         </div>
-        
-        <!-- Add Holiday Form -->
-        <div id="addHolidayForm" style="display:none; background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h4>Add New Holiday</h4>
-            <form id="holidayForm" onsubmit="handleHolidaySubmit(event)">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                    <div>
-                        <label for="holidayName"><strong>Holiday Name:</strong></label>
-                        <input type="text" id="holidayName" name="holiday_name" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+        <div class="clinic-modal-body">
+            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="showAddHolidayForm()">
+                    <i class="fas fa-plus"></i> Add Holiday
+                </button>
+            </div>
+            
+            <!-- Add Holiday Form -->
+            <div id="addHolidayForm" style="display:none; background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h4 style="margin-top:0; margin-bottom:12px;">Add New Holiday</h4>
+                <form id="holidayForm" onsubmit="handleHolidaySubmit(event)">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <label for="holidayName"><strong>Holiday Name:</strong></label>
+                            <input type="text" id="holidayName" name="holiday_name" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                        </div>
+                        <div>
+                            <label for="holidayDate"><strong>Date:</strong></label>
+                            <input type="date" id="holidayDate" name="holiday_date" required min="<?= date('Y-m-d') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                        </div>
                     </div>
-                    <div>
-                        <label for="holidayDate"><strong>Date:</strong></label>
-                        <input type="date" id="holidayDate" name="holiday_date" required min="<?= date('Y-m-d') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label><strong>Recurrence:</strong></label>
+                        <div style="display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="recurrence" value="once" checked>
+                                <span>One Time</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="recurrence" value="yearly">
+                                <span>Yearly (Recurring)</span>
+                            </label>
+                        </div>
                     </div>
-                </div>
-                
-                <div style="margin-bottom: 15px;">
-                    <label><strong>Recurrence:</strong></label>
-                    <div style="display: flex; gap: 15px; margin-top: 10px;">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="radio" name="recurrence" value="once" checked>
-                            <span>One Time</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="radio" name="recurrence" value="yearly">
-                            <span>Yearly (Recurring)</span>
-                        </label>
+                    
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-secondary" onclick="hideAddHolidayForm()">Cancel</button>
+                        <button type="submit" class="btn btn-success">Add Holiday</button>
                     </div>
-                </div>
-                
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" onclick="hideAddHolidayForm()">Cancel</button>
-                    <button type="submit" class="btn btn-success">Add Holiday</button>
-                </div>
-            </form>
-        </div>
-        
-        <!-- Holidays List -->
-        <div id="holidaysList">
-            <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
-                        <th style="padding: 12px; text-align: left;">Holiday Name</th>
-                        <th style="padding: 12px; text-align: left;">Date</th>
-                        <th style="padding: 12px; text-align: left;">Recurrence</th>
-                        <th style="padding: 12px; text-align: center;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="holidaysTableBody">
-                    <!-- Holidays will be loaded here -->
-                </tbody>
-            </table>
+                </form>
+            </div>
+            
+            <!-- Holidays List -->
+            <div id="holidaysList">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                            <th style="padding: 12px; text-align: left;">Holiday Name</th>
+                            <th style="padding: 12px; text-align: left;">Date</th>
+                            <th style="padding: 12px; text-align: left;">Recurrence</th>
+                            <th style="padding: 12px; text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="holidaysTableBody">
+                        <!-- Holidays will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Emergency Closure Modal -->
-<div id="emergencyClosureModal" class="modal" style="display:none;">
-    <div class="modal-content" style="max-width: 600px;">
-        <span class="close" onclick="closeEmergencyClosureModal()">&times;</span>
-        <h3><i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i> Emergency Closure</h3>
+<div id="emergencyClosureModal" class="modal clinic-modal" style="display:none;">
+    <div class="modal-content clinic-modal-content" style="max-width: 600px;">
+        <div class="clinic-modal-header">
+            <div class="clinic-modal-title">
+                <i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i>
+                Emergency Closure
+            </div>
+            <button type="button" class="clinic-modal-close" onclick="closeEmergencyClosureModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="clinic-modal-body">
         <form id="emergencyClosureForm" onsubmit="handleEmergencyClosureSubmit(event)">
             <div style="margin-bottom: 15px;">
                 <label><strong>Closure Duration:</strong></label>
@@ -347,12 +551,26 @@ if (empty($_SESSION['admin_verified'])) {
                 <button type="submit" class="btn btn-danger">Confirm Emergency Closure</button>
             </div>
         </form>
+        </div>
     </div>
 </div>
 
 <script>
     // Include all JavaScript functions from admin.php for clinic control
     // Copy the relevant functions here...
+
+    // Robust JSON helper: if PHP returns HTML (warnings/redirect), show the raw text
+    function fetchJson(url, options = {}) {
+        return fetch(url, options).then(async (res) => {
+            const text = await res.text();
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                const preview = String(text).slice(0, 220).replace(/\s+/g, ' ').trim();
+                throw new Error(`Invalid JSON from ${url}. HTTP ${res.status}. Response starts with: ${preview}`);
+            }
+        });
+    }
     
     // Notification System - Same as admin.php
     function showNotification(type, title, message, iconHtml = '', duration = 5000) {
@@ -449,7 +667,7 @@ if (empty($_SESSION['admin_verified'])) {
     
     // Include all clinic closure JavaScript functions from admin.php
     // Block Day Modal Functions
-    function openBlockDayModal() { document.getElementById('blockDayModal').style.display = 'block'; }
+    function openBlockDayModal() { document.getElementById('blockDayModal').style.display = 'flex'; }
     function closeBlockDayModal() {
         document.getElementById('blockDayModal').style.display = 'none';
         document.getElementById('blockDayForm').reset();
@@ -459,7 +677,7 @@ if (empty($_SESSION['admin_verified'])) {
     
     // Holiday Modal Functions
     function openHolidayModal() {
-        document.getElementById('holidayModal').style.display = 'block';
+        document.getElementById('holidayModal').style.display = 'flex';
         loadHolidays();
     }
     function closeHolidayModal() {
@@ -473,7 +691,7 @@ if (empty($_SESSION['admin_verified'])) {
     }
     
     // Emergency Closure Modal Functions
-    function openEmergencyClosureModal() { document.getElementById('emergencyClosureModal').style.display = 'block'; }
+    function openEmergencyClosureModal() { document.getElementById('emergencyClosureModal').style.display = 'flex'; }
     function closeEmergencyClosureModal() {
         document.getElementById('emergencyClosureModal').style.display = 'none';
         document.getElementById('emergencyClosureForm').reset();
@@ -514,12 +732,11 @@ if (empty($_SESSION['admin_verified'])) {
             notify_patients: notifyPatients
         };
         
-        fetch('../controllers/manage_clinic_closure.php', {
+        fetchJson('../controllers/manage_clinic_closure.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestData)
         })
-        .then(response => response.json())
         .then(data => {
             if (data.success) {
                 showNotification('success', 'Day Blocked Successfully', `Date ${closureDate} has been blocked. ${notifyPatients ? 'Patients have been notified.' : ''}`);
@@ -533,7 +750,7 @@ if (empty($_SESSION['admin_verified'])) {
         })
         .catch(error => {
             console.error('Error:', error);
-            showNotification('error', 'Error', 'An error occurred while blocking the day. Please try again.');
+            showNotification('error', 'Error', error?.message || 'An error occurred while blocking the day. Please try again.');
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
         });
@@ -557,12 +774,11 @@ if (empty($_SESSION['admin_verified'])) {
             recurrence: formData.get('recurrence')
         };
         
-        fetch('../controllers/manage_clinic_closure.php', {
+        fetchJson('../controllers/manage_clinic_closure.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestData)
         })
-        .then(response => response.json())
         .then(data => {
             if (data.success) {
                 showNotification('success', 'Holiday Added', `Holiday "${requestData.holiday_name}" has been added.`);
@@ -577,7 +793,7 @@ if (empty($_SESSION['admin_verified'])) {
         })
         .catch(error => {
             console.error('Error:', error);
-            showNotification('error', 'Error', 'An error occurred while adding holiday. Please try again.');
+            showNotification('error', 'Error', error?.message || 'An error occurred while adding holiday. Please try again.');
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
         });
@@ -585,8 +801,7 @@ if (empty($_SESSION['admin_verified'])) {
     
     // Load holidays list
     function loadHolidays() {
-        fetch('../controllers/get_holidays.php')
-        .then(response => response.json())
+        fetchJson('../controllers/get_holidays.php')
         .then(data => {
             const tbody = document.getElementById('holidaysTableBody');
             if (!tbody) return;
@@ -611,19 +826,21 @@ if (empty($_SESSION['admin_verified'])) {
                 tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No holidays found. Add one to get started.</td></tr>';
             }
         })
-        .catch(error => console.error('Error loading holidays:', error));
+        .catch(error => {
+            console.error('Error loading holidays:', error);
+            showNotification('error', 'Error', error?.message || 'Failed to load holidays.');
+        });
     }
     
     // Delete holiday
     function deleteHoliday(holidayId) {
         if (!confirm('Are you sure you want to delete this holiday?')) return;
         
-        fetch('../controllers/manage_clinic_closure.php', {
+        fetchJson('../controllers/manage_clinic_closure.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'delete_holiday', holiday_id: holidayId })
         })
-        .then(response => response.json())
         .then(data => {
             if (data.success) {
                 showNotification('success', 'Holiday Deleted', 'Holiday has been deleted successfully.');
@@ -635,7 +852,7 @@ if (empty($_SESSION['admin_verified'])) {
         })
         .catch(error => {
             console.error('Error:', error);
-            showNotification('error', 'Error', 'An error occurred while deleting holiday.');
+            showNotification('error', 'Error', error?.message || 'An error occurred while deleting holiday.');
         });
     }
     
@@ -668,12 +885,11 @@ if (empty($_SESSION['admin_verified'])) {
             notify_patients: notifyPatients
         };
         
-        fetch('../controllers/manage_clinic_closure.php', {
+        fetchJson('../controllers/manage_clinic_closure.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestData)
         })
-        .then(response => response.json())
         .then(data => {
             if (data.success) {
                 showNotification('warning', 'Emergency Closure Activated', `Clinic closed from ${startDate} to ${requestData.end_date}. ${data.cancelled_count || 0} appointments cancelled. ${notifyPatients ? 'Patients have been notified.' : ''}`);
@@ -687,7 +903,7 @@ if (empty($_SESSION['admin_verified'])) {
         })
         .catch(error => {
             console.error('Error:', error);
-            showNotification('error', 'Error', 'An error occurred while processing emergency closure. Please try again.');
+            showNotification('error', 'Error', error?.message || 'An error occurred while processing emergency closure. Please try again.');
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
         });
@@ -695,8 +911,7 @@ if (empty($_SESSION['admin_verified'])) {
     
     // Load clinic closures list
     function loadClinicClosures() {
-        fetch('../controllers/get_clinic_closures.php')
-        .then(response => response.json())
+        fetchJson('../controllers/get_clinic_closures.php')
         .then(data => {
             const container = document.getElementById('closuresContent');
             if (!container) return;
@@ -726,19 +941,21 @@ if (empty($_SESSION['admin_verified'])) {
                 container.innerHTML = '<p style="color: #6c757d; margin: 0; padding: 20px; background: white; border-radius: 8px; text-align: center;">No active closures.</p>';
             }
         })
-        .catch(error => console.error('Error loading clinic closures:', error));
+        .catch(error => {
+            console.error('Error loading clinic closures:', error);
+            showNotification('error', 'Error', error?.message || 'Failed to load clinic closures.');
+        });
     }
     
     // Remove closure
     function removeClosure(date) {
         if (!confirm(`Are you sure you want to remove the closure for ${date}?`)) return;
         
-        fetch('../controllers/manage_clinic_closure.php', {
+        fetchJson('../controllers/manage_clinic_closure.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'remove_closure', date: date })
         })
-        .then(response => response.json())
         .then(data => {
             if (data.success) {
                 showNotification('success', 'Closure Removed', `Closure for ${date} has been removed.`);
@@ -749,7 +966,7 @@ if (empty($_SESSION['admin_verified'])) {
         })
         .catch(error => {
             console.error('Error:', error);
-            showNotification('error', 'Error', 'An error occurred while removing closure.');
+            showNotification('error', 'Error', error?.message || 'An error occurred while removing closure.');
         });
     }
     

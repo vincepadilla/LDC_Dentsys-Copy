@@ -264,14 +264,14 @@
     <header>
         <div class="nav-container">
             <nav class="navbar">
-                <a href="#" class="logo">
+                <a href="/views/index.php" class="logo">
                     <!-- Replace with your actual logo path -->
                     <img src="../assets/images/landerologo.png" alt="Landero Dental Clinic Logo">
                     <span>Landero Dental Clinic</span>
                 </a>
                 
                 <ul class="nav-links">
-                    <li><a href="/">Home</a></li>
+                    <li><a href="/views/index.php">Home</a></li>
                     <li><a href="/#services">Services</a></li>
                     <li><a href="/#dentists">Dentists</a></li>
                     <li><a href="/#contact">Contact</a></li>

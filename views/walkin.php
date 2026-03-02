@@ -305,7 +305,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                                 </div>
                                 
                                 <div style='background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;'>
-                                    <p style='margin: 0; color: #856404;'><strong>Important:</strong> Please bring this ticket (Ticket ID: <strong>{$walkin_id}</strong>) when you visit the clinic. The exact appointment date and time will be finalized with the receptionist during your visit.</p>
+                                    <p style='margin: 0; color: #856404;'><strong>Important:</strong> Please bring this ticket (Ticket ID: <strong>{$walkin_id}</strong>) when you visit the clinic.</p>
                                 </div>
                                 
                                 <p style='margin-top: 20px;'>Thank you for choosing Landero Dental Clinic!</p>
@@ -424,6 +424,38 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
             color: rgba(255,255,255,0.75);
             font-style: italic;
         }
+
+        .availability-note {
+            margin-top: 20px;
+            padding: 15px 20px;
+            background: #f9fafb;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            color: #444;
+        }
+
+        .availability-note h4 {
+            margin-bottom: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .availability-note ul {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 10px 0;
+        }
+
+        .availability-note li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .walkin-note {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 8px;
+        }
         
         /* Responsive tooltip for mobile devices */
         @media (max-width: 480px) {
@@ -456,6 +488,227 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
             }
             .cal-tooltip .tt-title {
                 font-size: 10px;
+            }
+        }
+
+        /* Patient-facing clinic calendar */
+        .availability-calendar.patient-calendar {
+            margin-top: 10px;
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 16px 16px 12px;
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        /* Header (month + nav) */
+        .availability-calendar .availability-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .availability-calendar .cal-month {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #0f172a;
+        }
+
+        .availability-calendar .cal-nav {
+            border: none;
+            background: #e5f3ff;
+            color: #0f4c81;
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+        }
+        .availability-calendar .cal-nav:hover {
+            background: #d0e7ff;
+            box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+        }
+        .availability-calendar .cal-nav:active {
+            transform: translateY(1px);
+            box-shadow: none;
+        }
+
+        /* Grid */
+        .availability-calendar .cal-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            font-size: 0.78rem;
+        }
+
+        /* Weekday header cells */
+        .availability-calendar .cal-head {
+            text-align: center;
+            font-weight: 600;
+            color: #64748b;
+            padding: 4px 0;
+        }
+
+        /* Empty filler cells */
+        .availability-calendar .cal-empty {
+            min-height: 32px;
+        }
+
+        /* Day cells */
+        .availability-calendar .cal-day {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 5px 6px 6px;
+            cursor: default;
+            min-height: 44px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            border: 1px solid transparent;
+            transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.05s ease;
+        }
+
+        .availability-calendar .cal-day:hover {
+            background: #eef2ff;
+            border-color: rgba(129, 140, 248, 0.6);
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.15);
+            transform: translateY(-1px);
+        }
+
+        /* Today highlight */
+        .availability-calendar .cal-day.cal-today {
+            border-color: #0f766e;
+            box-shadow: 0 0 0 1px rgba(15, 118, 110, 0.7);
+        }
+
+        /* Day header row: date + dot */
+        .availability-calendar .day-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .availability-calendar .day-number {
+            font-weight: 600;
+            color: #0f172a;
+            font-size: 0.8rem;
+        }
+
+        /* Small status dot */
+        .availability-calendar .day-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            flex-shrink: 0;
+            background: #9ca3af; /* default; overridden per status */
+        }
+
+        /* Friendly status label */
+        .availability-calendar .day-status-text {
+            margin-top: 2px;
+            font-size: 0.7rem;
+            line-height: 1.2;
+            color: #4b5563;
+        }
+
+        /* Status colors mapped to existing status classes */
+        .availability-calendar .cal-day.status-available .day-status-dot {
+            background: #16a34a; /* green */
+        }
+        .availability-calendar .cal-day.status-limited .day-status-dot {
+            background: #facc15; /* yellow */
+        }
+        .availability-calendar .cal-day.status-full .day-status-dot {
+            background: #dc2626; /* red */
+        }
+
+        /* Optional softer text per status */
+        .availability-calendar .cal-day.status-full .day-status-text {
+            color: #b91c1c;
+        }
+        .availability-calendar .cal-day.status-limited .day-status-text {
+            color: #854d0e;
+        }
+
+        /* Legend under calendar */
+        .availability-calendar .cal-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 18px;
+            margin-top: 10px;
+            font-size: 0.72rem;
+            color: #4b5563;
+        }
+
+        .availability-calendar .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .availability-calendar .legend-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            display: inline-block;
+        }
+
+        .availability-calendar .legend-available {
+            background: #16a34a;
+        }
+        .availability-calendar .legend-limited {
+            background: #facc15;
+        }
+        .availability-calendar .legend-full {
+            background: #dc2626;
+        }
+
+        /* Tooltip note styling */
+        .cal-tooltip .tt-note {
+            margin-top: 8px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Responsive tweaks */
+        @media (max-width: 768px) {
+            .availability-calendar.patient-calendar {
+                padding: 12px 10px 10px;
+                border-radius: 12px;
+            }
+
+            .availability-calendar .cal-grid {
+                gap: 3px;
+                font-size: 0.7rem;
+            }
+
+            .availability-calendar .cal-day {
+                min-height: 40px;
+                padding: 4px 4px 5px;
+            }
+
+            .availability-calendar .day-number {
+                font-size: 0.75rem;
+            }
+
+            .availability-calendar .day-status-text {
+                font-size: 0.65rem;
+            }
+
+            .availability-calendar .cal-legend {
+                font-size: 0.68rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .availability-calendar .cal-head {
+                font-size: 0.68rem;
             }
         }
     </style>
@@ -545,11 +798,18 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
 
                 <div class="payment-method-section">
                     <h3 class="section-title">Clinic Calendar</h3>
-                    <div id="doctorAvailabilityCalendar" class="availability-calendar"></div>
-                    <p style="margin-top: 15px; color: #555; font-size: 0.9rem;">
-                        This calendar shows general clinic operating days. Exact appointment date and time for walk-in payment
-                        will be finalized with the receptionist during your visit.
-                    </p>
+                    <div id="doctorAvailabilityCalendar" class="availability-calendar patient-calendar"></div>
+                    <div class="availability-note">
+                        <h4>Walk-In Status Guide</h4>
+                        <ul>
+                            <li>🟢 <strong>Available</strong> – The clinic is open for walk-in visits from <strong>8:00 AM to 8:00 PM</strong>.</li>
+                            <li>🟡 <strong>Limited</strong> – The dentist has scheduled appointments. Walk-ins may be accommodated depending on availability.</li>
+                            <li>🔴 <strong>Not Available</strong> – The clinic is closed or fully booked. Please visit on another day.</li>
+                        </ul>
+                        <p class="walkin-note">
+                            Walk-in patients are accommodated on a first-come, first-served basis.
+                        </p>
+                    </div>
 
                     <!-- Walk-in payments are always treated as Cash in the backend -->
                     <input type="hidden" name="paymentMethod" value="Cash">
@@ -634,16 +894,44 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
         const blockedKeys = uniqueValidKeys(dayData?.blockedSlots || []);
         const availableKeys = timeSlotKeys.filter(k => !bookedKeys.includes(k) && !blockedKeys.includes(k));
 
-        function listHtml(keys) {
-            if (!keys.length) return `<div class="tt-none">None</div>`;
-            return `<ul>${keys.map(k => `<li>${escapeHtml(timeSlotLabels[k])}</li>`).join('')}</ul>`;
+        const available = availableKeys.length;
+        const bookedCount = bookedKeys.length;
+        const blockedCount = blockedKeys.length;
+
+        // Map to patient-friendly status text (logic mirrors day status)
+        let statusText = 'Available';
+        if (available === 0) {
+            statusText = 'Not Available';
+        } else if (bookedCount > 0 || blockedCount > 0) {
+            statusText = 'Limited';
+        }
+
+        // Derive clinic hours from existing times if possible
+        let clinicHours = 'Clinic hours vary';
+        const openKeys = timeSlotKeys.filter(k => !blockedKeys.includes(k)); // any time not blocked
+        if (openKeys.length) {
+            const firstLabel = timeSlotLabels[openKeys[0]];
+            const lastLabel = timeSlotLabels[openKeys[openKeys.length - 1]];
+            if (firstLabel && lastLabel) {
+                const from = firstLabel.split('-')[0];
+                const to = lastLabel.split('-')[1];
+                clinicHours = `${from}–${to}`;
+            }
         }
 
         return `
             <div class="tt-title">${escapeHtml(dateStr)}</div>
-            <div class="tt-row"><span class="tt-label">Available (${availableKeys.length}):</span>${listHtml(availableKeys)}</div>
-            <div class="tt-row"><span class="tt-label">Booked (${bookedKeys.length}):</span>${listHtml(bookedKeys)}</div>
-            <div class="tt-row"><span class="tt-label">Unavailable (${blockedKeys.length}):</span>${listHtml(blockedKeys)}</div>
+            <div class="tt-row">
+                <span class="tt-label">Clinic hours:</span>
+                <span>${escapeHtml(clinicHours)}</span>
+            </div>
+            <div class="tt-row">
+                <span class="tt-label">Status:</span>
+                <span>${escapeHtml(statusText)}</span>
+            </div>
+            <div class="tt-row tt-note">
+                Walk-ins are first-come, first-served.
+            </div>
         `;
     }
 
@@ -762,14 +1050,14 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
             let blockedCount = blockedKeys.length;
 
             let statusClass = 'status-available';
-            let statusLabel = 'Plenty of slots';
+            let statusLabel = 'Available';
 
             if (available === 0) {
                 statusClass = 'status-full';
-                statusLabel = 'Fully booked';
+                statusLabel = 'Not Available';
             } else if (bookedCount > 0 || blockedCount > 0) {
                 statusClass = 'status-limited';
-                statusLabel = 'Limited slots';
+                statusLabel = 'Limited';
             }
 
             const classes = ['cal-cell', 'cal-day', statusClass];
@@ -777,13 +1065,11 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
 
             html += `
                 <div class="${classes.join(' ')}" data-date="${dateStr}">
-                    <div class="day-number">${day}</div>
-                    <div class="day-status-text">${statusLabel}</div>
-                    <div class="day-status-bars">
-                        <span class="bar available-bar" title="Available">${available}</span>
-                        <span class="bar booked-bar" title="Booked">${bookedCount}</span>
-                        <span class="bar blocked-bar" title="Blocked">${blockedCount}</span>
+                    <div class="day-header">
+                        <span class="day-number">${day}</span>
+                        <span class="day-status-dot" aria-hidden="true"></span>
                     </div>
+                    <div class="day-status-text" aria-label="${statusLabel}">${statusLabel}</div>
                 </div>
             `;
         }
@@ -792,7 +1078,7 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
         html += '<div class="cal-legend">';
         html += '<span class="legend-item"><span class="legend-dot legend-available"></span> Available</span>';
         html += '<span class="legend-item"><span class="legend-dot legend-limited"></span> Limited</span>';
-        html += '<span class="legend-item"><span class="legend-dot legend-full"></span> Fully booked / blocked</span>';
+        html += '<span class="legend-item"><span class="legend-dot legend-full"></span> Not Available</span>';
         html += '</div>';
 
         calendarEl.innerHTML = html;

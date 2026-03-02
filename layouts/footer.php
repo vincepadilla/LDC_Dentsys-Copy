@@ -298,7 +298,7 @@
             </div>
             
             <div class="footer-bottom">
-                <p>&copy; 2025 Landero Dental Clinic. All rights reserved.</p>
+                <p>&copy; <?php echo date('Y'); ?> Landero Dental Clinic. All rights reserved.</p>
             </div>
         </div>
     </footer>

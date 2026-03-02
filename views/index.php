@@ -3,6 +3,7 @@ session_start();
 include_once('../database/config.php');
 include_once('chat.php');
 
+
 $isLoggedIn = isset($_SESSION['valid'], $_SESSION['userID']) && $_SESSION['valid'] === true;
 
 $fname = $lname = $email = $phone = $birthdate = $gender = $age = $address = '';
@@ -731,7 +732,7 @@ foreach ($defaults as $key => $defaultValue) {
             </div>
             
             <div class="footer-bottom">
-                <p>&copy; 2025 Landero Dental Clinic. All rights reserved.</p>
+                <p>&copy; <?php echo date('Y'); ?> Landero Dental Clinic. All rights reserved.</p>
             </div>
         </div>
     </footer>

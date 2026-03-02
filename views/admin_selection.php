@@ -407,19 +407,6 @@ $stmt->close();
             </div>
 
             <div class="options-grid">
-                <div class="option-card" onclick="window.location.href='edit_content.php'">
-                    <div class="option-icon">
-                        <i class="fas fa-edit"></i>
-                    </div>
-                    <div class="option-title">Edit Content</div>
-                    <div class="option-description">
-                        Edit website content including services, contact information, hero section, and more
-                    </div>
-                    <div class="option-arrow">
-                        <i class="fas fa-arrow-right"></i>
-                    </div>
-                </div>
-
                 <div class="option-card" onclick="window.location.href='admin.php'">
                     <div class="option-icon">
                         <i class="fas fa-tachometer-alt"></i>
@@ -427,6 +414,19 @@ $stmt->close();
                     <div class="option-title">Admin Dashboard</div>
                     <div class="option-description">
                         Access the main admin dashboard to manage appointments, patients, and clinic operations
+                    </div>
+                    <div class="option-arrow">
+                        <i class="fas fa-arrow-right"></i>
+                    </div>
+                </div>
+
+                <div class="option-card" onclick="window.location.href='super_admin_portal.php'">
+                    <div class="option-icon">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="option-title">Super Admin Portal</div>
+                    <div class="option-description">
+                        Access advanced management tools including website content editing and user account control
                     </div>
                     <div class="option-arrow">
                         <i class="fas fa-arrow-right"></i>

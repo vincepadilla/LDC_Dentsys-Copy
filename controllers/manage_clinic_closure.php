@@ -1,6 +1,14 @@
 <?php
 session_start();
-include_once('config.php');
+
+// Always return JSON from this endpoint (avoid HTML warnings breaking fetch().json())
+header('Content-Type: application/json; charset=utf-8');
+
+// Ensure warnings/notices don't get printed as HTML into the JSON response
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
+require_once(__DIR__ . '/../database/config.php');
 
 // Check if admin is logged in
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
@@ -8,7 +16,11 @@ if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     exit();
 }
 
-header('Content-Type: application/json');
+// Ensure DB connection exists
+if (!isset($con) || !$con) {
+    echo json_encode(['success' => false, 'message' => 'Database connection not initialized']);
+    exit();
+}
 
 // Get JSON input
 $input = json_decode(file_get_contents('php://input'), true);
@@ -40,7 +52,7 @@ switch ($action) {
         break;
 }
 
-function blockDay($con, $data) {
+function blockDay($con, $data, $silent = false) {
     $date = $data['date'] ?? '';
     $closureType = $data['closure_type'] ?? 'full_day';
     $reason = $data['reason'] ?? '';
@@ -48,8 +60,9 @@ function blockDay($con, $data) {
     $notifyPatients = $data['notify_patients'] ?? false;
     
     if (empty($date)) {
-        echo json_encode(['success' => false, 'message' => 'Date is required']);
-        return;
+        $resp = ['success' => false, 'message' => 'Date is required'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
     }
     
     // Use custom reason if reason is "Other"
@@ -58,8 +71,9 @@ function blockDay($con, $data) {
     }
     
     if (empty($reason)) {
-        echo json_encode(['success' => false, 'message' => 'Reason is required']);
-        return;
+        $resp = ['success' => false, 'message' => 'Reason is required'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
     }
     
     // Check if clinic_closures table exists, if not create it
@@ -68,18 +82,29 @@ function blockDay($con, $data) {
     // Check if closure already exists for this date
     $checkQuery = "SELECT id FROM clinic_closures WHERE closure_date = ? AND status = 'active'";
     $checkStmt = $con->prepare($checkQuery);
+    if (!$checkStmt) {
+        $resp = ['success' => false, 'message' => 'Failed to prepare closure check query'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
+    }
     $checkStmt->bind_param("s", $date);
     $checkStmt->execute();
     $checkResult = $checkStmt->get_result();
     
     if ($checkResult->num_rows > 0) {
-        echo json_encode(['success' => false, 'message' => 'Closure already exists for this date']);
-        return;
+        $resp = ['success' => false, 'message' => 'Closure already exists for this date'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
     }
     
     // Insert clinic closure
     $insertQuery = "INSERT INTO clinic_closures (closure_date, closure_type, reason, status, created_at) VALUES (?, ?, ?, 'active', NOW())";
     $insertStmt = $con->prepare($insertQuery);
+    if (!$insertStmt) {
+        $resp = ['success' => false, 'message' => 'Failed to prepare closure insert query'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
+    }
     $insertStmt->bind_param("sss", $date, $closureType, $reason);
     
     if ($insertStmt->execute()) {
@@ -95,9 +120,13 @@ function blockDay($con, $data) {
             notifyAffectedPatients($con, $date, $reason, $closureType);
         }
         
-        echo json_encode(['success' => true, 'message' => 'Day blocked successfully']);
+        $resp = ['success' => true, 'message' => 'Day blocked successfully'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
     } else {
-        echo json_encode(['success' => false, 'message' => 'Failed to block day: ' . mysqli_error($con)]);
+        $resp = ['success' => false, 'message' => 'Failed to block day'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
     }
 }
 
@@ -117,21 +146,29 @@ function addHoliday($con, $data) {
     // Insert holiday
     $insertQuery = "INSERT INTO holidays (holiday_name, holiday_date, recurrence, created_at) VALUES (?, ?, ?, NOW())";
     $insertStmt = $con->prepare($insertQuery);
+    if (!$insertStmt) {
+        echo json_encode(['success' => false, 'message' => 'Failed to prepare holiday insert query']);
+        return;
+    }
     $insertStmt->bind_param("sss", $holidayName, $holidayDate, $recurrence);
     
     if ($insertStmt->execute()) {
-        // Automatically create closure for this holiday
-        blockDay($con, [
+        // Automatically create closure for this holiday (silent to avoid double JSON output)
+        $blockResp = blockDay($con, [
             'date' => $holidayDate,
             'closure_type' => 'full_day',
             'reason' => "Holiday: $holidayName",
             'custom_reason' => '',
             'notify_patients' => true
-        ]);
+        ], true);
         
-        echo json_encode(['success' => true, 'message' => 'Holiday added and day blocked successfully']);
+        if (!empty($blockResp['success'])) {
+            echo json_encode(['success' => true, 'message' => 'Holiday added and day blocked successfully']);
+        } else {
+            echo json_encode(['success' => true, 'message' => 'Holiday added (closure not created)', 'closure_error' => $blockResp['message'] ?? 'Unknown error']);
+        }
     } else {
-        echo json_encode(['success' => false, 'message' => 'Failed to add holiday: ' . mysqli_error($con)]);
+        echo json_encode(['success' => false, 'message' => 'Failed to add holiday']);
     }
 }
 
@@ -146,6 +183,10 @@ function deleteHoliday($con, $data) {
     // Get holiday date before deleting
     $getQuery = "SELECT holiday_date FROM holidays WHERE id = ?";
     $getStmt = $con->prepare($getQuery);
+    if (!$getStmt) {
+        echo json_encode(['success' => false, 'message' => 'Failed to prepare holiday lookup query']);
+        return;
+    }
     $getStmt->bind_param("i", $holidayId);
     $getStmt->execute();
     $result = $getStmt->get_result();
@@ -154,17 +195,21 @@ function deleteHoliday($con, $data) {
     // Delete holiday
     $deleteQuery = "DELETE FROM holidays WHERE id = ?";
     $deleteStmt = $con->prepare($deleteQuery);
+    if (!$deleteStmt) {
+        echo json_encode(['success' => false, 'message' => 'Failed to prepare holiday delete query']);
+        return;
+    }
     $deleteStmt->bind_param("i", $holidayId);
     
     if ($deleteStmt->execute()) {
         // Optionally remove closure for this date
         if ($holiday) {
-            removeClosure($con, ['date' => $holiday['holiday_date']]);
+            removeClosure($con, ['date' => $holiday['holiday_date']], true);
         }
         
         echo json_encode(['success' => true, 'message' => 'Holiday deleted successfully']);
     } else {
-        echo json_encode(['success' => false, 'message' => 'Failed to delete holiday: ' . mysqli_error($con)]);
+        echo json_encode(['success' => false, 'message' => 'Failed to delete holiday']);
     }
 }
 
@@ -234,29 +279,40 @@ function emergencyClosure($con, $data) {
     ]);
 }
 
-function removeClosure($con, $data) {
+function removeClosure($con, $data, $silent = false) {
     $date = $data['date'] ?? '';
     
     if (empty($date)) {
-        echo json_encode(['success' => false, 'message' => 'Date is required']);
-        return;
+        $resp = ['success' => false, 'message' => 'Date is required'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
     }
     
     // Mark closure as inactive
     $updateQuery = "UPDATE clinic_closures SET status = 'inactive' WHERE closure_date = ? AND status = 'active'";
     $updateStmt = $con->prepare($updateQuery);
+    if (!$updateStmt) {
+        $resp = ['success' => false, 'message' => 'Failed to prepare closure update query'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
+    }
     $updateStmt->bind_param("s", $date);
     
     if ($updateStmt->execute()) {
         // Unblock all time slots for this date
         $unblockQuery = "DELETE FROM blocked_time_slots WHERE date = ? AND reason LIKE 'Clinic Closure:%'";
         $unblockStmt = $con->prepare($unblockQuery);
-        $unblockStmt->bind_param("s", $date);
-        $unblockStmt->execute();
-        
-        echo json_encode(['success' => true, 'message' => 'Closure removed successfully']);
+        if ($unblockStmt) {
+            $unblockStmt->bind_param("s", $date);
+            $unblockStmt->execute();
+        }
+        $resp = ['success' => true, 'message' => 'Closure removed successfully'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
     } else {
-        echo json_encode(['success' => false, 'message' => 'Failed to remove closure: ' . mysqli_error($con)]);
+        $resp = ['success' => false, 'message' => 'Failed to remove closure'];
+        if (!$silent) echo json_encode($resp);
+        return $resp;
     }
 }
 
@@ -336,7 +392,7 @@ function checkClinicClosuresTable($con) {
     // Check if table exists, create if not
     $checkTable = "SHOW TABLES LIKE 'clinic_closures'";
     $result = mysqli_query($con, $checkTable);
-    
+    if (!$result) return;
     if (mysqli_num_rows($result) == 0) {
         $createTable = "CREATE TABLE clinic_closures (
             id INT AUTO_INCREMENT PRIMARY KEY,

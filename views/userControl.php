@@ -2,15 +2,11 @@
 session_start();
 include_once("../database/config.php");
 
-if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
+if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'super-admin') {
     header("Location: login.php");
     exit();
 }
 
-if (empty($_SESSION['admin_verified'])) {
-    header("Location: admin_verify.php");
-    exit();
-}
 
 // Check if status column exists and add it if not
 $checkColumn = "SHOW COLUMNS FROM user_account LIKE 'status'";
@@ -267,7 +263,7 @@ $usersResult = mysqli_query($con, $usersQuery);
 
 <div class="main-content">
     <div class="container">
-        <a href="admin.php" class="back-button" onclick="navigateBack(event)">
+        <a href="super_admin_portal.php" class="back-button" onclick="navigateBack(event)">
             <i class="fas fa-arrow-left"></i> Back to Admin
         </a>
         <h2><i class="fas fa-users"></i> USER CONTROL</h2>

@@ -3,16 +3,11 @@ session_start();
 include_once("../database/config.php");
 
 // Redirect if not logged in or not admin
-if (!isset($_SESSION['userID']) || !isset($_SESSION['role']) || strtolower($_SESSION['role']) !== 'admin') {
+if (!isset($_SESSION['userID']) || !isset($_SESSION['role']) || strtolower($_SESSION['role']) !== 'super-admin') {
     header("Location: login.php");
     exit();
 }
 
-// Check if admin is verified
-if (empty($_SESSION['admin_verified'])) {
-    header("Location: admin_verify.php");
-    exit();
-}
 
 // Create site_content table if it doesn't exist
 $createTableQuery = "CREATE TABLE IF NOT EXISTS site_content (
@@ -513,7 +508,7 @@ if (isset($_SESSION['content_error'])) {
     <div class="content-container">
         <div class="content-header">
             <h1><i class="fas fa-edit"></i> Edit Website Content</h1>
-            <a href="admin_selection.php" class="back-btn">
+            <a href="super_admin_portal.php" class="back-btn">
                 <i class="fas fa-arrow-left"></i> Back to Selection
             </a>
         </div>

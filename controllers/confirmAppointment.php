@@ -1,4 +1,7 @@
 <?php
+// Start output buffering to prevent any accidental output
+ob_start();
+
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -8,38 +11,85 @@ require_once __DIR__ . '/../libraries/PhpMailer/src/SMTP.php';
 
 include_once __DIR__ . '/../database/config.php';
 
+// Clear any output that might have been generated
+ob_clean();
+
 header('Content-Type: application/json');
+
+// Helper function to send JSON response and exit
+function sendJsonResponse($data) {
+    // Clear and end output buffer if active
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    echo json_encode($data);
+    exit();
+}
 
 // Function to generate new prefixed ID
 if (!function_exists('generateID')) {
     function generateID($prefix, $table, $column, $con) {
-        $query = "SELECT $column FROM $table ORDER BY $column DESC LIMIT 1";
-        $result = mysqli_query($con, $query);
-        $row = mysqli_fetch_assoc($result);
-        if ($row && !empty($row[$column])) {
-            $lastNum = intval(substr($row[$column], strlen($prefix))) + 1;
+        try {
+            $query = "SELECT $column FROM $table ORDER BY $column DESC LIMIT 1";
+            $result = mysqli_query($con, $query);
+            // With mysqli_report enabled, mysqli_query throws exceptions, so this may not be reached
+            // But keep it for backward compatibility
+            if (!$result) {
+                // Table doesn't exist or query failed, return default ID
+                return $prefix . str_pad(1, 3, '0', STR_PAD_LEFT);
+            }
+            $row = mysqli_fetch_assoc($result);
+            if ($row && !empty($row[$column])) {
+                $lastNum = intval(substr($row[$column], strlen($prefix))) + 1;
+            } else {
+                $lastNum = 1;
+            }
+            return $prefix . str_pad($lastNum, 3, '0', STR_PAD_LEFT);
+        } catch (mysqli_sql_exception $e) {
+            // Catch mysqli exceptions (table doesn't exist, etc.)
+            return $prefix . str_pad(1, 3, '0', STR_PAD_LEFT);
+        } catch (Exception $e) {
+            // Catch any other exceptions
+            return $prefix . str_pad(1, 3, '0', STR_PAD_LEFT);
+        }
+    }
+}
+
+// Set error handler to catch fatal errors and return JSON
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    // Only handle fatal errors that would break JSON output
+    if (error_reporting() === 0) {
+        return false;
+    }
+    return false; // Let PHP handle it normally, but we'll catch it in try-catch
+});
+
+// Set exception handler
+set_exception_handler(function($exception) {
+    ob_clean();
+    sendJsonResponse([
+        'success' => false,
+        'message' => 'An error occurred: ' . $exception->getMessage()
+    ]);
+});
+
+// Wrap everything in try-catch to handle any fatal errors
+try {
+    // Get appointment_id from POST or JSON body
+    $appointment_id = null;
+    if ($_SERVER["REQUEST_METHOD"] === "POST") {
+        if (isset($_POST['appointment_id']) && trim($_POST['appointment_id']) !== '') {
+            $appointment_id = trim($_POST['appointment_id']);
         } else {
-            $lastNum = 1;
-        }
-        return $prefix . str_pad($lastNum, 3, '0', STR_PAD_LEFT);
-    }
-}
-
-// Get appointment_id from POST or JSON body
-$appointment_id = null;
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    if (isset($_POST['appointment_id']) && trim($_POST['appointment_id']) !== '') {
-        $appointment_id = trim($_POST['appointment_id']);
-    } else {
-        // Try JSON body (e.g. when Content-Type is application/json)
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (is_array($input) && isset($input['appointment_id']) && trim($input['appointment_id']) !== '') {
-            $appointment_id = trim($input['appointment_id']);
+            // Try JSON body (e.g. when Content-Type is application/json)
+            $input = json_decode(file_get_contents('php://input'), true);
+            if (is_array($input) && isset($input['appointment_id']) && trim($input['appointment_id']) !== '') {
+                $appointment_id = trim($input['appointment_id']);
+            }
         }
     }
-}
 
-if ($appointment_id) {
+    if ($appointment_id) {
 
     // Get appointment details with joins to patient_information, services, and multidisciplinary_dental_team
     $stmt = $con->prepare("SELECT a.*, 
@@ -75,20 +125,34 @@ if ($appointment_id) {
             $user_id = $appointment['user_id'] ?? null;
             
             // === NOTIFICATION INSERT ===
+            // Try to insert notification, but don't fail if table doesn't exist
             if (!empty($user_id)) {
-                $notification_id = generateID('N', 'notifications', 'notification_id', $con);
-                $dentistName = 'Dr. ' . $dentist;
-                $dentistName = mysqli_real_escape_string($con, $dentistName);
-                $appointment_date = mysqli_real_escape_string($con, $appointment['appointment_date']);
-                $appointment_time = mysqli_real_escape_string($con, $appointment['appointment_time']);
-                $user_id = mysqli_real_escape_string($con, $user_id);
-                
-                $insertNotification = "INSERT INTO notifications 
-                    (notification_id, user_id, type, appointment_date, appointment_time, dentist_name, is_read, created_at)
-                    VALUES 
-                    ('$notification_id', '$user_id', 'confirmed', '$appointment_date', '$appointment_time', '$dentistName', 0, NOW())";
-                
-                mysqli_query($con, $insertNotification);
+                try {
+                    // Check if notifications table exists
+                    $tableCheck = mysqli_query($con, "SHOW TABLES LIKE 'notifications'");
+                    if (mysqli_num_rows($tableCheck) > 0) {
+                        $notification_id = generateID('N', 'notifications', 'notification_id', $con);
+                        $dentistName = 'Dr. ' . $dentist;
+                        $dentistName = mysqli_real_escape_string($con, $dentistName);
+                        $appointment_date = mysqli_real_escape_string($con, $appointment['appointment_date']);
+                        $appointment_time = mysqli_real_escape_string($con, $appointment['appointment_time']);
+                        $user_id_escaped = mysqli_real_escape_string($con, $user_id);
+                        
+                        $insertNotification = "INSERT INTO notifications 
+                            (notification_id, user_id, type, appointment_date, appointment_time, dentist_name, is_read, created_at)
+                            VALUES 
+                            ('$notification_id', '$user_id_escaped', 'confirmed', '$appointment_date', '$appointment_time', '$dentistName', 0, NOW())";
+                        
+                        $notificationResult = mysqli_query($con, $insertNotification);
+                        if (!$notificationResult) {
+                            // Log error but don't fail the appointment confirmation
+                            error_log("Failed to insert notification: " . mysqli_error($con));
+                        }
+                    }
+                } catch (Exception $e) {
+                    // Log error but don't fail the appointment confirmation
+                    error_log("Notification insert error: " . $e->getMessage());
+                }
             }
             
             // Send email (only if patient has email)
@@ -129,34 +193,44 @@ if ($appointment_id) {
             }
 
             // Return JSON success response
-            echo json_encode([
+            sendJsonResponse([
                 'success' => true,
                 'status' => 'success',
                 'message' => $emailSent ? 'Appointment confirmed and email sent successfully.' : 'Appointment confirmed successfully.'
             ]);
-            exit();
         } else {
-            echo json_encode([
+            sendJsonResponse([
                 'success' => false,
                 'message' => 'Error updating appointment: ' . $stmtUpdate->error
             ]);
-            exit();
         }
 
         $stmtUpdate->close();
     } else {
-        echo json_encode([
+        sendJsonResponse([
             'success' => false,
             'message' => 'Appointment not found.'
         ]);
-        exit();
     }
-
-    $con->close();
-} else {
-    echo json_encode([
+    
+    // Don't close connection here as it might be used elsewhere
+    // $con->close();
+    } else {
+        sendJsonResponse([
+            'success' => false,
+            'message' => 'Invalid request. Appointment ID is required.'
+        ]);
+    }
+} catch (Exception $e) {
+    // Catch any unhandled exceptions and return JSON error
+    sendJsonResponse([
         'success' => false,
-        'message' => 'Invalid request. Appointment ID is required.'
+        'message' => 'An error occurred while processing your request: ' . $e->getMessage()
     ]);
-    exit();
+} catch (Error $e) {
+    // Catch fatal errors (like missing tables)
+    sendJsonResponse([
+        'success' => false,
+        'message' => 'A system error occurred. Please contact support.'
+    ]);
 }

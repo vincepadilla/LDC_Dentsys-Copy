@@ -71,7 +71,12 @@ if (isset($_POST['submit'])) {
                     $_SESSION['role'] = $row['role'] ?? 'user';
                     $_SESSION['valid'] = true;
 
-                    if (strtolower($row['role']) === 'admin') {
+                    $role = strtolower($row['role'] ?? 'user');
+
+                    if ($role === 'super-admin' || $role === 'super_admin') {
+                        header("Location: super_admin_portal.php");
+                        exit();
+                    } elseif ($role === 'admin') {
                         header("Location: admin_verify.php");
                         exit();
                     } else {

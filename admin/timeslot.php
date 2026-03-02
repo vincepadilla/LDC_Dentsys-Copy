@@ -244,23 +244,6 @@ if (empty($_SESSION['admin_verified'])) {
                 </select>
             </div>
             
-            <div class="control-group">
-                <button class="btn btn-primary" onclick="openBlockDayModal()">
-                    <i class="fas fa-calendar-times"></i> Block Day
-                </button>
-            </div>
-            
-            <div class="control-group">
-                <button class="btn btn-accent" onclick="openHolidayModal()">
-                    <i class="fas fa-calendar-star"></i> Holidays
-                </button>
-            </div>
-            
-            <div class="control-group">
-                <button class="btn btn-danger" onclick="openEmergencyClosureModal()">
-                    <i class="fas fa-exclamation-triangle"></i> Emergency
-                </button>
-            </div>
         </div>
 
         <!-- Mobile/Tablet Card View Controls -->

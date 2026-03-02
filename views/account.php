@@ -912,10 +912,12 @@ if (isset($_SESSION['password_error'])) {
                             <div class="appointment-actions">
                                 <?php if ($status == 'Cancelled'): ?>
                                     <!-- For Cancelled appointments, allow reschedule and optional refund request -->
-                                    <a href="reschedule.php?id=<?= $recent_appointment['appointment_id']; ?>" 
-                                       class="btn btn-primary">
-                                        Reschedule
-                                    </a>
+                                    <?php if (!$isWalkInAppointment): ?>
+                                        <a href="reschedule.php?id=<?= $recent_appointment['appointment_id']; ?>" 
+                                           class="btn btn-primary">
+                                            Reschedule
+                                        </a>
+                                    <?php endif; ?>
 
                                     <?php if ($eligibleForRefundRequest): ?>
                                         <button type="button"
@@ -932,25 +934,21 @@ if (isset($_SESSION['password_error'])) {
                                     <?php endif; ?>
                                 <?php else: ?>
                                     <!-- Show all buttons for non-cancelled appointments -->
-                                    <a href="../controllers/printAppointmentReceipt.php?id=<?= urlencode($recent_appointment['appointment_id']); ?>" 
-                                       class="btn btn-secondary <?= $printReceiptDisabled ? 'disabled' : ''; ?>"
-                                       target="_blank"
-                                       <?= $printReceiptDisabled ? 'onclick="return false;" style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"' : ''; ?>>
-                                        Print Receipt
-                                    </a>
 
-                                    <button type="button" 
-                                       class="btn btn-danger <?= $buttonsDisabled ? 'disabled' : ''; ?>"
-                                       data-appointment-id="<?= htmlspecialchars($recent_appointment['appointment_id']); ?>"
-                                       <?= $buttonsDisabled ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : 'onclick="showCancelConfirmation(this)"'; ?>>
-                                        Cancel
-                                    </button>
+                                    <?php if (!$isWalkInAppointment): ?>
+                                        <button type="button" 
+                                           class="btn btn-danger <?= $buttonsDisabled ? 'disabled' : ''; ?>"
+                                           data-appointment-id="<?= htmlspecialchars($recent_appointment['appointment_id']); ?>"
+                                           <?= $buttonsDisabled ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : 'onclick="showCancelConfirmation(this)"'; ?>>
+                                            Cancel
+                                        </button>
 
-                                    <a href="reschedule.php?id=<?= $recent_appointment['appointment_id']; ?>" 
-                                       class="btn btn-primary <?= $rescheduleDisabled ? 'disabled' : ''; ?>"
-                                       <?= $rescheduleDisabled ? 'onclick="return false;" style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"' : ''; ?>>
-                                        Reschedule
-                                    </a>
+                                        <a href="reschedule.php?id=<?= $recent_appointment['appointment_id']; ?>" 
+                                           class="btn btn-primary <?= $rescheduleDisabled ? 'disabled' : ''; ?>"
+                                           <?= $rescheduleDisabled ? 'onclick="return false;" style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"' : ''; ?>>
+                                            Reschedule
+                                        </a>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                         </div>
