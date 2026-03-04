@@ -252,6 +252,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $date = mysqli_real_escape_string($con, trim($_POST['date']));
     $time_slot = mysqli_real_escape_string($con, trim($_POST['time']));
     $branch = mysqli_real_escape_string($con, trim($_POST['branch']));
+    $request_note = trim($_POST['request_note'] ?? '');
+    $request_note_db = ($request_note !== '') ? $request_note : null;
 
     $timeMap = [
         'firstBatch' => '8:00AM-9:00AM',
@@ -535,27 +537,66 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $colCheck = mysqli_query($con, "SHOW COLUMNS FROM appointments LIKE 'ticket_code'");
         $hasTicketCols = ($colCheck && mysqli_num_rows($colCheck) > 0);
 
+        // Insert appointment using prepared statement (stores request_note as NULL when empty)
         if ($hasTicketCols) {
-            $insertAppointment = "INSERT INTO appointments 
-                (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, ticket_code, ticket_expires_at)
-                VALUES 
-                ('$appointment_id', '$patient_id', '$team_id', '$service_id', '$branch', '$date', '$time', '$time_slot', '$appointmentStatus', " . ($ticketCode ? "'" . $ticketCode . "'" : "NULL") . ", " . ($ticketExpiresAt ? "'" . $ticketExpiresAt . "'" : "NULL") . ")";
+            $insertAppointmentStmt = $con->prepare("INSERT INTO appointments 
+                (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, request_note, ticket_code, ticket_expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            if (!$insertAppointmentStmt) {
+                error_log('Appointment insert prepare error: ' . $con->error);
+                echo "<script>alert('Error preparing appointment. Please try again.');
+                window.location.href='../views/index.php#appointment';</script>";
+                exit();
+            }
+            $insertAppointmentStmt->bind_param(
+                "ssssssssssss",
+                $appointment_id,
+                $patient_id,
+                $team_id,
+                $service_id,
+                $branch,
+                $date,
+                $time,
+                $time_slot,
+                $appointmentStatus,
+                $request_note_db,
+                $ticketCode,
+                $ticketExpiresAt
+            );
         } else {
             // Fallback for older DB without ticket columns
-            $insertAppointment = "INSERT INTO appointments 
-                (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status)
-                VALUES 
-                ('$appointment_id', '$patient_id', '$team_id', '$service_id', '$branch', '$date', '$time', '$time_slot', '$appointmentStatus')";
+            $insertAppointmentStmt = $con->prepare("INSERT INTO appointments 
+                (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, request_note)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            if (!$insertAppointmentStmt) {
+                error_log('Appointment insert prepare error: ' . $con->error);
+                echo "<script>alert('Error preparing appointment. Please try again.');
+                window.location.href='../views/index.php#appointment';</script>";
+                exit();
+            }
+            $insertAppointmentStmt->bind_param(
+                "ssssssssss",
+                $appointment_id,
+                $patient_id,
+                $team_id,
+                $service_id,
+                $branch,
+                $date,
+                $time,
+                $time_slot,
+                $appointmentStatus,
+                $request_note_db
+            );
         }
 
-        $appointmentInserted = mysqli_query($con, $insertAppointment);
+        $appointmentInserted = $insertAppointmentStmt->execute();
         
         if (!$appointmentInserted) {
-            $errorMsg = mysqli_error($con);
-            $errorCode = mysqli_errno($con);
+            $errorMsg = $insertAppointmentStmt->error;
+            $errorCode = $insertAppointmentStmt->errno;
             error_log('Appointment insert error: ' . $errorMsg . ' (Error Code: ' . $errorCode . ')');
-            error_log('Failed query: ' . $insertAppointment);
             error_log('Service ID used: ' . $service_id);
+            $insertAppointmentStmt->close();
             
             // Check if it's a foreign key constraint error
             if ($errorCode == 1452) {
@@ -571,6 +612,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
             exit();
         }
+        $insertAppointmentStmt->close();
 
         // === PAYMENT INSERT ===
         if ($isCashPayment) {

@@ -2,19 +2,28 @@
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-require '../PhpMailer/src/Exception.php';
-require '../PhpMailer/src/PHPMailer.php';
-require '../PhpMailer/src/SMTP.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/Exception.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/PHPMailer.php';
+require_once __DIR__ . '/../libraries/PhpMailer/src/SMTP.php';
 
-include_once("config.php");
+include_once __DIR__ . '/../database/config.php';
+
+header('Content-Type: application/json');
+
+function sendNoShowJson($data) {
+    echo json_encode($data);
+    exit();
+}
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
 
     $appointment_id = trim($_POST['appointment_id']);
 
     if (empty($appointment_id)) {
-        echo "<script>alert('Error: Appointment ID is required.'); window.location='admin.php?noshow=invalid_id';</script>";
-        exit();
+        sendNoShowJson([
+            'success' => false,
+            'message' => 'Error: Appointment ID is required.'
+        ]);
     }
 
     /** CHECK IF APPOINTMENT EXISTS **/
@@ -36,8 +45,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
     $stmtCheck->close();
 
     if (!$appointment) {
-        echo "<script>alert('Appointment not found.'); window.location='admin.php?noshow=not_found';</script>";
-        exit();
+        sendNoShowJson([
+            'success' => false,
+            'message' => 'Appointment not found.'
+        ]);
     }
 
     /** UPDATE STATUS TO NO-SHOW **/
@@ -45,70 +56,80 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
     $stmtUpdate->bind_param("s", $appointment_id);
 
     if (!$stmtUpdate->execute()) {
-        echo "<script>alert('Failed to update appointment status: " . $stmtUpdate->error . "'); window.location='admin.php?noshow=failed';</script>";
+        $error = $stmtUpdate->error;
         $stmtUpdate->close();
-        exit();
+        sendNoShowJson([
+            'success' => false,
+            'message' => 'Failed to update appointment status: ' . $error
+        ]);
     }
 
     $stmtUpdate->close();
 
     /** EMAIL VARIABLES **/
-    $patient_name = trim($appointment['first_name'] . " " . $appointment['last_name']);
-    $service = !empty($appointment['sub_service']) ? $appointment['sub_service'] : $appointment['service_category'];
-    $dentist = trim($appointment['dentist_first'] . " " . $appointment['dentist_last']);
-    $email = $appointment['email'];
+    $patient_name = trim(($appointment['first_name'] ?? '') . " " . ($appointment['last_name'] ?? ''));
+    $service = !empty($appointment['sub_service']) ? $appointment['sub_service'] : ($appointment['service_category'] ?? '');
+    $dentist = trim(($appointment['dentist_first'] ?? '') . " " . ($appointment['dentist_last'] ?? ''));
+    $email = $appointment['email'] ?? '';
 
-    /** SEND EMAIL **/
-    $mail = new PHPMailer(true);
+    $emailSent = false;
 
-    try {
-        $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com';
-        $mail->SMTPAuth = true;
-        $mail->Username = 'padillavincehenrick@gmail.com';
-        $mail->Password = 'glxd csoa ispj bvjg';
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port = 587;
+    if (!empty($email)) {
+        /** SEND EMAIL **/
+        $mail = new PHPMailer(true);
 
-        $mail->setFrom('padillavincehenrick@gmail.com', 'Landero Dental Clinic');
-        $mail->addAddress($email, $patient_name);
+        try {
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'mlanderodentalclinic@gmail.com';
+            $mail->Password = 'xrfp cpvv ckdv jmht';
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 587;
 
-        $mail->isHTML(true);
-        $mail->Subject = 'Missed Appointment Notice';
+            $mail->setFrom('mlanderodentalclinic@gmail.com', 'Landero Dental Clinic');
+            $mail->addAddress($email, $patient_name);
 
-        $mail->Body = "
-            <h3>Hi {$patient_name},</h3>
-            <p>It appears that you missed your scheduled dental appointment.</p>
+            $mail->isHTML(true);
+            $mail->Subject = 'Missed Appointment Notice';
 
-            <p>
-            <strong>Service:</strong> {$service}<br>
-            <strong>Dentist:</strong> {$dentist}<br>
-            <strong>Date:</strong> " . date('F j, Y', strtotime($appointment['appointment_date'])) . "<br>
-            <strong>Time:</strong> {$appointment['appointment_time']}
-            </p>
+            $mail->Body = "
+                <h3>Hi {$patient_name},</h3>
+                <p>It appears that you missed your scheduled dental appointment.</p>
 
-            <p>If you wish to reschedule, please log in to your account or contact our clinic.</p>
-            <p>Thank you for your understanding.</p>
-        ";
+                <p>
+                <strong>Service:</strong> {$service}<br>
+                <strong>Dentist:</strong> {$dentist}<br>
+                <strong>Date:</strong> " . date('F j, Y', strtotime($appointment['appointment_date'])) . "<br>
+                <strong>Time:</strong> {$appointment['appointment_time']}
+                </p>
 
-        $mail->send();
+                <p>If you wish to reschedule, please log in to your account or contact our clinic.</p>
+                <p>Thank you for your understanding.</p>
+            ";
 
-        echo "<script>
-                alert('Status updated to No-Show and email sent.');
-                window.location='admin.php?noshow=success';
-             </script>";
-        exit();
-
-    } catch (Exception $e) {
-        echo "<script>
-                alert('Status updated, but email failed to send. Error: {$mail->ErrorInfo}');
-                window.location='admin.php?noshow=email_failed';
-             </script>";
-        exit();
+            $mail->send();
+            $emailSent = true;
+        } catch (Exception $e) {
+            // Log error but still consider status update successful
+            error_log('No-Show email failed: ' . $mail->ErrorInfo);
+        }
     }
 
+    $message = $emailSent
+        ? 'Status updated to No-Show and email sent.'
+        : 'Status updated to No-Show. Email not sent (no email on file or sending failed).';
+
+    sendNoShowJson([
+        'success' => true,
+        'status'  => 'success',
+        'message' => $message
+    ]);
+
 } else {
-    header("Location: admin.php");
-    exit();
+    sendNoShowJson([
+        'success' => false,
+        'message' => 'Invalid request method.'
+    ]);
 }
 ?>

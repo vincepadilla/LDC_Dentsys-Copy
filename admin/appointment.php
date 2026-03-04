@@ -4,7 +4,7 @@ include_once("../database/config.php");
 
 $sql = "SELECT a.appointment_id, p.patient_id, p.first_name, p.last_name, s.service_category, s.sub_service,
                d.first_name as dentist_first, d.last_name as dentist_last,
-               a.appointment_date, a.appointment_time, a.status, a.branch
+               a.appointment_date, a.appointment_time, a.status, a.branch, a.request_note
         FROM appointments a
         LEFT JOIN patient_information p ON a.patient_id = p.patient_id
         LEFT JOIN services s ON a.service_id = s.service_id
@@ -83,7 +83,6 @@ $result = mysqli_query($con, $sql);
                         <th>Appointment ID</th>
                         <th>Patient Name</th>
                         <th>Service</th>
-                        <th>Dentist</th>
                         <th>Appointment Date</th>
                         <th>Appointment Time</th>
                         <th>Status</th>
@@ -103,16 +102,24 @@ $result = mysqli_query($con, $sql);
                             data-patient-name="<?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?>"
                             data-service="<?php echo htmlspecialchars($row['sub_service']); ?>"
                             data-appointment-date="<?php echo date('M j, Y', strtotime($row['appointment_date'])); ?>"
-                            data-appointment-time="<?php echo htmlspecialchars($row['appointment_time']); ?>">
+                            data-appointment-time="<?php echo htmlspecialchars($row['appointment_time']); ?>"
+                            data-dentist="<?php echo htmlspecialchars(trim($row['dentist_first'] . ' ' . $row['dentist_last'])); ?>"
+                            data-request-note="<?php echo htmlspecialchars($row['request_note']); ?>"
+                            data-branch="<?php echo htmlspecialchars($row['branch']); ?>">
                             <td><?php echo htmlspecialchars($row['appointment_id']); ?></td>
                             <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                             <td><?php echo htmlspecialchars($row['sub_service']); ?></td>
-                            <td><?php echo htmlspecialchars($row['dentist_first'] . ' ' . $row['dentist_last']); ?></td>
                             <td><?php echo date('M j, Y', strtotime($row['appointment_date'])); ?></td>
                             <td><?php echo htmlspecialchars($row['appointment_time']); ?></td>
                             <td><span class="status <?php echo $statusClass; ?>"><?php echo htmlspecialchars($row['status']); ?></span></td>
                             <td>
                                 <div class="action-btns">
+                                    <button type="button"
+                                            class="action-btn btn-gray"
+                                            title="View Details"
+                                            onclick="openAppointmentInfoModal(this)">
+                                        <i class="fas fa-info-circle"></i>
+                                    </button>
                                     <?php if (strtolower($row['status']) === 'pending'): ?>
                                     <button type="button" class="action-btn btn-primary-confirmed" title="Confirm"
                                         data-appointment-id="<?php echo $row['appointment_id']; ?>"
@@ -181,7 +188,7 @@ $result = mysqli_query($con, $sql);
                     } else { 
                     ?>
                         <tr>
-                            <td colspan="8" class="no-data">
+                            <td colspan="7" class="no-data">
                                 <i class="fas fa-calendar-times fa-2x"></i>
                                 <p>No appointments found</p>
                             </td>
@@ -207,7 +214,10 @@ $result = mysqli_query($con, $sql);
                      data-patient-name="<?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?>"
                      data-service="<?php echo htmlspecialchars($row['sub_service']); ?>"
                      data-appointment-date="<?php echo date('M j, Y', strtotime($row['appointment_date'])); ?>"
-                     data-appointment-time="<?php echo htmlspecialchars($row['appointment_time']); ?>">
+                     data-appointment-time="<?php echo htmlspecialchars($row['appointment_time']); ?>"
+                     data-dentist="<?php echo htmlspecialchars(trim($row['dentist_first'] . ' ' . $row['dentist_last'])); ?>"
+                     data-request-note="<?php echo htmlspecialchars($row['request_note']); ?>"
+                     data-branch="<?php echo htmlspecialchars($row['branch']); ?>">
                     <div class="appointment-card-header">
                         <div>
                             <div class="appointment-card-id">Appointment #<?php echo htmlspecialchars($row['appointment_id']); ?></div>
@@ -221,10 +231,6 @@ $result = mysqli_query($con, $sql);
                             <div class="appointment-card-value"><?php echo htmlspecialchars($row['sub_service']); ?></div>
                         </div>
                         <div class="appointment-card-field">
-                            <div class="appointment-card-label">Dentist</div>
-                            <div class="appointment-card-value"><?php echo htmlspecialchars($row['dentist_first'] . ' ' . $row['dentist_last']); ?></div>
-                        </div>
-                        <div class="appointment-card-field">
                             <div class="appointment-card-label">Date</div>
                             <div class="appointment-card-value"><?php echo date('M j, Y', strtotime($row['appointment_date'])); ?></div>
                         </div>
@@ -234,6 +240,12 @@ $result = mysqli_query($con, $sql);
                         </div>
                     </div>
                     <div class="appointment-card-actions">
+                        <button type="button"
+                                class="action-btn btn-info"
+                                title="View Details"
+                                onclick="openAppointmentInfoModal(this)">
+                            <i class="fas fa-info-circle"></i> Info
+                        </button>
                         <?php if (strtolower($row['status']) === 'pending'): ?>
                         <button type="button" class="action-btn btn-primary-confirmed" title="Confirm"
                             data-appointment-id="<?php echo $row['appointment_id']; ?>"
@@ -301,6 +313,64 @@ $result = mysqli_query($con, $sql);
             <?php } ?>
         </div>
         
+        <!-- Appointment Info Modal -->
+        <div id="appointment-info-modal" class="modal treatment-modal" style="display: none;">
+            <div class="modal-content treatment-modal-content">
+                <div class="modal-card">
+                    <div class="modal-header">
+                        <h3>
+                            <i class="fas fa-info-circle"></i>
+                            <span>Appointment Information</span>
+                        </h3>
+                        <span class="close" onclick="closeAppointmentInfoModal()" aria-label="Close appointment information modal">&times;</span>
+                    </div>
+
+                    <div class="modal-body treatment-body">
+                        <div class="appointment-info-grid">
+                            <div class="treatment-group form-group">
+                                <label>Appointment ID</label>
+                                <input type="text" id="info_appointment_id" readonly>
+                            </div>
+                            <div class="treatment-group form-group">
+                                <label>Patient Name</label>
+                                <input type="text" id="info_patient_name" readonly>
+                            </div>
+                            <div class="treatment-group form-group">
+                                <label>Service / Sub-Service</label>
+                                <input type="text" id="info_service" readonly>
+                            </div>
+                            <div class="treatment-group form-group">
+                                <label>Dentist</label>
+                                <input type="text" id="info_dentist" readonly>
+                            </div>
+                            <div class="treatment-group form-group">
+                                <label>Branch</label>
+                                <input type="text" id="info_branch" readonly>
+                            </div>
+                            <div class="treatment-group form-group">
+                                <label>Date</label>
+                                <input type="text" id="info_date" readonly>
+                            </div>
+                            <div class="treatment-group form-group">
+                                <label>Time</label>
+                                <input type="text" id="info_time" readonly>
+                            </div>
+                            <div class="treatment-group form-group">
+                                <label>Status</label>
+                                <input type="text" id="info_status" readonly>
+                            </div>
+                            <div class="treatment-group form-group appointment-info-notes">
+                                <label>Additional Service Request</label>
+                                <textarea id="info_request_note" rows="4" readonly placeholder="No additional request provided."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    
+                </div>
+            </div>
+        </div>
+
         <!-- Pagination Controls -->
         <div class="pagination-container" id="pagination-container">
             <div class="pagination-info" id="pagination-info"></div>
@@ -639,6 +709,46 @@ $result = mysqli_query($con, $sql);
             window.location.href = '../views/admin.php';
         }, 300);
         return false;
+    }
+    
+    // Open Appointment Info Modal
+    function openAppointmentInfoModal(trigger) {
+        const row = trigger.closest('.appointment-row');
+        if (!row) return;
+
+        const appointmentId = row.getAttribute('data-appointment-id') || '';
+        const patientName = row.getAttribute('data-patient-name') || '';
+        const service = row.getAttribute('data-service') || '';
+        const dentist = row.getAttribute('data-dentist') || '';
+        const branch = row.getAttribute('data-branch') || '';
+        const date = row.getAttribute('data-appointment-date') || row.getAttribute('data-date') || '';
+        const time = row.getAttribute('data-appointment-time') || '';
+        const status = row.getAttribute('data-status') || '';
+        const requestNote = row.getAttribute('data-request-note') || '';
+
+        document.getElementById('info_appointment_id').value = appointmentId;
+        document.getElementById('info_patient_name').value = patientName;
+        document.getElementById('info_service').value = service;
+        document.getElementById('info_dentist').value = dentist || 'Dr. Michelle Landero';
+        document.getElementById('info_branch').value = branch;
+        document.getElementById('info_date').value = date;
+        document.getElementById('info_time').value = time;
+        document.getElementById('info_status').value = status ? status.charAt(0).toUpperCase() + status.slice(1) : '';
+
+        const noteEl = document.getElementById('info_request_note');
+        if (requestNote && requestNote.trim() !== '') {
+            noteEl.value = requestNote;
+        } else {
+            noteEl.value = 'No additional request provided.';
+        }
+
+        const modal = document.getElementById('appointment-info-modal');
+        if (modal) modal.style.display = 'block';
+    }
+
+    function closeAppointmentInfoModal() {
+        const modal = document.getElementById('appointment-info-modal');
+        if (modal) modal.style.display = 'none';
     }
     
     // Pagination Variables
@@ -980,6 +1090,10 @@ $result = mysqli_query($con, $sql);
             return;
         }
         
+        if (!confirm(`Are you sure you want to mark Appointment #${appointmentId} as No-Show? An email notification will be sent to the patient.`)) {
+            return;
+        }
+        
         const formData = new FormData();
         formData.append('appointment_id', appointmentId);
         
@@ -1001,22 +1115,11 @@ $result = mysqli_query($con, $sql);
             if (!response.ok) {
                 throw new Error('Network response was not ok');
             }
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-                return response.json();
-            } else {
-                return response.text().then(text => {
-                    try {
-                        return JSON.parse(text);
-                    } catch {
-                        return { success: true };
-                    }
-                });
-            }
+            return response.json();
         })
         .then(data => {
-            if (data.success || data.status === 'success' || !data.message) {
-                showNotification('success', 'Marked as No-Show', `Appointment #${appointmentId} has been marked as no-show.`);
+            if (data && (data.success === true || data.status === 'success')) {
+                showNotification('success', 'Marked as No-Show', data.message || `Appointment #${appointmentId} has been marked as no-show.`);
                 setTimeout(() => {
                     location.reload();
                 }, 1500);

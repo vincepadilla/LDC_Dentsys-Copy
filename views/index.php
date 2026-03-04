@@ -3,7 +3,6 @@ session_start();
 include_once('../database/config.php');
 include_once('chat.php');
 
-
 $isLoggedIn = isset($_SESSION['valid'], $_SESSION['userID']) && $_SESSION['valid'] === true;
 
 $fname = $lname = $email = $phone = $birthdate = $gender = $age = $address = '';
@@ -689,10 +688,8 @@ foreach ($defaults as $key => $defaultValue) {
                     </div>
                     <p>Providing exceptional dental care with a personal touch since 2011.</p>
                     <div class="social-links">
-                        <a href="#"><i class="fab fa-facebook-f"></i></a>
-                        <a href="#"><i class="fab fa-twitter"></i></a>
-                        <a href="#"><i class="fab fa-instagram"></i></a>
-                        <a href="#"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="https://www.facebook.com/mlgalman.dmd" target="_blank"><i class="fab fa-facebook-f"></i></a>
+                        <a href="https://www.instagram.com/landero_dental/" target="_blank"><i class="fab fa-instagram"></i></a>
                     </div>
                 </div>
                 
@@ -774,47 +771,64 @@ foreach ($defaults as $key => $defaultValue) {
                 </div>
             </div>
 
+                <!-- Branch and Payment Method side by side -->
+                <div class="service-fields-row">
+                    <div class="form-group">
+                        <label for="popup_branch">Select Branch</label>
+                        <select id="popup_branch" name="branch" required>
+                            <option value="">Select Branch</option>
+                            <option value="comembo">Comembo Branch</option>
+                            <option value="taytay">Taytay Rizal Branch</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="popup_payment_method">Payment Method</label>
+                        <select id="popup_payment_method" name="payment_mode" required>
+                            <option value="digital" selected>Digital Payment</option>
+                            <option value="walkin">Walk-In Payment</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Preferred Date and Preferred Time side by side -->
+                <div class="service-fields-row">
+                    <div class="form-group" id="popup_date_group">
+                        <label for="popup_date">Preferred Date</label>
+                        <input type="date" id="popup_date" name="date"
+                            min="<?php echo $today; ?>"
+                            max="<?php echo $oneMonthLater; ?>"
+                            required>
+                    </div>
+
+                    <div class="form-group" id="popup_time_group">
+                        <label for="popup_time">Preferred Time</label>
+                        <select id="popup_time" name="time" required>
+                            <option value="">Select a time</option>
+                            <option value="firstBatch">Morning (8AM-9AM)</option>
+                            <option value="secondBatch">Morning (9AM-10AM)</option>
+                            <option value="thirdBatch">Morning (10AM-11AM)</option>
+                            <option value="fourthBatch">Afternoon (11AM-12PM)</option>
+                            <option value="fifthBatch">Afternoon (1PM-2PM)</option>
+                            <option value="sixthBatch">Afternoon (2PM-3PM)</option>
+                            <option value="sevenBatch">Afternoon (3PM-4PM)</option>
+                            <option value="eightBatch">Afternoon (4PM-5PM)</option>
+                            <option value="nineBatch">Afternoon (5PM-6PM)</option>
+                            <option value="tenBatch">Evening (6PM-7PM)</option>
+                            <option value="lastBatch">Evening (7PM-8PM)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Additional Service Request -->
                 <div class="form-group">
-                    <label for="popup_branch">Select Branch</label>
-                    <select id="popup_branch" name="branch" required>
-                        <option value="">Select Branch</option>
-                        <option value="comembo">Comembo Branch</option>
-                        <option value="taytay">Taytay Rizal Branch</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="popup_payment_method">Payment Method</label>
-                    <select id="popup_payment_method" name="payment_mode" required>
-                        <option value="digital" selected>Digital Payment</option>
-                        <option value="walkin">Walk-In Payment</option>
-                    </select>
-                </div>
-
-                <div class="form-group" id="popup_date_group">
-                    <label for="popup_date">Preferred Date</label>
-                    <input type="date" id="popup_date" name="date"
-                        min="<?php echo $today; ?>"
-                        max="<?php echo $oneMonthLater; ?>"
-                        required>
-                </div>
-
-                <div class="form-group" id="popup_time_group">
-                    <label for="popup_time">Preferred Time</label>
-                    <select id="popup_time" name="time" required>
-                        <option value="">Select a time</option>
-                        <option value="firstBatch">Morning (8AM-9AM)</option>
-                        <option value="secondBatch">Morning (9AM-10AM)</option>
-                        <option value="thirdBatch">Morning (10AM-11AM)</option>
-                        <option value="fourthBatch">Afternoon (11AM-12PM)</option>
-                        <option value="fifthBatch">Afternoon (1PM-2PM)</option>
-                        <option value="sixthBatch">Afternoon (2PM-3PM)</option>
-                        <option value="sevenBatch">Afternoon (3PM-4PM)</option>
-                        <option value="eightBatch">Afternoon (4PM-5PM)</option>
-                        <option value="nineBatch">Afternoon (5PM-6PM)</option>
-                        <option value="tenBatch">Evening (6PM-7PM)</option>
-                        <option value="lastBatch">Evening (7PM-8PM)</option>
-                    </select>
+                    <label for="popup_request_note">Request</label>
+                    <textarea
+                        id="popup_request_note"
+                        name="request_note"
+                        rows="3"
+                        placeholder="Example: After my cleaning, I’d like to request teeth whitening (if possible). Please advise the recommended order of procedures."></textarea>
+                    <small class="appointment-modal-note">You may request another service. The dentist will confirm if it’s possible and advise the proper order of procedures.</small>
                 </div>
 
                 <?php if (!$isLoggedIn): ?>

@@ -435,6 +435,7 @@ header {
     overflow-y: visible;
 }
 
+
 @keyframes modalSlideIn {
     from {
         opacity: 0;
@@ -507,12 +508,36 @@ header {
     background-color: #f9f9f9;
 }
 
+#appointmentModal textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+    transition: var(--transition);
+    background-color: #f9f9f9;
+    resize: vertical;
+    min-height: 90px;
+}
+
 .modal input:focus,
-.modal select:focus {
+.modal select:focus,
+#appointmentModal textarea:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(72, 166, 167, 0.2);
     background-color: var(--white);
+}
+
+/* Appointment modal note under request textarea (scoped to popup) */
+#appointmentModal .appointment-modal-note {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6B7280;
+    line-height: 1.4;
 }
 
 .modal .submit-btn {

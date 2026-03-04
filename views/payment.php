@@ -14,6 +14,7 @@ include_once('../database/config.php');
 
 $fname = $lname = $birthdate = $age = $email = $gender = $phone = '';
 $address = $service_id = $subService = $branch = $date = $time = '';
+$request_note = '';
 $price = 500;
 
 $dentist = 'Dr. Michelle Landero';
@@ -51,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
     $gender = htmlspecialchars($_POST['gender'] ?? $gender);
     $phone = htmlspecialchars($_POST['phone'] ?? $phone);
     $address = htmlspecialchars($_POST['address'] ?? $address);
+    $request_note = trim($_POST['request_note'] ?? '');
 
     // Get sub_service from POST - check multiple possible field names
     $subService = trim($_POST['sub_service'] ?? $_POST['subService'] ?? 'N/A');
@@ -589,6 +591,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                             <div class="detail-label">Time Slot</div>
                             <div class="detail-value"><?= $time ?></div>
                         </div>
+                        <?php if (!empty($request_note)): ?>
+                            <div class="detail-row">
+                                <div class="detail-label">Additional Service Request</div>
+                                <div class="detail-value"><?= nl2br(htmlspecialchars($request_note)) ?></div>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -608,10 +616,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                 <input type="hidden" name="branch" value="<?= $branch ?>">
                 <input type="hidden" name="date" value="<?= $date ?>">
                 <input type="hidden" name="time" value="<?= htmlspecialchars($_POST['time'] ?? '') ?>">
+                <input type="hidden" name="request_note" value="<?= htmlspecialchars($request_note) ?>">
             </div>
 
             <!-- Payment Information -->
             <div class="payment-section">
+
+                <div class="fee-notice">
+                    <p><strong>Consultation Fee:</strong> ₱500.00</p>
+                    <p>This appointment fee will be deducted from the total payment.</p>
+                </div>
                 <div class="section-header">
                     <h2>Payment Information</h2>
                     <p>Complete payment to confirm booking.</p>
@@ -662,12 +676,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                                 
                                 <div class="form-group">
                                     <label for="gcashAmount">Payment Amount You've Sent</label>
-                                    <input type="number" name="gcashAmount" id="gcashAmount" placeholder="Amount Sent" min="500" step="0.01">
+                                    <input 
+                                        type="number" 
+                                        name="gcashAmount" 
+                                        id="gcashAmount" 
+                                        placeholder="Amount Sent" 
+                                        min="500"
+                                        max="9999"
+                                        step="0.01"
+                                        oninput="if(this.value.length > 4) this.value = this.value.slice(0,4);"
+                                    >
                                 </div>
-                                
+
                                 <div class="form-group">
                                     <label for="gcashrefNum">Reference Number <span style="color: #dc2626;">*</span></label>
-                                    <input type="text" name="gcashrefNum" id="gcashrefNum" placeholder="Reference No." required>
+                                    <input 
+                                        type="text" 
+                                        name="gcashrefNum" 
+                                        id="gcashrefNum" 
+                                        placeholder="Reference No." 
+                                        maxlength="15"
+                                        pattern="\d{1,15}"
+                                        inputmode="numeric"
+                                        oninput="this.value = this.value.replace(/[^0-9]/g,'').slice(0,15);"
+                                        required
+                                    >
                                     <small class="reference-error" id="gcashrefNumError" style="display: none; color: #dc2626; font-size: 0.85rem; margin-top: 5px;"></small>
                                 </div>
                                 
@@ -724,12 +757,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                                 
                                 <div class="form-group">
                                     <label for="mayaAmount">Payment Amount You've Sent</label>
-                                    <input type="number" name="mayaAmount" id="mayaAmount" placeholder="Amount Sent" min="500" step="0.01">
+                                    <input 
+                                        type="number" 
+                                        name="mayaAmount" 
+                                        id="mayaAmount" 
+                                        placeholder="Amount Sent" 
+                                        min="500"
+                                        max="9999"
+                                        step="0.01"
+                                        oninput="if(this.value.length > 4) this.value = this.value.slice(0,4);"
+                                    >
                                 </div>
                                 
                                 <div class="form-group">
                                     <label for="mayarefNum">Reference Number <span style="color: #dc2626;">*</span></label>
-                                    <input type="text" name="mayarefNum" id="mayarefNum" placeholder="Reference No." required>
+                                    <input 
+                                        type="text" 
+                                        name="mayarefNum" 
+                                        id="mayarefNum" 
+                                        placeholder="Reference No." 
+                                        maxlength="15"
+                                        pattern="\d{1,15}"
+                                        inputmode="numeric"
+                                        oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0,15);"
+                                        required
+                                    >
                                     <small class="reference-error" id="mayarefNumError" style="display: none; color: #dc2626; font-size: 0.85rem; margin-top: 5px;"></small>
                                 </div>
                                 
@@ -752,10 +804,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                     </div>
                 </div>
                 
-                <div class="fee-notice">
-                    <p><strong>Consultation Fee:</strong> ₱500.00</p>
-                    <p>This appointment fee will be deducted from the total payment.</p>
-                </div>
             </div>
         </div>
 
@@ -768,6 +816,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
 <?php include_once('../layouts/footer.php'); ?>
 
 <script>
+
+document.getElementById("mayaAmount").addEventListener("input", function() {
+    if (this.value > 9999) {
+        this.value = 9999;
+    }
+});
 
 (function () {
   const ids = ["gcashAmount", "mayaAmount"];
