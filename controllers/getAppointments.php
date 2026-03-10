@@ -50,7 +50,8 @@ if ($clinicClosed && $closureType === 'full_day') {
 }
 
 // Query appointments for that date, fetch booked time slots
-$query = "SELECT time_slot FROM appointments WHERE appointment_date = ? AND status != 'Cancelled'";
+// Also read request_note so 2-hour appointments can block the next slot
+$query = "SELECT time_slot, request_note FROM appointments WHERE appointment_date = ? AND status != 'Cancelled'";
 $stmt = $con->prepare($query);
 $stmt->bind_param("s", $date);
 $stmt->execute();
@@ -58,7 +59,37 @@ $result = $stmt->get_result();
 
 $bookedSlots = [];
 while ($row = $result->fetch_assoc()) {
-    $bookedSlots[] = $row['time_slot'];
+    $slot = $row['time_slot'];
+    if (!$slot) {
+        continue;
+    }
+
+    // Always block the primary slot
+    $bookedSlots[] = $slot;
+
+    // If there is a request_note, treat this as a 2-hour appointment
+    // and also block the immediate next time slot (if any)
+    if (!empty($row['request_note'])) {
+        $timeSlotsOrder = [
+            'firstBatch',
+            'secondBatch',
+            'thirdBatch',
+            'fourthBatch',
+            'fifthBatch',
+            'sixthBatch',
+            'sevenBatch',
+            'eightBatch',
+            'nineBatch',
+            'tenBatch',
+            'lastBatch'
+        ];
+
+        $index = array_search($slot, $timeSlotsOrder, true);
+        if ($index !== false && isset($timeSlotsOrder[$index + 1])) {
+            $nextSlot = $timeSlotsOrder[$index + 1];
+            $bookedSlots[] = $nextSlot;
+        }
+    }
 }
 $stmt->close();
 

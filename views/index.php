@@ -160,6 +160,32 @@ foreach ($defaults as $key => $defaultValue) {
             }
         }
 
+        /* Validation Animation Styles */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+            20%, 40%, 60%, 80% { transform: translateX(10px); }
+        }
+
+        .validation-shake {
+            animation: shake 0.5s ease-in-out;
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+        }
+
+        .validation-error-message {
+            color: #dc3545;
+            font-size: 13px;
+            margin-top: 5px;
+            display: block;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         /* Closure Modal Popup Styles */
         .closure-modal-overlay {
             position: fixed;
@@ -562,10 +588,6 @@ foreach ($defaults as $key => $defaultValue) {
                     <button class="service-book-btn">Book Appointment</button>
                 </div>
 
-            </div>
-
-            <div class="text-center">
-                <a href="view_services.php" class="btn btn-services">View All Services Description</a>
             </div>
         </div>
     </section>
@@ -1212,6 +1234,44 @@ foreach ($defaults as $key => $defaultValue) {
     const popupDateInput = document.getElementById('popup_date');
     if (popupDateInput) popupDateInput.addEventListener('change', checkAvailability);
 
+    // Function to show validation error with animation
+    function showTimeSlotValidationError(message) {
+        const timeSelect = document.getElementById('popup_time');
+        const timeGroup = document.getElementById('popup_time_group');
+        
+        if (!timeSelect || !timeGroup) return;
+        
+        // Remove any existing error message
+        const existingError = timeGroup.querySelector('.validation-error-message');
+        if (existingError) {
+            existingError.remove();
+        }
+        
+        // Add shake animation class
+        timeSelect.classList.add('validation-shake');
+        
+        // Create and add error message
+        const errorMessage = document.createElement('small');
+        errorMessage.className = 'validation-error-message';
+        errorMessage.textContent = message;
+        timeGroup.appendChild(errorMessage);
+        
+        // Focus on the time select field
+        timeSelect.focus();
+        
+        // Remove shake animation class after animation completes
+        setTimeout(() => {
+            timeSelect.classList.remove('validation-shake');
+        }, 500);
+        
+        // Remove error message after 5 seconds
+        setTimeout(() => {
+            if (errorMessage.parentNode) {
+                errorMessage.remove();
+            }
+        }, 5000);
+    }
+
     const appointmentForm = document.getElementById('appointmentForm');
     if (appointmentForm) {
         appointmentForm.addEventListener('submit', function(e) {
@@ -1225,6 +1285,49 @@ foreach ($defaults as $key => $defaultValue) {
 
             const paymentModeEl = document.getElementById('popup_payment_method');
             const paymentMode = paymentModeEl ? paymentModeEl.value : 'digital';
+
+            // If patient entered a request, ensure the next time slot is also free
+            const requestInput = document.getElementById('popup_request_note');
+            const timeSelect = document.getElementById('popup_time');
+
+            // Only enforce this rule for digital payments where date/time are used
+            if (requestInput && timeSelect && paymentMode !== 'walkin') {
+                const requestValue = requestInput.value.trim();
+                const selectedSlot = timeSelect.value;
+
+                if (requestValue !== '' && selectedSlot) {
+                    const slotOrder = [
+                        'firstBatch',
+                        'secondBatch',
+                        'thirdBatch',
+                        'fourthBatch',
+                        'fifthBatch',
+                        'sixthBatch',
+                        'sevenBatch',
+                        'eightBatch',
+                        'nineBatch',
+                        'tenBatch',
+                        'lastBatch'
+                    ];
+
+                    const currentIndex = slotOrder.indexOf(selectedSlot);
+                    const nextSlot = currentIndex !== -1 ? slotOrder[currentIndex + 1] : null;
+
+                    // If there is no next slot (already last of the day), block the booking
+                    if (!nextSlot) {
+                        e.preventDefault();
+                        showTimeSlotValidationError("This time slot cannot accommodate an additional requested service because it is the last available time of the day. Please choose another time.");
+                        return;
+                    }
+
+                    const nextOption = timeSelect.querySelector('option[value="' + nextSlot + '"]');
+                    if (!nextOption || nextOption.disabled) {
+                        e.preventDefault();
+                        showTimeSlotValidationError("This time slot cannot accommodate an additional requested service because the next time slot is already booked. Please choose another time.");
+                        return;
+                    }
+                }
+            }
 
             if (paymentMode === 'walkin') {
                 // Route Walk-In Payment to walkin.php and allow submission without date/time

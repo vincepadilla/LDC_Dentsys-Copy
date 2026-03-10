@@ -972,7 +972,7 @@ if (isset($_SESSION['password_error'])) {
     <div class="edit-modal-content">
         <span class="close" onclick="closeEditModal()">&times;</span>
         <h3>EDIT ACCOUNT INFORMATION</h3>
-        <form action="../controllers/updateAccount.php" method="POST">
+        <form id="editAccountForm" action="../controllers/updateAccount.php" method="POST">
             <div class="form-row">
                 <div class="form-group">
                     <label>Username:</label>
@@ -1117,6 +1117,61 @@ function closeEditModal() {
     modal.classList.remove("show");
     setTimeout(() => modal.style.display = "none", 300);
 }
+
+// Handle edit account form submission with AJAX
+document.addEventListener('DOMContentLoaded', function() {
+    const editAccountForm = document.getElementById('editAccountForm');
+    if (editAccountForm) {
+        editAccountForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const submitButton = editAccountForm.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.innerHTML;
+            
+            // Disable submit button and show loading
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+            
+            // Create FormData object
+            const formData = new FormData(editAccountForm);
+            
+            // Submit via AJAX
+            fetch('../controllers/updateAccount.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success notification with animation
+                    showNotification('success', 'Account Updated', data.message || 'Your account information has been updated successfully!');
+                    
+                    // Close modal after short delay
+                    setTimeout(() => {
+                        closeEditModal();
+                        // Reload page to show updated information
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    // Show error notification
+                    showNotification('error', 'Update Failed', data.message || 'Failed to update account. Please try again.');
+                    
+                    // Re-enable submit button
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('error', 'Update Failed', 'An error occurred while updating your account. Please try again.');
+                
+                // Re-enable submit button
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonText;
+            });
+        });
+    }
+});
 
 function openCredentialsModal() {
     const modal = document.getElementById("credentialsModal");

@@ -248,7 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
         </script>";
         exit();
     }
-    
+
     // Check if clinic is closed on the selected date
     $clinicClosed = false;
     $closureReason = '';
@@ -278,6 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
             $closureStmt->close();
         }
     }
+        
     
     // If clinic is closed, prevent proceeding to payment
     if ($clinicClosed) {

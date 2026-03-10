@@ -13,6 +13,7 @@ $userID = $_SESSION['userID'];
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Get POST values, sanitize
+    $username = trim($_POST['username'] ?? '');
     $first_name = trim($_POST['first_name'] ?? '');
     $last_name = trim($_POST['last_name'] ?? '');
     $email = trim($_POST['email'] ?? '');
@@ -22,8 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $address = trim($_POST['address'] ?? '');
 
     // Update users table
-    $stmtUser = $con->prepare("UPDATE user_account SET first_name = ?, last_name = ?, email = ?, phone = ? WHERE user_id = ?");
-    $stmtUser->bind_param("sssss", $first_name, $last_name, $email, $phone, $userID);
+    $stmtUser = $con->prepare("UPDATE user_account SET username = ?, first_name = ?, last_name = ?, email = ?, phone = ? WHERE user_id = ?");
+    $stmtUser->bind_param("ssssss", $username, $first_name, $last_name, $email, $phone, $userID);
     $updateUser = $stmtUser->execute();
     $stmtUser->close();
 
@@ -34,10 +35,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $stmtPatient->close();
 
     if ($updateUser && $updatePatient) {
-        echo "Account updated successfully";
+        echo json_encode(['success' => true, 'message' => 'Account updated successfully']);
         exit();
     } else {
-        echo "Failed to update account";
+        echo json_encode(['success' => false, 'message' => 'Failed to update account. Please try again.']);
         exit();
     }
 } else {

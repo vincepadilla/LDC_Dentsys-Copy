@@ -757,7 +757,7 @@ if (empty($_SESSION['admin_verified'])) {
         <a href="../controllers/logout.php"><i class="fa-solid fa-right-from-bracket"></i> <span class="sidebar-text">Logout</span></a>
         <div class="sidebar-divider"></div>
         <button class="sidebar-btn-clinic-control" onclick="showControlsPopup()" title="Controls">
-            <i class="fas fa-cog"></i> <span class="sidebar-text">Controls</span>
+            <i class="fa-regular fa-circle-right"></i> <span class="sidebar-text">Others</span>
         </button>
     </nav>
 </div>
@@ -766,7 +766,7 @@ if (empty($_SESSION['admin_verified'])) {
 <div id="controlsPopupModal" class="modal" style="display:none; z-index: 10001;">
     <div class="modal-content" style="max-width: 400px;">
         <h3 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">
-            <i class="fas fa-sliders-h"></i> Select Control
+            <i class="fas fa-sliders-h"></i> Others
         </h3>
         <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
             <button class="control-option-btn" onclick="navigateToClinicControl()">
@@ -777,18 +777,6 @@ if (empty($_SESSION['admin_verified'])) {
                     <div style="text-align: left;">
                         <div style="font-weight: 600; font-size: 16px;">Clinic Control</div>
                         <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">Manage closures & holidays</div>
-                    </div>
-                </div>
-            </button>
-            
-            <button class="control-option-btn" onclick="navigateToUserControl()">
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <div class="control-icon" style="background: #3b82f620; color: #3b82f6;">
-                        <i class="fas fa-users"></i>
-                    </div>
-                    <div style="text-align: left;">
-                        <div style="font-weight: 600; font-size: 16px;">User Control</div>
-                        <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">Manage users & accounts</div>
                     </div>
                 </div>
             </button>

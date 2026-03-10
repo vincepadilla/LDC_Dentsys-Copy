@@ -204,6 +204,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
             $patient_id = $existingPatient['patient_id'];
         }
         
+        // Check if user already has an existing walk-in appointment
+        $checkExistingWalkIn = "SELECT walkin_id, status, created_at FROM walkin_appointments WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1";
+        $checkStmt = $con->prepare($checkExistingWalkIn);
+        $checkStmt->bind_param("s", $patient_id);
+        $checkStmt->execute();
+        $existingWalkInResult = $checkStmt->get_result();
+        $existingWalkIn = $existingWalkInResult->fetch_assoc();
+        $checkStmt->close();
+        
+        if ($existingWalkIn) {
+            // User already has a walk-in appointment
+            $existingWalkInId = htmlspecialchars($existingWalkIn['walkin_id']);
+            $existingStatus = htmlspecialchars($existingWalkIn['status']);
+            $_SESSION['walkin_limit_error'] = [
+                'walkin_id' => $existingWalkInId,
+                'status' => $existingStatus
+            ];
+            header("Location: walkin.php?error=existing_walkin");
+            exit();
+        }
+        
         // Ensure service_name is set - if still empty, use subService as fallback
         if (empty($service_name) || $service_name === 'Unknown Service') {
             $service_name = $subService ?: 'Walk-In Service';
@@ -711,6 +732,194 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
                 font-size: 0.68rem;
             }
         }
+        /* Notification System Styles */
+        .notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 400px;
+        }
+
+        .notification {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            min-width: 320px;
+            animation: slideInRight 0.4s ease-out;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .notification.success {
+            border-left: 4px solid #10B981;
+        }
+
+        .notification.warning {
+            border-left: 4px solid #F59E0B;
+        }
+
+        .notification.error {
+            border-left: 4px solid #EF4444;
+        }
+
+        .notification.info {
+            border-left: 4px solid #3B82F6;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+
+        .notification.hide {
+            animation: slideOutRight 0.3s ease-out forwards;
+        }
+
+        .notification-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .notification.success .notification-icon {
+            background: #D1FAE5;
+            color: #10B981;
+        }
+
+        .notification.warning .notification-icon {
+            background: #FEF3C7;
+            color: #F59E0B;
+        }
+
+        .notification.error .notification-icon {
+            background: #FEE2E2;
+            color: #EF4444;
+        }
+
+        .notification.info .notification-icon {
+            background: #DBEAFE;
+            color: #3B82F6;
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-title {
+            font-weight: 600;
+            font-size: 16px;
+            margin: 0 0 4px 0;
+            color: #111827;
+        }
+
+        .notification-message {
+            font-size: 14px;
+            color: #6B7280;
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .notification-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            font-size: 20px;
+            color: #9CA3AF;
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .notification-close:hover {
+            background: #F3F4F6;
+            color: #374151;
+        }
+
+        /* Success Scale Animation */
+        @keyframes successScale {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .success-scale-animation {
+            animation: successScale 0.5s ease-out;
+        }
+
+        /* Check Animation */
+        @keyframes checkmark {
+            0% {
+                stroke-dashoffset: 100;
+            }
+            100% {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        .check-animation {
+            animation: checkmark 0.6s ease-out forwards;
+            stroke-dasharray: 100;
+            stroke-dashoffset: 100;
+        }
+
+        @media (max-width: 768px) {
+            .notification-container {
+                top: 10px;
+                right: 10px;
+                left: 10px;
+                max-width: none;
+            }
+
+            .notification {
+                min-width: auto;
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1171,7 +1380,87 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
     // Initial render
     renderCalendar();
 })();
+
+// Notification System
+function showNotification(type, title, message, icon = null, duration = 5000) {
+    const container = document.getElementById('notificationContainer');
+    if (!container) return;
+    
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    
+    // Default icons based on type
+    let iconHTML = '';
+    if (icon) {
+        iconHTML = icon;
+    } else {
+        switch(type) {
+            case 'success':
+                iconHTML = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7" class="check-animation" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                break;
+            case 'warning':
+                iconHTML = '<i class="fas fa-exclamation-triangle"></i>';
+                break;
+            case 'error':
+                iconHTML = '<i class="fas fa-times-circle"></i>';
+                break;
+            case 'info':
+                iconHTML = '<i class="fas fa-info-circle"></i>';
+                break;
+        }
+    }
+    
+    notification.innerHTML = `
+        <div class="notification-icon ${type === 'success' ? 'success-scale-animation' : ''}">
+            ${iconHTML}
+        </div>
+        <div class="notification-content">
+            <div class="notification-title">${title}</div>
+            <div class="notification-message">${message}</div>
+        </div>
+        <button class="notification-close" onclick="closeNotification(this)">&times;</button>
+    `;
+    
+    container.appendChild(notification);
+    
+    // Auto remove after duration
+    setTimeout(() => {
+        closeNotification(notification.querySelector('.notification-close'));
+    }, duration);
+}
+
+function closeNotification(btn) {
+    const notification = btn.closest('.notification');
+    if (notification) {
+        notification.classList.add('hide');
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
+    }
+}
+
+// Check for walk-in limit error on page load
+document.addEventListener('DOMContentLoaded', function() {
+    <?php if (isset($_GET['error']) && $_GET['error'] === 'existing_walkin' && isset($_SESSION['walkin_limit_error'])): ?>
+        const errorData = <?php echo json_encode($_SESSION['walkin_limit_error']); ?>;
+        showNotification(
+            'warning',
+            'Walk-In Limit Reached',
+            'You already have a walk-in appointment (ID: ' + errorData.walkin_id + '). Each user is limited to one walk-in appointment at a time. Please complete or cancel your existing walk-in appointment before creating a new one.',
+            null,
+            8000
+        );
+        // Redirect to account page after showing notification
+        setTimeout(() => {
+            window.location.href = 'account.php';
+        }, 3000);
+        <?php unset($_SESSION['walkin_limit_error']); ?>
+    <?php endif; ?>
+});
 </script>
+
+<!-- Notification Container -->
+<div class="notification-container" id="notificationContainer"></div>
 
 </body>
 </html>

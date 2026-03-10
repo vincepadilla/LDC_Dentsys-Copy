@@ -22,6 +22,52 @@ if ($result && $result->num_rows > 0) {
     $adminInfo = $result->fetch_assoc();
 }
 $stmt->close();
+
+// Get dashboard statistics
+$totalUsers = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM user_account WHERE role != 'super-admin'"))['total'];
+$totalPatients = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM user_account WHERE role = 'patient'"))['total'];
+$totalAdmins = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM user_account WHERE role = 'admin'"))['total'];
+$totalDentists = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM user_account WHERE role = 'dentist'"))['total'];
+$totalAppointments = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM appointments"))['total'];
+$activeUsers = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM user_account WHERE (status IS NULL OR status = 'active') AND role != 'super-admin'"))['total'];
+$blockedUsers = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM user_account WHERE status = 'blocked'"))['total'];
+$todayAppointments = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM appointments WHERE DATE(appointment_date) = CURDATE()"))['total'];
+
+// System Performance Metrics
+// Patient Feedback Satisfaction (based on approved feedbacks)
+$totalFeedbacks = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM feedback"))['total'];
+$approvedFeedbacks = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM feedback WHERE status = 'approved'"))['total'];
+$feedbackSatisfaction = $totalFeedbacks > 0 ? round(($approvedFeedbacks / $totalFeedbacks) * 100, 1) : 0;
+
+// Appointment Completion Rate
+$completedAppointments = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM appointments WHERE status IN ('Complete', 'Completed')"))['total'];
+$completionRate = $totalAppointments > 0 ? round(($completedAppointments / $totalAppointments) * 100, 1) : 0;
+
+// Cancellation Rate
+$cancelledAppointments = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) as total FROM appointments WHERE status = 'Cancelled'"))['total'];
+$cancellationRate = $totalAppointments > 0 ? round(($cancelledAppointments / $totalAppointments) * 100, 1) : 0;
+
+// Top Active Users (by appointment count)
+$topUsersQuery = "
+    SELECT 
+        ua.user_id,
+        ua.first_name,
+        ua.last_name,
+        ua.role,
+        COUNT(DISTINCT a.appointment_id) as appointment_count
+    FROM user_account ua
+    LEFT JOIN patient_information p ON ua.user_id = p.user_id
+    LEFT JOIN appointments a ON p.patient_id = a.patient_id
+    WHERE ua.role != 'super-admin'
+    GROUP BY ua.user_id, ua.first_name, ua.last_name, ua.role
+    ORDER BY appointment_count DESC
+    LIMIT 5
+";
+$topUsersResult = mysqli_query($con, $topUsersQuery);
+$topUsers = [];
+while ($row = mysqli_fetch_assoc($topUsersResult)) {
+    $topUsers[] = $row;
+}
 ?>
 
 <!DOCTYPE html>
@@ -162,6 +208,253 @@ $stmt->close();
             color: #9ca3af;
         }
 
+        /* Dashboard Styles - Matching admin.php layout */
+        .dashboard-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            flex: 1 1 30%;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card i {
+            margin-right: 15px;
+            color: #3c8dbc;
+            font-size: 24px;
+        }
+
+        .stat-info {
+            flex: 1;
+        }
+
+        .stat-value {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .stat-label {
+            margin: 0;
+            font-size: 14px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-change.positive {
+            color: #10b981;
+        }
+
+        .stat-change.negative {
+            color: #ef4444;
+        }
+
+        /* Two Column Layout for Metrics and Top Users */
+        .metrics-users-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 30px;
+            margin-bottom: 20px;
+        }
+
+        .metrics-section,
+        .top-users-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metrics-section h2,
+        .top-users-section h2 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 20px;
+            margin-top: 0;
+        }
+
+        /* System Performance Metrics - Single Card with List */
+        .metrics-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e5e7eb;
+            padding: 24px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            flex: 1;
+        }
+
+        .metrics-container:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .metric-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .metric-item:last-child {
+            border-bottom: none;
+        }
+
+        .metric-item:hover {
+            background: #f8fafc;
+            margin: 0 -24px;
+            padding: 16px 24px;
+            border-radius: 8px;
+        }
+
+        .metric-item-content {
+            flex: 1;
+        }
+
+        .metric-item-label {
+            font-size: 14px;
+            color: #6b7280;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .metric-item-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .metric-item-details {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+
+        .metric-item-details.positive {
+            color: #059669;
+        }
+
+        .metric-item-details.negative {
+            color: #dc2626;
+        }
+
+        /* Top Active Users Card Styles */
+        .top-user-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e5e7eb;
+            padding: 24px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .top-user-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .top-user-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .top-user-card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .top-user-card-rank {
+            font-size: 14px;
+            font-weight: 700;
+            color: #6b7280;
+        }
+
+        .top-user-card-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .top-user-card-item:last-child {
+            border-bottom: none;
+        }
+
+        .top-user-card-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .top-user-card-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 4px;
+        }
+
+        .top-user-card-role {
+            font-size: 13px;
+            color: #6b7280;
+            text-transform: capitalize;
+        }
+
+        .top-user-card-count {
+            font-size: 18px;
+            font-weight: 700;
+            color: #48A6A7;
+        }
+
+        .no-data-message {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 16px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .no-data-message i {
+            font-size: 48px;
+            color: #d1d5db;
+            margin-bottom: 16px;
+        }
+
+        .no-data-message p {
+            color: #6b7280;
+            font-size: 16px;
+            margin: 0;
+        }
+
         /* Responsive: reuse admin sidebar responsiveness */
         @media (max-width: 768px) {
             .main-content {
@@ -173,6 +466,31 @@ $stmt->close();
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 10px;
+            }
+
+            .dashboard-grid {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .stat-card {
+                width: 100%;
+            }
+
+            .metrics-users-container {
+                grid-template-columns: 1fr;
+            }
+
+            .metrics-container {
+                padding: 20px;
+            }
+
+            .metric-item-value {
+                font-size: 20px;
+            }
+
+            .top-user-card {
+                padding: 20px;
             }
         }
     </style>
@@ -193,10 +511,18 @@ $stmt->close();
         </div>
         <nav class="sidebar-nav">
             <a href="super_admin_portal.php" class="active">
-                <i class="fa fa-shield-alt"></i>
-                <span class="sidebar-text">Super Admin Home</span>
+                <i class="fas fa-tachometer-alt"></i>
+                <span class="sidebar-text">Dashboard</span>
             </a>
-            <a href="#settings">
+            <a href="userControl.php">
+                <i class="fas fa-users-cog"></i>
+                <span class="sidebar-text">User Control</span>
+            </a>
+            <a href="edit_content.php">
+                <i class="fas fa-edit"></i>
+                <span class="sidebar-text">Edit Content</span>
+            </a>
+            <a href="settings.php">
                 <i class="fas fa-cog"></i>
                 <span class="sidebar-text">Settings</span>
             </a>
@@ -212,63 +538,134 @@ $stmt->close();
         <div class="super-admin-header">
             <div>
                 <div class="super-admin-title">
-                    Super Admin Portal
+                    Super Admin Dashboard
                 </div>
                 <div class="super-admin-subtitle">
                     Welcome, <?php echo htmlspecialchars($adminInfo['first_name'] ?? $_SESSION['first_name'] ?? 'Admin'); ?>.
-                    Manage global website content and user accounts from here.
+                    Overview of system statistics and management tools.
                 </div>
-            </div>
-            <div class="super-admin-actions">
-                <span class="sa-badge">
-                    <i class="fas fa-crown"></i>
-                    SUPER ADMIN
-                </span>
             </div>
         </div>
 
-        <div class="tool-cards">
-            <!-- Edit Content Tool -->
-            <div class="tool-card">
-                <div class="tool-card-header">
-                    <div class="tool-icon" style="background: #e0f2fe; color: #0284c7;">
-                        <i class="fas fa-edit"></i>
-                    </div>
-                    <div>
-                        <div class="tool-card-title">Edit Website Content</div>
-                        <div class="tool-card-desc">
-                            Manage homepage text, services, contact details, clinic locations, and other public-facing content.
-                        </div>
-                    </div>
-                </div>
-                <div class="tool-card-footer">
-                    <a href="edit_content.php" class="tool-link-btn">
-                        Go to Content Manager
-                        <i class="fas fa-arrow-right"></i>
-                    </a>
-                    <span class="tool-meta"></span>
+        <!-- Dashboard Statistics -->
+        <div class="dashboard-grid">
+            <div class="stat-card">
+                <i class="fas fa-users fa-2x"></i>
+                <div class="stat-info">
+                    <div class="stat-value"><?php echo number_format($totalUsers); ?></div>
+                    <div class="stat-label">Total Users</div>
                 </div>
             </div>
 
-            <!-- User Management Tool -->
-            <div class="tool-card">
-                <div class="tool-card-header">
-                    <div class="tool-icon" style="background: #ecfdf5; color: #16a34a;">
-                        <i class="fas fa-users-cog"></i>
+            <div class="stat-card">
+                <i class="fas fa-user-injured fa-2x"></i>
+                <div class="stat-info">
+                    <div class="stat-value"><?php echo number_format($totalPatients); ?></div>
+                    <div class="stat-label">Total Patients</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <i class="fas fa-user-shield fa-2x"></i>
+                <div class="stat-info">
+                    <div class="stat-value"><?php echo number_format($totalAdmins); ?></div>
+                    <div class="stat-label">Total Admins</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <i class="fas fa-user-md fa-2x"></i>
+                <div class="stat-info">
+                    <div class="stat-value"><?php echo number_format($totalDentists); ?></div>
+                    <div class="stat-label">Total Dentists</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <i class="fas fa-calendar-check fa-2x"></i>
+                <div class="stat-info">
+                    <div class="stat-value"><?php echo number_format($totalAppointments); ?></div>
+                    <div class="stat-label">Total Appointments</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <i class="fas fa-ban fa-2x"></i>
+                <div class="stat-info">
+                    <div class="stat-value"><?php echo number_format($blockedUsers); ?></div>
+                    <div class="stat-label">Blocked Users</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <i class="fas fa-calendar-day fa-2x"></i>
+                <div class="stat-info">
+                    <div class="stat-value"><?php echo number_format($todayAppointments); ?></div>
+                    <div class="stat-label">Today's Appointments</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Performance Metrics and Top Active Users - Side by Side -->
+        <div class="metrics-users-container">
+            <!-- System Performance Metrics Section -->
+            <div class="metrics-section">
+                <h2>System Performance Metrics</h2>
+                <div class="metrics-container">
+                    <div class="metric-item">
+                        <div class="metric-item-content">
+                            <div class="metric-item-label">Feedback Satisfaction</div>
+                            <div class="metric-item-value"><?php echo $feedbackSatisfaction; ?>%</div>
+                            <div class="metric-item-details positive">
+                                <?php echo number_format($approvedFeedbacks); ?> approved of <?php echo number_format($totalFeedbacks); ?> total
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <div class="tool-card-title">User Management</div>
-                        <div class="tool-card-desc">
-                            View and manage user accounts, review activity, and block or unblock accounts when needed.
+
+                    <div class="metric-item">
+                        <div class="metric-item-content">
+                            <div class="metric-item-label">Appointment Completion Rate</div>
+                            <div class="metric-item-value"><?php echo $completionRate; ?>%</div>
+                            <div class="metric-item-details positive">
+                                <?php echo number_format($completedAppointments); ?> completed of <?php echo number_format($totalAppointments); ?> total
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="metric-item">
+                        <div class="metric-item-content">
+                            <div class="metric-item-label">Cancellation Rate</div>
+                            <div class="metric-item-value"><?php echo $cancellationRate; ?>%</div>
+                            <div class="metric-item-details negative">
+                                <?php echo number_format($cancelledAppointments); ?> cancelled of <?php echo number_format($totalAppointments); ?> total
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="tool-card-footer">
-                    <a href="userControl.php" class="tool-link-btn">
-                        Go to User Control
-                        <i class="fas fa-arrow-right"></i>
-                    </a>
-                    <span class="tool-meta"></span>
+            </div>
+
+            <!-- Top Active Users Section -->
+            <div class="top-users-section">
+                <h2>Top Active Users</h2>
+                <div class="top-user-card">
+                    <?php if (count($topUsers) > 0): ?>
+                        <?php foreach ($topUsers as $index => $user): ?>
+                            <div class="top-user-card-item">
+                                <div class="top-user-card-info">
+                                    <div class="top-user-card-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div>
+                                    <div class="top-user-card-role"><?php echo ucfirst($user['role']); ?></div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <div class="top-user-card-count"><?php echo number_format($user['appointment_count']); ?> appts</div>
+                                    <button class="tool-link-btn" style="padding: 4px 10px; font-size: 11px;" onclick="window.location.href='userControl.php'">
+                                        Change Role
+                                    </button>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <div style="padding: 20px; text-align: center; color: #9ca3af;">No data available</div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

@@ -10,8 +10,8 @@ use PHPMailer\PHPMailer\Exception;
 
 include_once('../database/config.php');
 
-// Check if admin is logged in
-if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
+// Check if admin or super-admin is logged in
+if (!isset($_SESSION['userID']) || (strtolower($_SESSION['role']) !== 'admin' && strtolower($_SESSION['role']) !== 'super-admin')) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized access']);
     exit();
 }
@@ -33,6 +33,22 @@ switch ($action) {
     
     case 'send_promotional_email':
         sendPromotionalEmail($con, $input);
+        break;
+    
+    case 'add_user':
+        addUser($con, $input);
+        break;
+    
+    case 'edit_user':
+        editUser($con, $input);
+        break;
+    
+    case 'change_user_role':
+        changeUserRole($con, $input);
+        break;
+    
+    case 'get_user_details':
+        getUserDetails($con, $input);
         break;
     
     default:
@@ -285,5 +301,348 @@ function checkPromotionalEmailsTable($con) {
 
 // Initialize tables on first access
 checkPromotionalEmailsTable($con);
+
+function addUser($con, $data) {
+    // Only super-admin can add users
+    if (strtolower($_SESSION['role']) !== 'super-admin') {
+        echo json_encode(['success' => false, 'message' => 'Only super-admin can add users']);
+        return;
+    }
+    
+    $username = trim($data['username'] ?? '');
+    $first_name = trim($data['first_name'] ?? '');
+    $last_name = trim($data['last_name'] ?? '');
+    $email = trim($data['email'] ?? '');
+    $phone = trim($data['phone'] ?? '');
+    $role = trim($data['role'] ?? '');
+    $password = $data['password'] ?? '';
+    
+    // Validate required fields
+    if (empty($username) || empty($first_name) || empty($last_name) || empty($email) || empty($phone) || empty($role) || empty($password)) {
+        echo json_encode(['success' => false, 'message' => 'All fields are required']);
+        return;
+    }
+    
+    // Validate role
+    $allowedRoles = ['patient', 'admin', 'dentist'];
+    if (!in_array(strtolower($role), $allowedRoles)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid role selected']);
+        return;
+    }
+    
+    // Validate email format
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid email format']);
+        return;
+    }
+    
+    // Validate password length
+    if (strlen($password) < 6) {
+        echo json_encode(['success' => false, 'message' => 'Password must be at least 6 characters long']);
+        return;
+    }
+    
+    // Check if username already exists
+    $checkUsername = $con->prepare("SELECT user_id FROM user_account WHERE username = ? LIMIT 1");
+    $checkUsername->bind_param("s", $username);
+    $checkUsername->execute();
+    $usernameResult = $checkUsername->get_result();
+    
+    if ($usernameResult->num_rows > 0) {
+        $checkUsername->close();
+        echo json_encode(['success' => false, 'message' => 'Username already exists']);
+        return;
+    }
+    $checkUsername->close();
+    
+    // Check if email already exists
+    $checkEmail = $con->prepare("SELECT user_id FROM user_account WHERE email = ? LIMIT 1");
+    $checkEmail->bind_param("s", $email);
+    $checkEmail->execute();
+    $emailResult = $checkEmail->get_result();
+    
+    if ($emailResult->num_rows > 0) {
+        $checkEmail->close();
+        echo json_encode(['success' => false, 'message' => 'Email already exists']);
+        return;
+    }
+    $checkEmail->close();
+    
+    // Generate user ID
+    $result = mysqli_query($con, "SELECT user_id FROM user_account ORDER BY user_id DESC LIMIT 1");
+    if ($result && mysqli_num_rows($result) > 0) {
+        $row = mysqli_fetch_assoc($result);
+        $lastID = intval(substr($row['user_id'], 1)) + 1;
+        $user_id = "U" . str_pad($lastID, 4, "0", STR_PAD_LEFT);
+    } else {
+        $user_id = "U0001";
+    }
+    
+    // Hash password
+    $password_hash = password_hash($password, PASSWORD_DEFAULT);
+    
+    // Insert user
+    $insertQuery = "INSERT INTO user_account (user_id, username, first_name, last_name, email, phone, password_hash, role, contactNumber_verify, status) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'verified', 'active')";
+    $stmt = $con->prepare($insertQuery);
+    
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($con)]);
+        return;
+    }
+    
+    $stmt->bind_param("ssssssss", $user_id, $username, $first_name, $last_name, $email, $phone, $password_hash, $role);
+    
+    if ($stmt->execute()) {
+        $stmt->close();
+        echo json_encode([
+            'success' => true, 
+            'message' => "User '{$username}' has been added successfully with role '{$role}'",
+            'user_id' => $user_id
+        ]);
+    } else {
+        $error = $stmt->error;
+        $stmt->close();
+        echo json_encode(['success' => false, 'message' => 'Failed to add user: ' . $error]);
+    }
+}
+
+function editUser($con, $data) {
+    // Only super-admin can edit users
+    if (strtolower($_SESSION['role']) !== 'super-admin') {
+        echo json_encode(['success' => false, 'message' => 'Only super-admin can edit users']);
+        return;
+    }
+    
+    $user_id = trim($data['user_id'] ?? '');
+    $username = trim($data['username'] ?? '');
+    $first_name = trim($data['first_name'] ?? '');
+    $last_name = trim($data['last_name'] ?? '');
+    $email = trim($data['email'] ?? '');
+    $phone = trim($data['phone'] ?? '');
+    $role = trim($data['role'] ?? '');
+    
+    // Validate required fields
+    if (empty($user_id) || empty($username) || empty($first_name) || empty($last_name) || empty($email) || empty($phone) || empty($role)) {
+        echo json_encode(['success' => false, 'message' => 'All fields are required']);
+        return;
+    }
+    
+    // Validate role
+    $allowedRoles = ['patient', 'admin', 'dentist'];
+    if (!in_array(strtolower($role), $allowedRoles)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid role selected']);
+        return;
+    }
+    
+    // Validate email format
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid email format']);
+        return;
+    }
+    
+    // Check if user exists
+    $checkUser = $con->prepare("SELECT user_id FROM user_account WHERE user_id = ? LIMIT 1");
+    $checkUser->bind_param("s", $user_id);
+    $checkUser->execute();
+    $userResult = $checkUser->get_result();
+    
+    if ($userResult->num_rows === 0) {
+        $checkUser->close();
+        echo json_encode(['success' => false, 'message' => 'User not found']);
+        return;
+    }
+    $checkUser->close();
+    
+    // Check if username already exists (excluding current user)
+    $checkUsername = $con->prepare("SELECT user_id FROM user_account WHERE username = ? AND user_id != ? LIMIT 1");
+    $checkUsername->bind_param("ss", $username, $user_id);
+    $checkUsername->execute();
+    $usernameResult = $checkUsername->get_result();
+    
+    if ($usernameResult->num_rows > 0) {
+        $checkUsername->close();
+        echo json_encode(['success' => false, 'message' => 'Username already exists']);
+        return;
+    }
+    $checkUsername->close();
+    
+    // Check if email already exists (excluding current user)
+    $checkEmail = $con->prepare("SELECT user_id FROM user_account WHERE email = ? AND user_id != ? LIMIT 1");
+    $checkEmail->bind_param("ss", $email, $user_id);
+    $checkEmail->execute();
+    $emailResult = $checkEmail->get_result();
+    
+    if ($emailResult->num_rows > 0) {
+        $checkEmail->close();
+        echo json_encode(['success' => false, 'message' => 'Email already exists']);
+        return;
+    }
+    $checkEmail->close();
+    
+    // Update user
+    $updateQuery = "UPDATE user_account SET username = ?, first_name = ?, last_name = ?, email = ?, phone = ?, role = ? WHERE user_id = ?";
+    $stmt = $con->prepare($updateQuery);
+    
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($con)]);
+        return;
+    }
+    
+    $stmt->bind_param("sssssss", $username, $first_name, $last_name, $email, $phone, $role, $user_id);
+    
+    if ($stmt->execute()) {
+        $stmt->close();
+        echo json_encode([
+            'success' => true, 
+            'message' => "User '{$username}' has been updated successfully with role '{$role}'",
+            'user_id' => $user_id
+        ]);
+    } else {
+        $error = $stmt->error;
+        $stmt->close();
+        echo json_encode(['success' => false, 'message' => 'Failed to update user: ' . $error]);
+    }
+}
+
+function changeUserRole($con, $data) {
+    // Only super-admin can change roles
+    if (strtolower($_SESSION['role']) !== 'super-admin') {
+        echo json_encode(['success' => false, 'message' => 'Only super-admin can change user roles']);
+        return;
+    }
+    
+    $user_id = trim($data['user_id'] ?? '');
+    $role = trim($data['role'] ?? '');
+    
+    if (empty($user_id) || empty($role)) {
+        echo json_encode(['success' => false, 'message' => 'User ID and Role are required']);
+        return;
+    }
+    
+    $allowedRoles = ['patient', 'admin', 'dentist'];
+    if (!in_array(strtolower($role), $allowedRoles)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid role selected']);
+        return;
+    }
+    
+    // Check if user exists and get username
+    $checkUser = $con->prepare("SELECT username FROM user_account WHERE user_id = ? LIMIT 1");
+    $checkUser->bind_param("s", $user_id);
+    $checkUser->execute();
+    $userResult = $checkUser->get_result();
+    
+    if ($userResult->num_rows === 0) {
+        $checkUser->close();
+        echo json_encode(['success' => false, 'message' => 'User not found']);
+        return;
+    }
+    
+    $userRow = $userResult->fetch_assoc();
+    $username = $userRow['username'];
+    $checkUser->close();
+    
+    // Update user role
+    $updateQuery = "UPDATE user_account SET role = ? WHERE user_id = ?";
+    $stmt = $con->prepare($updateQuery);
+    
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($con)]);
+        return;
+    }
+    
+    $stmt->bind_param("ss", $role, $user_id);
+    
+    if ($stmt->execute()) {
+        $stmt->close();
+        echo json_encode([
+            'success' => true, 
+            'message' => "Role for '{$username}' has been successfully changed to '{$role}'",
+            'user_id' => $user_id
+        ]);
+    } else {
+        $error = $stmt->error;
+        $stmt->close();
+        echo json_encode(['success' => false, 'message' => 'Failed to change role: ' . $error]);
+    }
+}
+
+function getUserDetails($con, $data) {
+    $user_id = trim($data['user_id'] ?? '');
+    
+    if (empty($user_id)) {
+        echo json_encode(['success' => false, 'message' => 'User ID is required']);
+        return;
+    }
+    
+    // Get user details with appointment information
+    $query = "
+        SELECT 
+            ua.user_id,
+            ua.username,
+            ua.first_name,
+            ua.last_name,
+            ua.email,
+            ua.phone,
+            ua.role,
+            ua.created_at,
+            ua.last_login,
+            COALESCE(ua.status, 'active') as account_status,
+            COALESCE(p.patient_id, NULL) as patient_id,
+            COUNT(DISTINCT a.appointment_id) as appointment_count,
+            MAX(a.appointment_date) as last_appointment_date,
+            MIN(a.appointment_date) as first_appointment_date
+        FROM user_account ua
+        LEFT JOIN patient_information p ON ua.user_id = p.user_id
+        LEFT JOIN appointments a ON p.patient_id = a.patient_id
+        WHERE ua.user_id = ?
+        GROUP BY ua.user_id, ua.username, ua.first_name, ua.last_name, ua.email, ua.phone, ua.role, ua.created_at, ua.last_login, ua.status, p.patient_id
+    ";
+    
+    $stmt = $con->prepare($query);
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($con)]);
+        return;
+    }
+    
+    $stmt->bind_param("s", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows === 0) {
+        $stmt->close();
+        echo json_encode(['success' => false, 'message' => 'User not found']);
+        return;
+    }
+    
+    $user = $result->fetch_assoc();
+    $stmt->close();
+    
+    // Format dates
+    $created_at = $user['created_at'] ? date('F j, Y g:i A', strtotime($user['created_at'])) : 'N/A';
+    $last_login = $user['last_login'] ? date('F j, Y g:i A', strtotime($user['last_login'])) : 'Never';
+    $last_appointment = $user['last_appointment_date'] ? date('F j, Y', strtotime($user['last_appointment_date'])) : 'N/A';
+    $first_appointment = $user['first_appointment_date'] ? date('F j, Y', strtotime($user['first_appointment_date'])) : 'N/A';
+    
+    echo json_encode([
+        'success' => true,
+        'user' => [
+            'user_id' => $user['user_id'],
+            'username' => $user['username'],
+            'first_name' => $user['first_name'],
+            'last_name' => $user['last_name'],
+            'email' => $user['email'],
+            'phone' => $user['phone'] ? $user['phone'] : 'N/A',
+            'role' => ucfirst($user['role']),
+            'account_status' => ucfirst($user['account_status']),
+            'patient_id' => $user['patient_id'] ? $user['patient_id'] : 'N/A',
+            'appointment_count' => $user['appointment_count'],
+            'created_at' => $created_at,
+            'last_login' => $last_login,
+            'last_appointment_date' => $last_appointment,
+            'first_appointment_date' => $first_appointment
+        ]
+    ]);
+}
 ?>
 

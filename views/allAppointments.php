@@ -708,13 +708,7 @@ if (!empty($user['patient_id'])) {
                                 <?php 
                                 $walkinCanPrint = ($status == 'Complete' || $status == 'Completed');
                                 ?>
-                                <?php if (!empty($appointment['walkin_id']) && $walkinCanPrint): ?>
-                                    <a href="../controllers/printWalkInReceipt.php?id=<?= htmlspecialchars($appointment['walkin_id']); ?>" 
-                                       class="btn btn-secondary"
-                                       target="_blank">
-                                        Print Receipt
-                                    </a>
-                                <?php endif; ?>
+                                
                             <?php elseif ($status == 'Cancelled'): ?>
                                 <!-- For Cancelled appointments, allow reschedule and optional refund request -->
                                 <a href="reschedule.php?id=<?= $appointment['appointment_id']; ?>" 
@@ -737,12 +731,6 @@ if (!empty($user['patient_id'])) {
                                 <?php endif; ?>
                             <?php else: ?>
                                 <!-- Show all buttons for non-cancelled appointments -->
-                                <a href="../controllers/printAppointmentReceipt.php?id=<?= $appointment['appointment_id']; ?>" 
-                                   class="btn btn-secondary <?= $printReceiptDisabled ? 'disabled' : ''; ?>"
-                                   target="_blank"
-                                   <?= $printReceiptDisabled ? 'onclick="return false;" style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"' : ''; ?>>
-                                    Print Receipt
-                                </a>
 
                                 <button type="button" 
                                    class="btn btn-danger <?= $buttonsDisabled ? 'disabled' : ''; ?>"
