@@ -36,6 +36,7 @@ $defaults = [
     'hero_subtitle' => 'Professional dental care in a comfortable and friendly environment',
     'services_title' => 'Our Services',
     'services_subtitle' => 'Comprehensive dental care for the whole family',
+    'announcement_text' => '',
     'contact_title' => 'Contact Us',
     'contact_subtitle' => 'Send us a message about appointments, services, or any other concerns about us.',
     'contact_help_title' => 'We\'re here to help',
@@ -582,6 +583,11 @@ if (isset($_SESSION['content_error'])) {
                 <i class="fas fa-edit"></i>
                 <span class="sidebar-text">Edit Content</span>
             </a>
+
+            <a href="settings.php">
+                <i class="fas fa-cog"></i>
+                <span class="sidebar-text">Settings</span>
+            </a>
             <a href="../controllers/logout.php">
                 <i class="fa-solid fa-right-from-bracket"></i>
                 <span class="sidebar-text">Logout</span>
@@ -601,10 +607,7 @@ if (isset($_SESSION['content_error'])) {
                     Manage and update your website content sections
                 </div>
             </div>
-            <a href="super_admin_portal.php" class="back-to-dashboard">
-                <i class="fas fa-arrow-left"></i>
-                Back to Dashboard
-            </a>
+            
         </div>
 
         <form id="contentForm" action="../controllers/updateContent.php" method="POST">
@@ -623,6 +626,10 @@ if (isset($_SESSION['content_error'])) {
                         <i class="fas fa-envelope"></i>
                         <span>Contact</span>
                     </button>
+                    <button type="button" class="tab-button" onclick="showSection('announcement')">
+                        <i class="fas fa-bullhorn"></i>
+                        <span>Announcement</span>
+                    </button>
                     <button type="button" class="tab-button" onclick="showSection('location')">
                         <i class="fas fa-map-marker-alt"></i>
                         <span>Location</span>
@@ -630,11 +637,6 @@ if (isset($_SESSION['content_error'])) {
                     <button type="button" class="tab-button" onclick="showSection('dentist')">
                         <i class="fas fa-user-doctor"></i>
                         <span>Dentist</span>
-                    </button>
-                    <button type="button" class="tab-button" onclick="showSection('feedback')">
-                        <i class="fas fa-comments"></i>
-                        <span>Patient Feedback</span>
-                        <span class="tab-badge" id="pendingCount">0</span>
                     </button>
                 </div>
                     <?php if ($success_msg): ?>
@@ -783,6 +785,26 @@ if (isset($_SESSION['content_error'])) {
                         </div>
                     </div>
 
+                    <!-- Announcement Section -->
+                    <div id="announcement" class="tab-content">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <i class="fas fa-bullhorn"></i>
+                                Announcement
+                            </div>
+                            <div class="section-description">
+                                Displayed below the hero section on the homepage
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label class="form-label">Announcement Text</label>
+                                <textarea name="announcement_text" class="form-textarea" placeholder="Example: Braces are temporarily unavailable at the moment."><?php echo htmlspecialchars($contentData['announcement_text']); ?></textarea>
+                                <div class="form-help">Leave empty to hide the announcement on the homepage.</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Dentist Section -->
                     <div id="dentist" class="tab-content">
                         <div class="section-header">
@@ -821,40 +843,7 @@ if (isset($_SESSION['content_error'])) {
                         </div>
                     </div>
 
-                    <!-- Feedback Management Section -->
-                    <div id="feedback" class="tab-content">
-                        <div class="section-header">
-                            <div class="section-title">
-                                <i class="fas fa-comments"></i>
-                                Patient Feedback Management
-                            </div>
-                            <div class="section-description">
-                                Review and manage patient feedback submissions
-                            </div>
-                        </div>
-                        <div class="feedback-filters">
-                            <button type="button" class="filter-btn active" onclick="filterFeedbacks('all')">
-                                <i class="fas fa-list"></i> All
-                            </button>
-                            <button type="button" class="filter-btn" onclick="filterFeedbacks('pending')">
-                                <i class="fas fa-clock"></i> Pending
-                            </button>
-                            <button type="button" class="filter-btn" onclick="filterFeedbacks('approved')">
-                                <i class="fas fa-check"></i> Approved
-                            </button>
-                            <button type="button" class="filter-btn" onclick="filterFeedbacks('rejected')">
-                                <i class="fas fa-times"></i> Rejected
-                            </button>
-                        </div>
-                        <div id="feedbackList" class="feedback-list">
-                            <div class="empty-state">
-                                <i class="fas fa-spinner fa-spin"></i>
-                                <h3>Loading feedback...</h3>
-                            </div>
-                        </div>
-                    </div>
-
-                    <button type="submit" class="btn-save">
+                    <button type="submit" class="btn-save" id="saveBtn">
                         <i class="fas fa-save"></i>
                         Save All Changes
                     </button>
@@ -914,154 +903,6 @@ if (isset($_SESSION['content_error'])) {
             // Add active class to clicked tab button
             event.target.closest('.tab-button').classList.add('active');
 
-            // Load feedbacks if feedback section is opened
-            if (sectionName === 'feedback') {
-                loadFeedbacks('all');
-            }
-        }
-
-        let currentFilter = 'all';
-
-        function loadFeedbacks(filter = 'all') {
-            currentFilter = filter;
-            const feedbackList = document.getElementById('feedbackList');
-            feedbackList.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><h3>Loading feedback...</h3></div>';
-
-            const url = filter === 'all' 
-                ? '../controllers/getPendingFeedbacks.php'
-                : `../controllers/getPendingFeedbacks.php?status=${filter}`;
-
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displayFeedbacks(data.feedbacks, filter);
-                        updatePendingCount(data.pending_count || 0);
-                        updateFilterButtons(filter);
-                    } else {
-                        feedbackList.innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-circle"></i><h3>Error loading feedbacks</h3></div>';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    feedbackList.innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-circle"></i><h3>Error loading feedbacks</h3></div>';
-                });
-        }
-
-        function filterFeedbacks(status) {
-            loadFeedbacks(status);
-        }
-
-        function updateFilterButtons(activeFilter) {
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            const activeBtn = event.target.closest('.filter-btn');
-            if (activeBtn) {
-                activeBtn.classList.add('active');
-            }
-        }
-
-        function displayFeedbacks(feedbacks, filter = 'all') {
-            const feedbackList = document.getElementById('feedbackList');
-
-            if (feedbacks.length === 0) {
-                let message = 'No feedback found.';
-                if (filter === 'pending') message = 'No pending feedback. All feedback has been reviewed.';
-                else if (filter === 'approved') message = 'No approved feedback yet.';
-                else if (filter === 'rejected') message = 'No rejected feedback.';
-
-                feedbackList.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><h3>${message}</h3></div>`;
-                return;
-            }
-
-            feedbackList.innerHTML = '';
-
-            feedbacks.forEach(feedback => {
-                const card = document.createElement('div');
-                card.className = `feedback-card ${feedback.status}`;
-
-                const date = new Date(feedback.created_at);
-                const formattedDate = date.toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-
-                card.innerHTML = `
-                    <div class="feedback-header">
-                        <div class="feedback-info">
-                            <h4>${escapeHtml(feedback.patient_name)}</h4>
-                            <div class="feedback-meta">${formattedDate}</div>
-                            ${feedback.appointment_id ? `<div class="feedback-meta">Appointment ID: ${feedback.appointment_id}</div>` : ''}
-                        </div>
-                        <span class="feedback-status-badge ${feedback.status}">${feedback.status}</span>
-                    </div>
-                    <div class="feedback-text">${escapeHtml(feedback.feedback_text)}</div>
-                    <div class="feedback-actions">
-                        ${feedback.status === 'pending' ? `
-                            <button class="btn-action btn-approve" onclick="updateFeedbackStatus(${feedback.feedback_id}, 'approved')">
-                                <i class="fas fa-check"></i> Approve
-                            </button>
-                            <button class="btn-action btn-reject" onclick="updateFeedbackStatus(${feedback.feedback_id}, 'rejected')">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
-                        ` : ''}
-                        ${feedback.status === 'rejected' ? `
-                            <button class="btn-action btn-approve" onclick="updateFeedbackStatus(${feedback.feedback_id}, 'approved')">
-                                <i class="fas fa-check"></i> Approve
-                            </button>
-                        ` : ''}
-                        ${feedback.status === 'approved' ? `
-                            <button class="btn-action btn-reject" onclick="updateFeedbackStatus(${feedback.feedback_id}, 'rejected')">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
-                        ` : ''}
-                    </div>
-                `;
-
-                feedbackList.appendChild(card);
-            });
-        }
-
-        function updateFeedbackStatus(feedbackId, status) {
-            if (!confirm(`Are you sure you want to ${status === 'approved' ? 'approve' : 'reject'} this feedback?`)) {
-                return;
-            }
-
-            fetch('../controllers/updateFeedbackStatus.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `feedback_id=${feedbackId}&status=${status}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    loadFeedbacks(currentFilter);
-                } else {
-                    alert('Error: ' + (data.message || 'Failed to update feedback status'));
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while updating feedback status');
-            });
-        }
-
-        function updatePendingCount(count) {
-            const countElement = document.getElementById('pendingCount');
-            if (countElement) {
-                if (count > 0) {
-                    countElement.textContent = count;
-                    countElement.style.display = 'inline-block';
-                } else {
-                    countElement.style.display = 'none';
-                }
-            }
         }
 
         function escapeHtml(text) {
@@ -1070,17 +911,99 @@ if (isset($_SESSION['content_error'])) {
             return div.innerHTML;
         }
 
-        // Load pending count on page load
         document.addEventListener('DOMContentLoaded', function() {
-            fetch('../controllers/getPendingFeedbacks.php')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updatePendingCount(data.pending_count || 0);
+            // Hook form for AJAX save (no reload, keep fallback action attribute intact)
+            const form = document.getElementById('contentForm');
+            const saveBtn = document.getElementById('saveBtn');
+            if (form) {
+                form.addEventListener('submit', async function(e){
+                    e.preventDefault();
+                    if (!saveBtn) return;
+                    saveBtn.disabled = true;
+
+                    const allowed = [
+                        'hero_title','hero_subtitle',
+                        'services_title','services_subtitle',
+                        'announcement_text',
+                        'contact_title','contact_subtitle','contact_help_title','contact_help_text',
+                        'contact_hours','contact_phone','contact_email',
+                        'location_title','location_subtitle','location_comembo','location_taytay',
+                        'dentist_title','dentist_subtitle','dentist_name','dentist_specialty','dentist_experience'
+                    ];
+                    const payload = {};
+                    allowed.forEach(k => {
+                        const el = form.querySelector(`[name="${k}"]`);
+                        if (el) payload[k] = el.value;
+                    });
+
+                    // Clear previous alerts
+                    document.querySelectorAll('.alert').forEach(n => n.remove());
+
+                    try {
+                        const res = await fetch('../controllers/update_site_content.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        const json = await res.json();
+                        const container = document.querySelector('.content-area');
+                        if (json && json.success) {
+                            // Success alert
+                            const div = document.createElement('div');
+                            div.className = 'alert alert-success';
+                            div.innerHTML = '<i class="fas fa-check-circle"></i><span>Content saved successfully.</span>';
+                            if (container) container.insertBefore(div, container.firstChild.nextSibling);
+
+                            // Trigger cross-tab sync
+                            try { localStorage.setItem('site_content_updated', Date.now().toString()); } catch(e){}
+                        } else {
+                            const div = document.createElement('div');
+                            div.className = 'alert alert-error';
+                            div.innerHTML = '<i class="fas fa-exclamation-circle"></i><span>Failed to save content.</span>';
+                            if (container) container.insertBefore(div, container.firstChild.nextSibling);
+                        }
+                    } catch (err) {
+                        const container = document.querySelector('.content-area');
+                        const div = document.createElement('div');
+                        div.className = 'alert alert-error';
+                        div.innerHTML = '<i class="fas fa-exclamation-circle"></i><span>Network error. Please try again.</span>';
+                        if (container) container.insertBefore(div, container.firstChild.nextSibling);
+                    } finally {
+                        saveBtn.disabled = false;
                     }
-                })
-                .catch(error => console.error('Error loading pending count:', error));
+                });
+            }
+
+            // Listen to cross-tab updates to refresh form fields in real-time
+            window.addEventListener('storage', function(e){
+                if (e && e.key === 'site_content_updated') {
+                    refreshContentFields();
+                }
+            });
+
+            // Initial light refresh to keep in sync
+            refreshContentFields();
         });
+
+        async function refreshContentFields(){
+            try{
+                const res = await fetch('../controllers/fetch_site_content.php', { cache: 'no-store' });
+                const json = await res.json();
+                if (!(json && json.success)) return;
+                const map = json.data || {};
+                const form = document.getElementById('contentForm');
+                if (!form) return;
+                Object.keys(map).forEach(k => {
+                    const el = form.querySelector(`[name="${k}"]`);
+                    if (el && typeof map[k] === 'string') {
+                        // Only update if different to avoid moving cursor unexpectedly
+                        if (el.value !== map[k]) el.value = map[k];
+                    }
+                });
+            }catch(e){
+                // silent fail
+            }
+        }
     </script>
 </body>
 </html>

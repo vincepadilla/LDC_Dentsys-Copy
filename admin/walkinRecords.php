@@ -34,7 +34,6 @@ $lastUpdated = date('M d, Y h:i A');
     <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="../assets/css/adminstyle.css">
     <link rel="stylesheet" href="walkinrecordsDesign.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
@@ -46,6 +45,7 @@ $lastUpdated = date('M d, Y h:i A');
             --text-muted: #6b7280;
             --accent: #2563eb;
             --accent-soft: #eff6ff;
+            --sidebar-width: 260px;
         }
 
         body {
@@ -56,11 +56,14 @@ $lastUpdated = date('M d, Y h:i A');
 
         .main-content {
             padding: 24px 16px 32px;
+            margin-left: var(--sidebar-width);
+            transition: margin-left 0.2s ease;
         }
 
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
+            max-width: none;
+            margin: 0;
+            padding-right: 16px;
         }
 
         .back-button {
@@ -743,6 +746,226 @@ $lastUpdated = date('M d, Y h:i A');
             padding: 20px;
         }
 
+        /* Complete Walk-in modal (based on appointment.php Add Appointment modal layout) */
+        #complete-walkin-modal.treatment-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1100;
+            background: rgba(15, 23, 42, 0.62);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 18px;
+        }
+
+        #complete-walkin-modal .treatment-modal-content {
+            width: min(1120px, 96vw);
+            max-height: 94vh;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 24px 50px rgba(15, 23, 42, 0.22);
+            overflow: hidden;
+        }
+
+        #complete-walkin-modal .modal-card {
+            display: flex;
+            flex-direction: column;
+            max-height: 94vh;
+        }
+
+        #complete-walkin-modal .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #ffffff;
+        }
+
+        #complete-walkin-modal .modal-header h3 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+            color: #111827;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: transparent !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: 0 !important;
+        }
+
+        #complete-walkin-modal .complete-walkin-close {
+            position: static;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+            color: #9ca3af;
+            background: rgba(0,0,0,0.04);
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        #complete-walkin-modal .complete-walkin-close:hover {
+            background: rgba(0,0,0,0.08);
+            color: #6b7280;
+        }
+
+        #complete-walkin-modal .treatment-body {
+            padding: 20px 24px;
+            overflow: auto;
+        }
+
+        #complete-walkin-modal .walkin-complete-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        #complete-walkin-modal .walkin-complete-panel {
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 18px;
+        }
+
+        #complete-walkin-modal .walkin-complete-panel-title {
+            margin: 0 0 14px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        #complete-walkin-modal .appointment-info-grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        #complete-walkin-modal .treatment-group.form-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #4b5563;
+            margin-bottom: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #complete-walkin-modal input[type="text"],
+        #complete-walkin-modal input[type="number"],
+        #complete-walkin-modal textarea {
+            width: 100%;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 15px;
+            line-height: 1.4;
+            padding: 12px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            background: #ffffff;
+            color: #111827;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        #complete-walkin-modal input[readonly] {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        #complete-walkin-modal textarea {
+            min-height: 132px;
+            resize: vertical;
+        }
+
+        #complete-walkin-modal #walkin_prescription_given {
+            min-height: 150px;
+        }
+
+        #complete-walkin-modal #walkin_treatment_notes {
+            min-height: 140px;
+        }
+
+        #complete-walkin-modal .form-help {
+            display: block;
+            margin-top: 5px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        #complete-walkin-modal .modal-footer {
+            padding: 18px 24px;
+            border-top: 1px solid #e5e7eb;
+            background: #ffffff;
+        }
+
+        #complete-walkin-modal .modal-actions {
+            margin-top: 0;
+            padding-top: 0;
+            border-top: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: stretch;
+            gap: 12px;
+        }
+
+        #complete-walkin-modal .modal-actions .btn {
+            height: 44px;
+            width: 100%;
+            min-width: 0;
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 24px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        @media (min-width: 640px) {
+            #complete-walkin-modal .modal-actions {
+                flex-direction: row;
+                justify-content: flex-end;
+                align-items: center;
+                gap: 12px;
+            }
+            #complete-walkin-modal .modal-actions .btn {
+                width: auto;
+                min-width: 160px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                margin-left: 0;
+            }
+            #complete-walkin-modal .treatment-modal-content {
+                width: 100%;
+                max-height: 95vh;
+            }
+            #complete-walkin-modal .modal-header,
+            #complete-walkin-modal .treatment-body,
+            #complete-walkin-modal .modal-footer {
+                padding-left: 16px;
+                padding-right: 16px;
+            }
+            #complete-walkin-modal .walkin-complete-layout {
+                grid-template-columns: 1fr;
+                gap: 14px;
+            }
+            #complete-walkin-modal .modal-actions {
+                gap: 10px;
+            }
+        }
+
         .modal-panel {
             background: #fff;
             width: min(900px, 95%);
@@ -1077,12 +1300,6 @@ $lastUpdated = date('M d, Y h:i A');
                             </td>
                             <td>
                                 <div class="action-buttons">
-                                    <button class="btn-add-appointment btn-icon" 
-                                            onclick="openAddAppointmentModal('<?php echo htmlspecialchars($row['walkin_id']); ?>', '<?php echo htmlspecialchars($row['patient_id']); ?>', '<?php echo htmlspecialchars($patientName ?: 'N/A'); ?>', '<?php echo htmlspecialchars($row['sub_service'] ?: $row['service']); ?>', '<?php echo htmlspecialchars($row['dentist_name']); ?>', '<?php echo htmlspecialchars($row['branch']); ?>')"
-                                            title="Add to Appointment">
-                                        <i class="fas fa-calendar-plus"></i>
-                                        <span class="btn-icon-label">Add to Appointment</span>
-                                    </button>
                                     <button class="btn-complete btn-icon" 
                                             onclick="markAsCompleted('<?php echo htmlspecialchars($row['walkin_id']); ?>', this)"
                                             <?php echo $isCompleted ? 'disabled' : ''; ?>>
@@ -1185,12 +1402,6 @@ $lastUpdated = date('M d, Y h:i A');
                         </div>
                     </div>
                     <div class="walkin-card-actions">
-                        <button class="btn-add-appointment btn-icon" 
-                                onclick="openAddAppointmentModal('<?php echo htmlspecialchars($row['walkin_id']); ?>', '<?php echo htmlspecialchars($row['patient_id']); ?>', '<?php echo htmlspecialchars($patientName ?: 'N/A'); ?>', '<?php echo htmlspecialchars($row['sub_service'] ?: $row['service']); ?>', '<?php echo htmlspecialchars($row['dentist_name']); ?>', '<?php echo htmlspecialchars($row['branch']); ?>')"
-                                title="Add to Appointment">
-                            <i class="fas fa-calendar-plus"></i>
-                            <span class="btn-icon-label">Add to Appointment</span>
-                        </button>
                         <button class="btn-complete btn-icon" 
                                 onclick="markAsCompleted('<?php echo htmlspecialchars($row['walkin_id']); ?>', this)"
                                 <?php echo $isCompleted ? 'disabled' : ''; ?>>
@@ -1214,120 +1425,89 @@ $lastUpdated = date('M d, Y h:i A');
     </div>
 </div>
 
-<!-- Add to Appointment Modal -->
-<div id="addAppointmentModal" class="modal-overlay" style="display: none;">
-    <div class="modal-panel">
-        <button class="modal-close" onclick="closeAddAppointmentModal()" aria-label="Close add appointment dialog">
-            <i class="fas fa-times"></i>
-        </button>
-        <div class="modal-heading">
-            <span class="modal-badge">New Appointment</span>
-            <h3>Add walk-in to appointment schedule</h3>
-            <p>Convert this walk-in record into a scheduled appointment.</p>
-        </div>
-        <form id="addAppointmentForm" class="modal-form" onsubmit="handleAddAppointmentSubmit(event)">
-            <input type="hidden" id="appointment_walkin_id" name="walkin_id">
-            <input type="hidden" id="appointment_patient_id" name="patient_id">
-            <input type="hidden" id="appointment_dentist_name" name="dentist_name">
-            <input type="hidden" id="appointment_service_name" name="service_name">
-            <input type="hidden" id="appointment_branch_hidden" name="branch">
-            
-            <div class="form-grid">
-                <div class="form-group full-width">
-                    <label class="form-label" for="appointment_patient_name">Patient Name</label>
-                    <input type="text" id="appointment_patient_name" class="form-control" readonly style="background: #f3f4f6; cursor: not-allowed;">
-                </div>
-
-                <div class="form-group full-width">
-                    <label class="form-label" for="appointment_service">Service</label>
-                    <input type="text" id="appointment_service" class="form-control" readonly style="background: #f3f4f6; cursor: not-allowed;">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="appointment_dentist">Dentist</label>
-                    <input type="text" id="appointment_dentist" class="form-control" readonly style="background: #f3f4f6; cursor: not-allowed;">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="appointment_branch">Branch</label>
-                    <input type="text" id="appointment_branch" class="form-control" readonly style="background: #f3f4f6; cursor: not-allowed;">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="appointment_date">Appointment Date <span class="required">*</span></label>
-                    <input type="date" id="appointment_date" name="appointment_date" class="form-control" required min="<?php echo date('Y-m-d'); ?>">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label" for="appointment_time_slot">Time Slot <span class="required">*</span></label>
-                    <select id="appointment_time_slot" name="time_slot" class="form-control" required>
-                        <option value="" disabled selected>Select time slot</option>
-                        <option value="firstBatch">Morning (8:00AM-9:00AM)</option>
-                        <option value="secondBatch">Morning (9:00AM-10:00AM)</option>
-                        <option value="thirdBatch">Morning (10:00AM-11:00AM)</option>
-                        <option value="fourthBatch">Afternoon (11:00AM-12:00PM)</option>
-                        <option value="fifthBatch">Afternoon (1:00PM-2:00PM)</option>
-                        <option value="sixthBatch">Afternoon (2:00PM-3:00PM)</option>
-                        <option value="sevenBatch">Afternoon (3:00PM-4:00PM)</option>
-                        <option value="eightBatch">Afternoon (4:00PM-5:00PM)</option>
-                        <option value="nineBatch">Afternoon (5:00PM-6:00PM)</option>
-                        <option value="tenBatch">Evening (6:00PM-7:00PM)</option>
-                        <option value="lastBatch">Evening (7:00PM-8:00PM)</option>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button type="submit" class="btn btn-success btn-wide">
-                    <i class="fas fa-calendar-check"></i> Add Appointment
-                </button>
-                <button type="button" onclick="closeAddAppointmentModal()" class="btn btn-link">Cancel</button>
-            </div>
-        </form>
-    </div>
-</div>
-
 <!-- Complete Walk-in Modal -->
-<div id="complete-walkin-modal" class="complete-walkin-modal">
-    <div class="complete-walkin-content">
-        <div class="complete-walkin-header">
-            <h3><i class="fa-solid fa-check-to-slot"></i>Complete Walk-in Appointment</h3>
-            <span class="complete-walkin-close">&times;</span>
-        </div>
-        <div class="complete-walkin-body">
-            <form id="walkinTreatmentForm" onsubmit="handleWalkinTreatmentSubmit(event)">
-                <input type="hidden" id="walkin_treatment_patient_id" name="patient_id">
-                <input type="hidden" id="walkin_treatment_walkin_id" name="walkin_id">
+<div id="complete-walkin-modal" class="modal treatment-modal" style="display: none;">
+    <div class="modal-content treatment-modal-content">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>
+                    <i class="fa-solid fa-check-to-slot"></i>
+                    <span>Complete Walk-in Appointment</span>
+                </h3>
+                <span class="close complete-walkin-close"
+                      onclick="closeCompleteWalkinModal()"
+                      aria-label="Close complete walk-in appointment modal">&times;</span>
+            </div>
 
-                <div class="complete-walkin-form-group">
-                    <label for="walkin_patient_id">Patient ID:</label>
-                    <input type="text" id="walkin_patient_id" value="" readonly>
+            <div class="modal-body treatment-body">
+                <form id="walkinTreatmentForm" onsubmit="handleWalkinTreatmentSubmit(event)">
+                    <input type="hidden" id="walkin_treatment_patient_id" name="patient_id">
+                    <input type="hidden" id="walkin_treatment_walkin_id" name="walkin_id">
+
+                    <div class="walkin-complete-layout">
+                        <div class="walkin-complete-panel">
+                            <h4 class="walkin-complete-panel-title">Patient and Prescription</h4>
+                            <div class="appointment-info-grid">
+                                <div class="treatment-group form-group">
+                                    <label for="walkin_patient_id">
+                                        <i class="fas fa-id-card"></i> Patient ID
+                                    </label>
+                                    <input type="text" id="walkin_patient_id" value="" readonly>
+                                    <small class="form-help">Patient ID is automatically filled</small>
+                                </div>
+
+                                <div class="treatment-group form-group">
+                                    <label for="walkin_prescription_given">
+                                        <i class="fas fa-pills"></i> Prescription
+                                    </label>
+                                    <textarea id="walkin_prescription_given" name="prescription_given" rows="5" placeholder="Enter prescribed medications and instructions" required></textarea>
+                                    <small class="form-help">List all prescribed medications and dosage instructions</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="walkin-complete-panel">
+                            <h4 class="walkin-complete-panel-title">Treatment Details</h4>
+                            <div class="appointment-info-grid">
+                                <div class="treatment-group form-group">
+                                    <label for="walkin_treatment_type">
+                                        <i class="fas fa-stethoscope"></i> Treatment
+                                    </label>
+                                    <input type="text" id="walkin_treatment_type" name="treatment" placeholder="Enter treatment type (e.g., Cleaning, Extraction, Filling)" required>
+                                    <small class="form-help">Specify the treatment provided to the patient</small>
+                                </div>
+
+                                <div class="treatment-group form-group">
+                                    <label for="walkin_treatment_cost">
+                                        <i class="fas fa-peso-sign"></i> Treatment Cost (₱)
+                                    </label>
+                                    <input type="number" id="walkin_treatment_cost" name="treatment_cost" step="0.01" min="0" placeholder="0.00" required>
+                                    <small class="form-help">Enter the total cost of the treatment</small>
+                                </div>
+
+                                <div class="treatment-group form-group">
+                                    <label for="walkin_treatment_notes">
+                                        <i class="fas fa-notes-medical"></i> Treatment Notes
+                                    </label>
+                                    <textarea id="walkin_treatment_notes" name="treatment_notes" rows="5" placeholder="Enter detailed notes about the treatment, patient condition, and recommendations" required></textarea>
+                                    <small class="form-help">Add any additional notes or observations about the treatment</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="treatment-footer modal-footer">
+                <div class="modal-actions">
+                    <button type="button" onclick="closeCompleteWalkinModal()" class="btn btn-link" id="cancelCompleteWalkin">
+                        Cancel
+                    </button>
+                    <button type="submit" form="walkinTreatmentForm" class="btn btn-success btn-wide" id="completeWalkinSubmitBtn">
+                        Save
+                    </button>
                 </div>
-                
-                <div class="complete-walkin-form-group">
-                    <label for="walkin_treatment_type">Treatment:</label>
-                    <input type="text" id="walkin_treatment_type" name="treatment" required>
-                </div>
-                
-                <div class="complete-walkin-form-group">
-                    <label for="walkin_prescription_given">Prescription:</label>
-                    <input type="text" id="walkin_prescription_given" name="prescription_given" required>
-                </div>
-                
-                <div class="complete-walkin-form-group">
-                    <label for="walkin_treatment_notes">Notes:</label>
-                    <input type="text" id="walkin_treatment_notes" name="treatment_notes" required>
-                </div>
-                
-                <div class="complete-walkin-form-group">
-                    <label for="walkin_treatment_cost">Treatment Cost (₱):</label>
-                    <input type="number" id="walkin_treatment_cost" name="treatment_cost" step="0.01" min="0" required>
-                </div>
-                
-                <div class="complete-walkin-actions">
-                    <button type="button" class="btn btn-danger" id="cancelCompleteWalkin">CANCEL</button>
-                    <button type="submit" class="btn btn-completed">COMPLETE AND SAVE</button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
 </div>
@@ -1396,7 +1576,7 @@ $lastUpdated = date('M d, Y h:i A');
         walkinIdInput.value = walkinId;
         patientIdDisplay.value = patientId;
 
-        modal.style.display = 'block';
+        modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
     }
 
@@ -1417,11 +1597,13 @@ $lastUpdated = date('M d, Y h:i A');
         const form = event.target;
         const formData = new FormData(form);
         const walkinId = document.getElementById('walkin_treatment_walkin_id').value;
-        
-        const submitBtn = form.querySelector('button[type="submit"]');
-        const originalText = submitBtn.innerHTML;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        // The submit button is outside the form (uses form="walkinTreatmentForm"), so query the DOM, not the form.
+        const submitBtn = document.getElementById('completeWalkinSubmitBtn') || document.querySelector('button[form="walkinTreatmentForm"][type="submit"]');
+        const originalText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        }
         
         fetch('../controllers/saveWalkinTreatment.php', {
             method: 'POST',
@@ -1456,20 +1638,25 @@ $lastUpdated = date('M d, Y h:i A');
                 closeCompleteWalkinModal();
                 form.reset();
                 setTimeout(() => {
-                    location.reload();
+                    // Redirect to treatment history page after successful save
+                    window.location.href = 'treatmenthistory.php';
                 }, 2000);
             } else {
                 const errorMsg = data.message || 'Failed to save treatment. Please try again.';
                 showNotification('error', 'Error', errorMsg);
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }
             }
         })
         .catch(error => {
             console.error('Fetch error:', error);
             showNotification('error', 'Error', 'An error occurred while saving treatment: ' + error.message);
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
         });
     }
 
@@ -1629,100 +1816,6 @@ $lastUpdated = date('M d, Y h:i A');
         }
     }
     
-    // Add to Appointment Modal Functions
-    function openAddAppointmentModal(walkinId, patientId, patientName, serviceName, dentistName, branch) {
-        const modal = document.getElementById('addAppointmentModal');
-        if (!modal) {
-            showNotification('error', 'Error', 'Modal not found. Please refresh the page.');
-            return;
-        }
-        
-        // Set form values
-        document.getElementById('appointment_walkin_id').value = walkinId;
-        document.getElementById('appointment_patient_id').value = patientId;
-        document.getElementById('appointment_patient_name').value = patientName;
-        document.getElementById('appointment_service').value = serviceName;
-        document.getElementById('appointment_service_name').value = serviceName;
-        document.getElementById('appointment_dentist').value = dentistName;
-        document.getElementById('appointment_dentist_name').value = dentistName;
-        document.getElementById('appointment_branch').value = branch;
-        const branchHidden = document.getElementById('appointment_branch_hidden');
-        if (branchHidden) {
-            branchHidden.value = branch;
-        }
-        
-        // Reset date and time slot
-        document.getElementById('appointment_date').value = '';
-        document.getElementById('appointment_time_slot').value = '';
-        
-        // Set minimum date to today
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('appointment_date').setAttribute('min', today);
-        
-        modal.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-    }
-    
-    function closeAddAppointmentModal() {
-        const modal = document.getElementById('addAppointmentModal');
-        if (modal) {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-            const form = document.getElementById('addAppointmentForm');
-            if (form) {
-                form.reset();
-                // Clear validation states
-                form.querySelectorAll('.form-control').forEach(input => {
-                    input.classList.remove('is-invalid', 'is-valid');
-                });
-            }
-        }
-    }
-    
-    function handleAddAppointmentSubmit(event) {
-        event.preventDefault();
-        
-        const form = event.target;
-        const formData = new FormData(form);
-        
-        const submitBtn = form.querySelector('button[type="submit"]');
-        const originalText = submitBtn.innerHTML;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
-        
-        fetch('../controllers/addAppointmentFromWalkin.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok: ' + response.status);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success === true) {
-                showNotification('success', 'Appointment Added', data.message || 'Walk-in record has been successfully added to appointment schedule.');
-                closeAddAppointmentModal();
-                setTimeout(() => {
-                    // Optionally reload the page to show updated data
-                    // location.reload();
-                }, 2000);
-            } else {
-                const errorMsg = data.message || 'Failed to add appointment. Please try again.';
-                showNotification('error', 'Error', errorMsg);
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
-            }
-        })
-        .catch(error => {
-            console.error('Fetch error:', error);
-            showNotification('error', 'Error', 'An error occurred while adding appointment: ' + error.message);
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
-        });
-    }
-
     // Event listeners for modal
     document.addEventListener('DOMContentLoaded', function() {
         const completeModal = document.getElementById('complete-walkin-modal');
@@ -1751,16 +1844,6 @@ $lastUpdated = date('M d, Y h:i A');
         if (initialVisibleCountEl && totalCountEl) {
             // On initial load, visible count equals total records
             initialVisibleCountEl.textContent = totalCountEl.textContent;
-        }
-        
-        // Add to Appointment Modal event listeners
-        const addAppointmentModal = document.getElementById('addAppointmentModal');
-        if (addAppointmentModal) {
-            window.addEventListener('click', function(event) {
-                if (event.target === addAppointmentModal) {
-                    closeAddAppointmentModal();
-                }
-            });
         }
     });
 </script>

@@ -63,6 +63,67 @@ $usersQuery = "
     LIMIT $recordsPerPage OFFSET $offset
 ";
 $usersResult = mysqli_query($con, $usersQuery);
+
+function renderUsersTableRows($usersResult) {
+    if ($usersResult && mysqli_num_rows($usersResult) > 0) {
+        while ($user = mysqli_fetch_assoc($usersResult)) {
+            $hasAppointments = $user['appointment_count'] > 0;
+            $statusClass = ($user['account_status'] === 'blocked' || $user['account_status'] === 'Blocked') ? 'status-blocked' : 'status-active';
+            $statusText = ($user['account_status'] === 'blocked' || $user['account_status'] === 'Blocked') ? 'Blocked' : 'Active';
+            $rowClass = $hasAppointments ? 'user-row has-appointments' : 'user-row';
+            $lastAppt = $user['last_appointment_date'] ? date('M j, Y', strtotime($user['last_appointment_date'])) : 'N/A';
+
+            $roleBadgeClass = 'status-active';
+            $roleText = ucfirst($user['role']);
+
+            echo "<tr class='{$rowClass}' data-status='{$statusText}' data-search='" . strtolower($user['first_name'] . ' ' . $user['last_name'] . ' ' . $user['email']) . "' data-has-appointments='" . ($hasAppointments ? 'yes' : 'no') . "'>";
+            echo "<td style='color: #64748b; font-weight: 500;'>{$user['user_id']}</td>";
+            echo "<td><strong style='color: #1e293b; font-size: 15px;'>{$user['first_name']} {$user['last_name']}</strong><br><small style='color: #94a3b8; font-size: 13px;'>@{$user['username']}</small></td>";
+            echo "<td><span class='{$roleBadgeClass}' style='text-transform: capitalize;'>{$roleText}</span></td>";
+            echo "<td><span class='badge'>" . ($user['appointment_count'] > 0 ? $user['appointment_count'] : '0') . "</span></td>";
+            echo "<td style='color: #64748b;'>{$lastAppt}</td>";
+            echo "<td><span class='{$statusClass}'>{$statusText}</span></td>";
+            echo "<td>";
+            echo "<div style='display: flex; gap: 8px; align-items: center;'>";
+            echo "<button class='action-btn btn-warning' onclick='openEditUserModal(\"{$user['user_id']}\", \"" . htmlspecialchars($user['username'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['first_name'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['last_name'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['email'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['phone'] ?? '', ENT_QUOTES) . "\", \"{$user['role']}\")' title='Edit User'>";
+            echo "<i class='fas fa-edit'></i>";
+            echo "</button>";
+
+            if ($user['account_status'] !== 'blocked' && $user['account_status'] !== 'Blocked') {
+                echo "<button class='action-btn btn-danger' onclick='blockUser(\"{$user['user_id']}\", \"{$user['first_name']} {$user['last_name']}\")' title='Block User'>";
+                echo "<i class='fas fa-ban'></i>";
+                echo "</button>";
+            } else {
+                echo "<button class='action-btn btn-success' onclick='unblockUser(\"{$user['user_id']}\", \"{$user['first_name']} {$user['last_name']}\")' title='Unblock User'>";
+                echo "<i class='fas fa-check-circle'></i>";
+                echo "</button>";
+            }
+            echo "<button class='action-btn btn-info' onclick='viewUserDetails(\"{$user['user_id']}\")' title='View User'>";
+            echo "<i class='fas fa-eye'></i>";
+            echo "</button>";
+            echo "</div>";
+            echo "</td>";
+            echo "</tr>";
+        }
+        return;
+    }
+
+    echo "<tr><td colspan='9' style='text-align: center; padding: 30px;'>No users found.</td></tr>";
+}
+
+if (isset($_GET['ajax_users']) && $_GET['ajax_users'] === '1') {
+    ob_start();
+    renderUsersTableRows($usersResult);
+    $rowsHtml = ob_get_clean();
+
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => true,
+        'rows_html' => $rowsHtml,
+        'total_records' => (int)$totalRecords
+    ]);
+    exit();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1384,6 +1445,10 @@ $usersResult = mysqli_query($con, $usersQuery);
                 <i class="fas fa-edit"></i>
                 <span class="sidebar-text">Edit Content</span>
             </a>
+            <a href="settings.php">
+                <i class="fas fa-cog"></i>
+                <span class="sidebar-text">Settings</span>
+            </a>
             <a href="../controllers/logout.php">
                 <i class="fa-solid fa-right-from-bracket"></i>
                 <span class="sidebar-text">Logout</span>
@@ -1407,9 +1472,7 @@ $usersResult = mysqli_query($con, $usersQuery);
                             <p class="page-description">Manage user accounts, view appointment history, and send promotional communications.</p>
                         </div>
                     </div>
-                    <a href="super_admin_portal.php" class="back-btn">
-                        <i class="fas fa-arrow-left"></i> Back to Dashboard
-                    </a>
+                    
                 </div>
         
                 <!-- Second Row: Action Buttons + Filter -->
@@ -1460,59 +1523,7 @@ $usersResult = mysqli_query($con, $usersQuery);
                             </tr>
                         </thead>
                         <tbody id="usersTableBody">
-                    <?php
-                    if (mysqli_num_rows($usersResult) > 0) {
-                        while ($user = mysqli_fetch_assoc($usersResult)) {
-                            $hasAppointments = $user['appointment_count'] > 0;
-                            $statusClass = ($user['account_status'] === 'blocked' || $user['account_status'] === 'Blocked') ? 'status-blocked' : 'status-active';
-                            $statusText = ($user['account_status'] === 'blocked' || $user['account_status'] === 'Blocked') ? 'Blocked' : 'Active';
-                            $rowClass = $hasAppointments ? 'user-row has-appointments' : 'user-row';
-                            $lastAppt = $user['last_appointment_date'] ? date('M j, Y', strtotime($user['last_appointment_date'])) : 'N/A';
-                            
-                            $roleBadgeClass = '';
-                            $roleText = ucfirst($user['role']);
-                            if ($user['role'] === 'admin') {
-                                $roleBadgeClass = 'status-active';
-                            } elseif ($user['role'] === 'dentist') {
-                                $roleBadgeClass = 'status-active';
-                            } else {
-                                $roleBadgeClass = 'status-active';
-                            }
-                            
-                            echo "<tr class='{$rowClass}' data-status='{$statusText}' data-search='" . strtolower($user['first_name'] . ' ' . $user['last_name'] . ' ' . $user['email']) . "' data-has-appointments='" . ($hasAppointments ? 'yes' : 'no') . "'>";
-                            echo "<td style='color: #64748b; font-weight: 500;'>{$user['user_id']}</td>";
-                            echo "<td><strong style='color: #1e293b; font-size: 15px;'>{$user['first_name']} {$user['last_name']}</strong><br><small style='color: #94a3b8; font-size: 13px;'>@{$user['username']}</small></td>";
-                            
-                            echo "<td><span class='{$roleBadgeClass}' style='text-transform: capitalize;'>{$roleText}</span></td>";
-                            echo "<td><span class='badge'>" . ($user['appointment_count'] > 0 ? $user['appointment_count'] : '0') . "</span></td>";
-                            echo "<td style='color: #64748b;'>{$lastAppt}</td>";
-                            echo "<td><span class='{$statusClass}'>{$statusText}</span></td>";
-                            echo "<td>";
-                            echo "<div style='display: flex; gap: 8px; align-items: center;'>";
-                            echo "<button class='action-btn btn-warning' onclick='openEditUserModal(\"{$user['user_id']}\", \"" . htmlspecialchars($user['username'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['first_name'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['last_name'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['email'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['phone'] ?? '', ENT_QUOTES) . "\", \"{$user['role']}\")' title='Edit User'>";
-                            echo "<i class='fas fa-edit'></i>";
-                            echo "</button>";
-                            
-                            if ($user['account_status'] !== 'blocked' && $user['account_status'] !== 'Blocked') {
-                                echo "<button class='action-btn btn-danger' onclick='blockUser(\"{$user['user_id']}\", \"{$user['first_name']} {$user['last_name']}\")' title='Block User'>";
-                                echo "<i class='fas fa-ban'></i>";
-                                echo "</button>";
-                            } else {
-                                echo "<button class='action-btn btn-success' onclick='unblockUser(\"{$user['user_id']}\", \"{$user['first_name']} {$user['last_name']}\")' title='Unblock User'>";
-                                echo "<i class='fas fa-check-circle'></i>";
-                                echo "</button>";
-                            }
-                            echo "<button class='action-btn btn-info' onclick='viewUserDetails(\"{$user['user_id']}\")' title='View User'>";
-                            echo "<i class='fas fa-eye'></i>";
-                            echo "</button>";
-                            echo "</div>";
-                            echo "</td>";
-                            echo "</tr>";
-                        }
-                    } else {
-                        echo "<tr><td colspan='9' style='text-align: center; padding: 30px;'>No users found.</td></tr>";
-                    }
-                    ?>
+                    <?php renderUsersTableRows($usersResult); ?>
                         </tbody>
                     </table>
                 </div>
@@ -1838,6 +1849,68 @@ $usersResult = mysqli_query($con, $usersQuery);
 </div>
 
 <script>
+    const userControlRealtimeConfig = {
+        recordsPerPage: <?php echo (int)$recordsPerPage; ?>,
+        currentPage: <?php echo (int)$currentPage; ?>,
+        refreshMs: 4000
+    };
+
+    function getUsersRealtimeEndpoint() {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('ajax_users', '1');
+        currentUrl.searchParams.set('_rt', Date.now().toString());
+        return currentUrl.toString();
+    }
+
+    function updatePaginationInfo(totalRecords) {
+        const info = document.querySelector('.pagination-info');
+        if (!info) return;
+
+        const safeTotal = Number(totalRecords) || 0;
+        const start = safeTotal > 0 ? ((userControlRealtimeConfig.currentPage - 1) * userControlRealtimeConfig.recordsPerPage) + 1 : 0;
+        const end = Math.min(userControlRealtimeConfig.currentPage * userControlRealtimeConfig.recordsPerPage, safeTotal);
+        info.textContent = `Showing ${start} - ${end} of ${safeTotal} users`;
+    }
+
+    let isRealtimeUsersFetchInFlight = false;
+    async function refreshUsersTableRealtime() {
+        if (isRealtimeUsersFetchInFlight) return;
+
+        const tableBody = document.getElementById('usersTableBody');
+        if (!tableBody) return;
+
+        isRealtimeUsersFetchInFlight = true;
+        try {
+            const response = await fetch(getUsersRealtimeEndpoint(), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                cache: 'no-store'
+            });
+            if (!response.ok) return;
+
+            const payload = await response.json();
+            if (!(payload && payload.success)) return;
+
+            const nextRows = String(payload.rows_html || '');
+            if (nextRows && nextRows !== tableBody.innerHTML) {
+                tableBody.innerHTML = nextRows;
+                filterUsers();
+            }
+
+            updatePaginationInfo(payload.total_records);
+        } catch (error) {
+            console.error('Realtime users refresh failed:', error);
+        } finally {
+            isRealtimeUsersFetchInFlight = false;
+        }
+    }
+
+    function initUserControlRealtimeUpdates() {
+        refreshUsersTableRealtime();
+        setInterval(refreshUsersTableRealtime, userControlRealtimeConfig.refreshMs);
+    }
+
+    document.addEventListener('DOMContentLoaded', initUserControlRealtimeUpdates);
+
     // Notification System
     function showNotification(type, title, message, iconHtml = '', duration = 5000) {
         const container = document.getElementById('notificationContainer');
@@ -1917,7 +1990,7 @@ $usersResult = mysqli_query($con, $usersQuery);
                 showNotification('success', 'Role Updated', data.message);
                 setTimeout(() => {
                     closeChangeRoleModal();
-                    location.reload();
+                    refreshUsersTableRealtime();
                 }, 1500);
             } else {
                 showNotification('error', 'Error', data.message || 'Failed to update role. Please try again.');
@@ -1983,7 +2056,7 @@ $usersResult = mysqli_query($con, $usersQuery);
                 showNotification('success', 'User Updated', `User "${requestData.username}" has been updated successfully with role "${requestData.role}".`);
                 setTimeout(() => {
                     closeEditUserModal();
-                    location.reload();
+                    refreshUsersTableRealtime();
                 }, 1500);
             } else {
                 showNotification('error', 'Error', data.message || 'Failed to update user. Please try again.');
@@ -2055,7 +2128,7 @@ $usersResult = mysqli_query($con, $usersQuery);
                 showNotification('success', 'User Added', `User "${requestData.username}" has been added successfully with role "${requestData.role}".`);
                 setTimeout(() => {
                     closeAddUserModal();
-                    location.reload();
+                    refreshUsersTableRealtime();
                 }, 1500);
             } else {
                 showNotification('error', 'Error', data.message || 'Failed to add user. Please try again.');
@@ -2114,7 +2187,7 @@ $usersResult = mysqli_query($con, $usersQuery);
         .then(data => {
             if (data.success) {
                 showNotification('success', 'User Blocked', `${userName} has been blocked successfully.`);
-                setTimeout(() => location.reload(), 1500);
+                setTimeout(() => refreshUsersTableRealtime(), 1500);
             } else {
                 showNotification('error', 'Error', data.message || 'Failed to block user.');
             }
@@ -2140,7 +2213,7 @@ $usersResult = mysqli_query($con, $usersQuery);
         .then(data => {
             if (data.success) {
                 showNotification('success', 'User Unblocked', `${userName} has been unblocked successfully.`);
-                setTimeout(() => location.reload(), 1500);
+                setTimeout(() => refreshUsersTableRealtime(), 1500);
             } else {
                 showNotification('error', 'Error', data.message || 'Failed to unblock user.');
             }

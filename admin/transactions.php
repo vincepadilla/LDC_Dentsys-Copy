@@ -535,7 +535,10 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                             <td>
                                 <?php 
                                 $paymentMethodDisplay = strtolower(trim($row['method'] ?? ''));
-                                if ($paymentMethodDisplay === 'cash') {
+                                $proofValue = trim($row['proof_image'] ?? '');
+                                if (strcasecmp($proofValue, 'Walk-in') === 0 || $paymentMethodDisplay === 'n/a') {
+                                    echo htmlspecialchars($row['patient_name'] ?? ($row['account_name'] ?? 'N/A'));
+                                } elseif ($paymentMethodDisplay === 'cash') {
                                     echo 'N/A';
                                 } else {
                                     echo htmlspecialchars($row['account_name'] ?? '');
@@ -562,19 +565,22 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                                 ?>
                             </td>
                             <td>
-                                <?php if (!empty($row['proof_image'])): ?>
-                                    <?php 
-                                    $clean_path = ltrim($row['proof_image'], '/');
+                                <?php 
+                                $proofValue = trim($row['proof_image'] ?? '');
+                                if (strcasecmp($proofValue, 'Walk-in') === 0) {
+                                    echo '<span>Paid on-site</span>';
+                                } elseif (!empty($proofValue)) {
+                                    $clean_path = ltrim($proofValue, '/');
                                     $clean_path = str_replace('uploads/', '', $clean_path);
                                     $image_path = '/uploads/' . $clean_path;
-                                    ?>
+                                ?>
                                     <button type="button" onclick="viewProofPDF('<?php echo htmlspecialchars($row['payment_id']); ?>')" 
                                         class="view-image-btn">
-                                        View Image
+                                        View
                                     </button>
-                                <?php else: ?>
+                                <?php } else { ?>
                                     <span>No Image</span>
-                                <?php endif; ?>
+                                <?php } ?>
                             </td>
                             <td>
                                 <span class="status status-<?php echo htmlspecialchars(strtolower($row['status'] ?? 'pending')); ?>">
@@ -682,7 +688,16 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                         <?php if ($paymentMethodDisplay !== 'cash'): ?>
                         <div class="payment-card-field">
                             <div class="payment-card-label">Account Name</div>
-                            <div class="payment-card-value"><?php echo htmlspecialchars($row['account_name'] ?? 'N/A'); ?></div>
+                            <div class="payment-card-value">
+                                <?php 
+                                $proofValue = trim($row['proof_image'] ?? '');
+                                if (strcasecmp($proofValue, 'Walk-in') === 0 || $paymentMethodDisplay === 'n/a') {
+                                    echo htmlspecialchars($row['patient_name'] ?? ($row['account_name'] ?? 'N/A'));
+                                } else {
+                                    echo htmlspecialchars($row['account_name'] ?? 'N/A');
+                                }
+                                ?>
+                            </div>
                         </div>
                         <div class="payment-card-field">
                             <div class="payment-card-label">Account Number</div>
@@ -696,19 +711,22 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                         <div class="payment-card-field">
                             <div class="payment-card-label">Proof</div>
                             <div class="payment-card-value">
-                                <?php if (!empty($row['proof_image'])): ?>
-                                    <?php 
-                                    $clean_path = ltrim($row['proof_image'], '/');
+                                <?php 
+                                $proofValue = trim($row['proof_image'] ?? '');
+                                if (strcasecmp($proofValue, 'Walk-in') === 0) {
+                                    echo '<span>Paid on-site</span>';
+                                } elseif (!empty($proofValue)) {
+                                    $clean_path = ltrim($proofValue, '/');
                                     $clean_path = str_replace('uploads/', '', $clean_path);
                                     $image_path = '/uploads/' . $clean_path;
-                                    ?>
+                                ?>
                                     <button type="button" onclick="viewProofPDF('<?php echo htmlspecialchars($row['payment_id']); ?>')" 
                                         class="view-image-btn">
                                         View
                                     </button>
-                                <?php else: ?>
+                                <?php } else { ?>
                                     <span>No Image</span>
-                                <?php endif; ?>
+                                <?php } ?>
                             </div>
                         </div>
                     </div>

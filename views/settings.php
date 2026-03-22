@@ -487,6 +487,51 @@ if (isset($_SESSION['settings_error'])) {
             height: 0;
         }
 
+        .coming-soon-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 20000;
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            color: #92400e;
+            border: 1px solid #f59e0b;
+            border-radius: 12px;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.15);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 280px;
+            max-width: 420px;
+            animation: toastIn 0.28s ease-out;
+        }
+
+        .coming-soon-toast.hide {
+            animation: toastOut 0.25s ease-in forwards;
+        }
+
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateY(-12px) scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes toastOut {
+            from {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(-8px) scale(0.98);
+            }
+        }
+
         @media (max-width: 768px) {
             .main-content {
                 margin-left: 0;
@@ -559,47 +604,46 @@ if (isset($_SESSION['settings_error'])) {
                     Manage system configuration and preferences
                 </div>
             </div>
-            <a href="super_admin_portal.php" class="back-to-dashboard">
-                <i class="fas fa-arrow-left"></i>
-                Back to Dashboard
-            </a>
+            
         </div>
 
-        <form action="../controllers/update_settings.php" method="POST">
+        <form id="settingsForm" action="../controllers/update_settings.php" method="POST">
             <div class="content-area">
-                <?php if ($success_msg): ?>
-                    <div class="alert alert-success">
-                        <i class="fas fa-check-circle"></i>
-                        <span><?php echo htmlspecialchars($success_msg); ?></span>
-                    </div>
-                <?php endif; ?>
+                <div id="settingsAlertContainer">
+                    <?php if ($success_msg): ?>
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle"></i>
+                            <span><?php echo htmlspecialchars($success_msg); ?></span>
+                        </div>
+                    <?php endif; ?>
 
-                <?php if ($error_msg): ?>
-                    <div class="alert alert-error">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <span><?php echo htmlspecialchars($error_msg); ?></span>
-                    </div>
-                <?php endif; ?>
+                    <?php if ($error_msg): ?>
+                        <div class="alert alert-error">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span><?php echo htmlspecialchars($error_msg); ?></span>
+                        </div>
+                    <?php endif; ?>
+                </div>
 
                 <!-- Section Tabs -->
                 <div class="section-tabs">
-                    <button type="button" class="tab-button active" onclick="showSection('appointment')">
+                    <button type="button" class="tab-button active" onclick="showSection('appointment', this)">
                         <i class="fas fa-calendar-alt"></i>
                         <span>Appointment</span>
                     </button>
-                    <button type="button" class="tab-button" onclick="showSection('payment')">
+                    <button type="button" class="tab-button" onclick="showSection('payment', this)">
                         <i class="fas fa-money-bill-wave"></i>
                         <span>Payment</span>
                     </button>
-                    <button type="button" class="tab-button" onclick="showSection('email')">
+                    <button type="button" class="tab-button" onclick="showSection('email', this)">
                         <i class="fas fa-envelope"></i>
                         <span>Email & Notifications</span>
                     </button>
-                    <button type="button" class="tab-button" onclick="showSection('security')">
+                    <button type="button" class="tab-button" onclick="showSection('security', this)">
                         <i class="fas fa-shield-alt"></i>
                         <span>Security</span>
                     </button>
-                    <button type="button" class="tab-button" onclick="showSection('maintenance')">
+                    <button type="button" class="tab-button" onclick="showSection('maintenance', this)">
                         <i class="fas fa-tools"></i>
                         <span>Maintenance</span>
                     </button>
@@ -826,7 +870,7 @@ if (isset($_SESSION['settings_error'])) {
                             <label class="form-label">Restore Database</label>
                             <div class="file-input-wrapper">
                                 <input type="file" id="restoreFile" accept=".sql" style="display: none;" onchange="handleRestoreFile(this)">
-                                <button type="button" class="btn-action btn-secondary" onclick="document.getElementById('restoreFile').click()">
+                                <button type="button" class="btn-action btn-secondary" onclick="showComingSoonRestoreAlert()">
                                     <i class="fas fa-upload"></i>
                                     Select Backup File
                                 </button>
@@ -879,7 +923,7 @@ if (isset($_SESSION['settings_error'])) {
             }
         });
 
-        function showSection(sectionName) {
+        function showSection(sectionName, buttonEl = null) {
             // Hide all sections
             document.querySelectorAll('.tab-content').forEach(section => {
                 section.classList.remove('active');
@@ -894,8 +938,83 @@ if (isset($_SESSION['settings_error'])) {
             document.getElementById(sectionName).classList.add('active');
 
             // Add active class to clicked tab button
-            event.target.closest('.tab-button').classList.add('active');
+            if (buttonEl) {
+                buttonEl.classList.add('active');
+            }
+
+            // Persist current tab to avoid jumping back to first tab
+            try {
+                localStorage.setItem('settings_active_tab', sectionName);
+            } catch (e) {}
         }
+
+        function renderSettingsAlert(type, message) {
+            const container = document.getElementById('settingsAlertContainer');
+            if (!container) return;
+
+            const alertClass = type === 'success' ? 'alert-success' : 'alert-error';
+            const iconClass = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+            container.innerHTML = `
+                <div class="alert ${alertClass}">
+                    <i class="fas ${iconClass}"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Restore previously active tab if available
+            try {
+                const activeTab = localStorage.getItem('settings_active_tab');
+                if (activeTab) {
+                    const button = document.querySelector(`.tab-button[onclick*="'${activeTab}'"]`);
+                    if (button && document.getElementById(activeTab)) {
+                        showSection(activeTab, button);
+                    }
+                }
+            } catch (e) {}
+
+            // AJAX save to avoid full page refresh and keep tab state
+            const settingsForm = document.getElementById('settingsForm');
+            if (!settingsForm) return;
+
+            settingsForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const submitBtn = settingsForm.querySelector('.btn-save');
+                const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+                }
+
+                try {
+                    const formData = new FormData(settingsForm);
+                    const response = await fetch(settingsForm.action, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        }
+                    });
+
+                    const data = await response.json().catch(() => ({}));
+                    if (response.ok && data.success) {
+                        renderSettingsAlert('success', data.message || 'Settings updated successfully!');
+                    } else {
+                        renderSettingsAlert('error', data.message || 'Some settings could not be updated.');
+                    }
+                } catch (error) {
+                    renderSettingsAlert('error', 'Failed to save settings. Please try again.');
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnHtml;
+                    }
+                }
+            });
+        });
 
         function backupDatabase() {
             if (confirm('Are you sure you want to create a database backup? This may take a few moments.')) {
@@ -905,31 +1024,35 @@ if (isset($_SESSION['settings_error'])) {
 
         function handleRestoreFile(input) {
             if (input.files && input.files[0]) {
-                const file = input.files[0];
-                if (confirm('WARNING: Restoring the database will overwrite all current data. Are you absolutely sure you want to proceed?')) {
-                    const formData = new FormData();
-                    formData.append('restore_file', file);
-                    
-                    fetch('../controllers/restore_database.php', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert('Database restored successfully!');
-                            location.reload();
-                        } else {
-                            alert('Error: ' + (data.message || 'Failed to restore database'));
-                        }
-                    })
-                    .catch(error => {
-                        alert('Error: ' + error.message);
-                    });
-                } else {
-                    input.value = '';
-                }
+                showComingSoonRestoreAlert();
+                // Reset file input to avoid accidental form state issues
+                input.value = '';
             }
+        }
+
+        function showComingSoonRestoreAlert() {
+            const oldToast = document.querySelector('.coming-soon-toast');
+            if (oldToast) {
+                oldToast.remove();
+            }
+
+            const toast = document.createElement('div');
+            toast.className = 'coming-soon-toast';
+            toast.innerHTML = `
+                <i class="fas fa-tools"></i>
+                <div>
+                    <strong>Restore Database - Coming Soon</strong><br>
+                    <span>This feature is temporarily disabled to avoid system errors.</span>
+                </div>
+            `;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('hide');
+                setTimeout(() => {
+                    if (toast.parentNode) toast.remove();
+                }, 260);
+            }, 2600);
         }
     </script>
 </body>

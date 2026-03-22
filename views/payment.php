@@ -9,13 +9,19 @@ if (!isset($_SESSION['userID'])) {
 }
 
 define("TITLE", "Payment");
+require_once(__DIR__ . "/../database/config.php");
 include_once('../layouts/header.php');
-include_once('../database/config.php');
+// System settings loader (safe, with fallbacks)
+require_once(__DIR__ . "/../includes/system_settings.php");
 
 $fname = $lname = $birthdate = $age = $email = $gender = $phone = '';
 $address = $service_id = $subService = $branch = $date = $time = '';
 $request_note = '';
-$price = 500;
+// Dynamic reservation/consultation fee (fallback to previous 500)
+$__settings = getSystemSettings($con);
+$reservationFee = toFloatSetting(getSetting($__settings, 'reservation_fee_amount', 500), 500.0);
+$__gcashEnabled = toBoolSetting(getSetting($__settings, 'gcash_enabled', '1'));
+$__mayaEnabled = toBoolSetting(getSetting($__settings, 'maya_enabled', '1'));
 
 $dentist = 'Dr. Michelle Landero';
 
@@ -624,7 +630,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
             <div class="payment-section">
 
                 <div class="fee-notice">
-                    <p><strong>Consultation Fee:</strong> ₱500.00</p>
+					<!-- Use dynamic reservation/consultation fee from settings -->
+					<p><strong>Consultation Fee:</strong> ₱<?php echo number_format($reservationFee, 2); ?></p>
                     <p>This appointment fee will be deducted from the total payment.</p>
                 </div>
                 <div class="section-header">
@@ -637,14 +644,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                     
                     <div class="payment-method-selector">
                         <select name="paymentMethod" id="paymentMethod" required>
-                            <option value="">Select payment method</option>
-                            <option value="GCash">GCash</option>
-                            <option value="PayMaya">PayMaya</option>
+							<option value="">Select payment method</option>
+							<?php if ($__gcashEnabled): ?>
+								<option value="GCash">GCash</option>
+							<?php endif; ?>
+							<?php if ($__mayaEnabled): ?>
+								<option value="PayMaya">PayMaya</option>
+							<?php endif; ?>
+							<?php if (!$__gcashEnabled && !$__mayaEnabled): ?>
+								<option value="" disabled>No payment methods available</option>
+							<?php endif; ?>
                         </select>
                     </div>
 
                     <!-- GCash Section -->
-                    <div id="gcashDetails" class="payment-details" style="display: none;">
+					<div id="gcashDetails" class="payment-details" style="display: none;<?php echo $__gcashEnabled ? '' : 'pointer-events:none;opacity:0.6;'; ?>">
                         <div class="payment-option">
                             <div class="payment-header">
                                 <div class="payment-logo">
@@ -690,7 +704,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                                         name="gcashAmount" 
                                         id="gcashAmount" 
                                         placeholder="Amount Sent" 
-                                        min="500"
+										min="<?php echo htmlspecialchars((string)$reservationFee, ENT_QUOTES, 'UTF-8'); ?>"
                                         max="9999"
                                         step="0.01"
                                         oninput="if(this.value.length > 4) this.value = this.value.slice(0,4);"
@@ -732,7 +746,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                     </div>
 
                     <!-- PayMaya Section -->
-                    <div id="mayaDetails" class="payment-details" style="display: none;">
+					<div id="mayaDetails" class="payment-details" style="display: none;<?php echo $__mayaEnabled ? '' : 'pointer-events:none;opacity:0.6;'; ?>">
                         <div class="payment-option">
                             <div class="payment-header">
                                 <div class="payment-logo">
@@ -779,7 +793,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                                         name="mayaAmount" 
                                         id="mayaAmount" 
                                         placeholder="Amount Sent" 
-                                        min="500"
+										min="<?php echo htmlspecialchars((string)$reservationFee, ENT_QUOTES, 'UTF-8'); ?>"
                                         max="9999"
                                         step="0.01"
                                         oninput="if(this.value.length > 4) this.value = this.value.slice(0,4);"
@@ -833,6 +847,126 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
 <?php include_once('../layouts/footer.php'); ?>
 
 <script>
+// Dynamic reservation fee (from PHP) for client-side validation; fallback handled server-side
+const RESERVATION_FEE = <?php echo json_encode((float)$reservationFee); ?>;
+const GCASH_ENABLED = <?php echo $__gcashEnabled ? 'true' : 'false'; ?>;
+const MAYA_ENABLED = <?php echo $__mayaEnabled ? 'true' : 'false'; ?>;
+let currentReservationFee = Number(RESERVATION_FEE) || 500;
+
+// Realtime: poll system settings so fee/payment methods reflect without refresh
+(function initRealtimePaymentSettings() {
+	const SETTINGS_URL = '../controllers/getSystemSettings.php';
+	let state = {
+		fee: currentReservationFee,
+		gcash: GCASH_ENABLED,
+		maya: MAYA_ENABLED
+	};
+
+	function setMinAmounts(fee) {
+		const gcashAmount = document.getElementById('gcashAmount');
+		const mayaAmount = document.getElementById('mayaAmount');
+		if (gcashAmount) gcashAmount.min = String(fee);
+		if (mayaAmount) mayaAmount.min = String(fee);
+	}
+
+	function updateFeeDisplay(fee) {
+		// Update the static text in the fee notice if present
+		const feeNotice = document.querySelector('.fee-notice strong');
+		if (feeNotice) {
+			feeNotice.textContent = 'Consultation Fee:';
+			const sibling = feeNotice.parentElement; // <p>
+			if (sibling) {
+				// Replace the whole line with formatted fee
+				sibling.innerHTML = '<strong>Consultation Fee:</strong> ₱' + (Number(fee).toFixed(2));
+			}
+		}
+	}
+
+	function ensurePaymentOptions(gcashEnabled, mayaEnabled) {
+		const select = document.getElementById('paymentMethod');
+		if (!select) return;
+
+		function ensureOption(value, label, enabled) {
+			let opt = Array.from(select.options).find(o => o.value === value);
+			if (enabled) {
+				if (!opt) {
+					opt = document.createElement('option');
+					opt.value = value;
+					opt.text = label;
+					select.appendChild(opt);
+				}
+			} else if (opt) {
+				if (select.value === value) {
+					select.value = '';
+					const evt = new Event('change');
+					select.dispatchEvent(evt);
+				}
+				opt.remove();
+			}
+		}
+
+		ensureOption('GCash', 'GCash', !!gcashEnabled);
+		ensureOption('PayMaya', 'PayMaya', !!mayaEnabled);
+
+		// Also visually disable the detail sections when turned off
+		const gcashDetails = document.getElementById('gcashDetails');
+		const mayaDetails = document.getElementById('mayaDetails');
+		if (gcashDetails) {
+			gcashDetails.style.pointerEvents = gcashEnabled ? '' : 'none';
+			gcashDetails.style.opacity = gcashEnabled ? '' : '0.6';
+			if (!gcashEnabled && gcashDetails.style.display !== 'none') {
+				gcashDetails.style.display = 'none';
+			}
+		}
+		if (mayaDetails) {
+			mayaDetails.style.pointerEvents = mayaEnabled ? '' : 'none';
+			mayaDetails.style.opacity = mayaEnabled ? '' : '0.6';
+			if (!mayaEnabled && mayaDetails.style.display !== 'none') {
+				mayaDetails.style.display = 'none';
+			}
+		}
+	}
+
+	async function poll() {
+		try {
+			const res = await fetch(SETTINGS_URL, { cache: 'no-store' });
+			if (!res.ok) return;
+			const data = await res.json();
+			const typed = data && data.typed ? data.typed : null;
+			if (!typed) return;
+
+			// Fee
+			if (Number.isFinite(typed.reservation_fee_amount) && typed.reservation_fee_amount !== state.fee) {
+				state.fee = typed.reservation_fee_amount;
+				window.RESERVATION_FEE = state.fee;
+				currentReservationFee = Number(state.fee) || 500;
+				updateFeeDisplay(state.fee);
+				setMinAmounts(state.fee);
+			}
+
+			// Methods
+			if (typeof typed.gcash_enabled === 'boolean' && typed.gcash_enabled !== state.gcash ||
+				typeof typed.maya_enabled === 'boolean' && typed.maya_enabled !== state.maya) {
+				state.gcash = !!typed.gcash_enabled;
+				state.maya = !!typed.maya_enabled;
+				window.GCASH_ENABLED = state.gcash;
+				window.MAYA_ENABLED = state.maya;
+				ensurePaymentOptions(state.gcash, state.maya);
+			}
+		} catch (e) {
+			// Silent fail; keep UI stable
+		}
+	}
+
+	// Initialize current UI
+	setMinAmounts(state.fee);
+	updateFeeDisplay(state.fee);
+	ensurePaymentOptions(state.gcash, state.maya);
+
+	// Poll immediately, then every 3 seconds for near-instant updates
+	poll();
+	setInterval(poll, 3000);
+})();
 
 document.getElementById("mayaAmount").addEventListener("input", function() {
     if (this.value > 9999) {
@@ -867,9 +1001,10 @@ document.getElementById("mayaAmount").addEventListener("input", function() {
     input.addEventListener("input", () => {
       const value = parseFloat(input.value);
 
-      if (input.value !== "" && (isNaN(value) || value < 500)) {
-        error.textContent = "Minimum payment amount is ₱500";
-        input.setCustomValidity("Minimum payment amount is ₱500");
+			if (input.value !== "" && (isNaN(value) || value < currentReservationFee)) {
+				const feeLabel = Number(currentReservationFee).toFixed(2);
+				error.textContent = "Minimum payment amount is ₱" + feeLabel;
+				input.setCustomValidity("Minimum payment amount is ₱" + feeLabel);
       } else {
         error.textContent = "";
         input.setCustomValidity("");
@@ -905,10 +1040,10 @@ paymentMethodSelect.addEventListener('change', function () {
     document.getElementById('gcashConfirm').checked = false;
     document.getElementById('mayaConfirm').checked = false;
 
-    if (method === 'GCash') {
+	if (method === 'GCash' && GCASH_ENABLED) {
         document.getElementById('gcashDetails').style.display = 'block';
         toggleFields(gcashFields, true);
-    } else if (method === 'PayMaya') {
+	} else if (method === 'PayMaya' && MAYA_ENABLED) {
         document.getElementById('mayaDetails').style.display = 'block';
         toggleFields(mayaFields, true);
     }

@@ -2,7 +2,28 @@
 session_start();
 require_once(__DIR__ . "/../database/config.php");
 
+function isAjaxRequest() {
+    return (
+        (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') ||
+        (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false)
+    );
+}
+
+function respond($success, $message, $statusCode = 200, $errors = []) {
+    if (isAjaxRequest()) {
+        http_response_code($statusCode);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => (bool)$success,
+            'message' => (string)$message,
+            'errors' => $errors
+        ]);
+        exit();
+    }
+}
+
 if (!isset($_SESSION['userID']) || !isset($_SESSION['role']) || strtolower($_SESSION['role']) !== 'super-admin') {
+    respond(false, 'Unauthorized', 401);
     header("Location: ../views/login.php");
     exit();
 }
@@ -114,11 +135,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($success) {
         $_SESSION['settings_success'] = 'Settings updated successfully!';
+        respond(true, 'Settings updated successfully!');
     } else {
         $_SESSION['settings_error'] = 'Some settings could not be updated: ' . implode(', ', $errors);
+        respond(false, $_SESSION['settings_error'], 400, $errors);
     }
 } else {
     $_SESSION['settings_error'] = 'Invalid request method';
+    respond(false, 'Invalid request method', 405);
 }
 
 header("Location: ../views/settings.php");

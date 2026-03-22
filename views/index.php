@@ -1,6 +1,9 @@
 <?php
 session_start();
 require_once(__DIR__ . "/../database/config.php");
+// System settings loader (safe, with fallbacks)
+require_once(__DIR__ . "/../includes/system_settings.php");
+require_once(__DIR__ . "/../includes/site_content.php");
 include_once('chat.php');
 
 $isLoggedIn = isset($_SESSION['valid'], $_SESSION['userID']) && $_SESSION['valid'] === true;
@@ -9,6 +12,19 @@ $fname = $lname = $email = $phone = $birthdate = $gender = $age = $address = '';
 
 $todayStr = date('Y-m-d');
 $oneMonthLater = date('Y-m-d', strtotime('+1 month'));
+
+// Load dynamic system settings with safe defaults
+$__settings = getSystemSettings($con);
+$__advanceDays = toIntSetting(getSetting($__settings, 'advance_booking_limit', 30), 30);
+$__slotDuration = toIntSetting(getSetting($__settings, 'appointment_slot_duration', 60), 60);
+$__maxPerDay = toIntSetting(getSetting($__settings, 'max_appointments_per_day', 0), 0);
+$__walkInsEnabled = toBoolSetting(getSetting($__settings, 'walk_ins_enabled', '1'));
+$__maintenanceMode = toBoolSetting(getSetting($__settings, 'maintenance_mode', '0'));
+
+// Respect existing variables; only provide/override where used to avoid breaking flows
+// Preferred date boundaries (fallback to previous behavior if settings are absent)
+$today = $todayStr; // used later in min attribute
+$oneMonthLater = date('Y-m-d', strtotime('+' . (int)$__advanceDays . ' days'));
 
 if ($isLoggedIn) {
     $user_id = $_SESSION['userID'];
@@ -62,29 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
     }
 }
 
-// ✅ Load website content from database
-// Create site_content table if it doesn't exist
-$createTableQuery = "CREATE TABLE IF NOT EXISTS site_content (
-    content_id INT AUTO_INCREMENT PRIMARY KEY,
-    content_key VARCHAR(100) UNIQUE NOT NULL,
-    content_value TEXT,
-    content_type VARCHAR(50) DEFAULT 'text',
-    section VARCHAR(50) DEFAULT 'general',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
-
-mysqli_query($con, $createTableQuery);
-
-// Get all content from database
-$contentQuery = "SELECT content_key, content_value FROM site_content";
-$contentResult = mysqli_query($con, $contentQuery);
-$siteContent = [];
-
-while ($row = mysqli_fetch_assoc($contentResult)) {
-    // Remove any escaped slashes that might have been stored incorrectly
-    $siteContent[$row['content_key']] = stripslashes($row['content_value']);
-}
+// ✅ Load website content from database via helper
+$siteContent = getSiteContent($con);
 
 // Default values if not in database
 $defaults = [
@@ -92,6 +87,7 @@ $defaults = [
     'hero_subtitle' => 'Professional dental care in a comfortable and friendly environment',
     'services_title' => 'Our Services',
     'services_subtitle' => 'Comprehensive dental care for the whole family',
+    'announcement_text' => '',
     'contact_title' => 'Contact Us',
     'contact_subtitle' => 'Send us a message about appointments, services, or any other concerns about us.',
     'contact_help_title' => 'We\'re here to help',
@@ -491,6 +487,12 @@ foreach ($defaults as $key => $defaultValue) {
     </style>
 </head>
 <body>
+	<?php if ($__maintenanceMode): ?>
+		<!-- Initial maintenance notice; JS will keep this in sync in real-time -->
+		<div data-maintenance-banner="1" style="background:#FEF3C7;color:#92400E;padding:10px 16px;text-align:center;border-bottom:1px solid #FDE68A;font-size:14px;">
+			System maintenance is ongoing. Booking and payments unavailable.
+		</div>
+	<?php endif; ?>
     <!-- Header -->
 <header>
     <div class="container">
@@ -524,8 +526,8 @@ foreach ($defaults as $key => $defaultValue) {
     <section class="hero" id="home">
         <div class="container">
             <div class="hero-content">
-                <h1><?php echo htmlspecialchars($siteContent['hero_title']); ?></h1>
-                <p><?php echo htmlspecialchars($siteContent['hero_subtitle']); ?></p>
+                <h1 data-content-key="hero_title"><?php echo htmlspecialchars($siteContent['hero_title']); ?></h1>
+                <p data-content-key="hero_subtitle"><?php echo htmlspecialchars($siteContent['hero_subtitle']); ?></p>
                 <div class="btn-container">
                     <a href="#services" class="btn btn-primary">Book an Appointment</a>
                     <a href="learnmore.php" class="btn btn-outline">Learn More</a>
@@ -534,12 +536,25 @@ foreach ($defaults as $key => $defaultValue) {
         </div>
     </section>
 
+    <?php $announcement = trim((string)$siteContent['announcement_text']); ?>
+    <?php if ($announcement !== ''): ?>
+    <!-- Inline Announcement directly below hero -->
+    <section id="site-announcement-section" style="background:#FEF3C7;border-top:1px solid #FDE68A;border-bottom:1px solid #FDE68A;">
+        <div class="container" style="padding-top:14px;padding-bottom:14px;">
+            <div id="siteAnnouncement" style="display:flex;gap:10px;align-items:flex-start;color:#92400E;">
+                <i class="fas fa-bullhorn" style="margin-top:2px;"></i>
+                <div data-content-key="announcement_text"><?php echo htmlspecialchars($announcement); ?></div>
+            </div>
+        </div>
+    </section>
+    <?php endif; ?>
+
     <!-- Services Section -->
     <section class="services" id="services">
         <div class="container">
             <div class="section-title">
-                <h2><?php echo htmlspecialchars($siteContent['services_title']); ?></h2>
-                <p><?php echo htmlspecialchars($siteContent['services_subtitle']); ?></p>
+                <h2 data-content-key="services_title"><?php echo htmlspecialchars($siteContent['services_title']); ?></h2>
+                <p data-content-key="services_subtitle"><?php echo htmlspecialchars($siteContent['services_subtitle']); ?></p>
             </div>
             
             <div class="services-grid">
@@ -595,8 +610,8 @@ foreach ($defaults as $key => $defaultValue) {
     <section class="location-section" id="location">
         <div class="container">
             <div class="section-title">
-                <h2><?php echo htmlspecialchars($siteContent['location_title']); ?></h2>
-                <p><?php echo htmlspecialchars($siteContent['location_subtitle']); ?></p>
+                <h2 data-content-key="location_title"><?php echo htmlspecialchars($siteContent['location_title']); ?></h2>
+                <p data-content-key="location_subtitle"><?php echo htmlspecialchars($siteContent['location_subtitle']); ?></p>
             </div>
             <div class="location-grid">
                 <div class="map-wrapper">
@@ -608,10 +623,10 @@ foreach ($defaults as $key => $defaultValue) {
                 <div class="location-details">
                     <h3>Main Address</h3>
                     <ul>
-                        <li><i class="fas fa-map-marker-alt"></i><span><strong>Comembo Branch: </strong><?php echo htmlspecialchars($siteContent['location_comembo']); ?></span></li>
-                        <li><i class="fas fa-map-marker-alt"></i><span><strong>Taytay Branch: </strong><?php echo htmlspecialchars($siteContent['location_taytay']); ?></span></li>
-                        <li><i class="fas fa-phone"></i><span><?php echo htmlspecialchars($siteContent['contact_phone']); ?></span></li>
-                        <li><i class="fas fa-envelope"></i><span><?php echo htmlspecialchars($siteContent['contact_email']); ?></span></li>
+                        <li><i class="fas fa-map-marker-alt"></i><span><strong>Comembo Branch: </strong><span data-content-key="location_comembo"><?php echo htmlspecialchars($siteContent['location_comembo']); ?></span></span></li>
+                        <li><i class="fas fa-map-marker-alt"></i><span><strong>Taytay Branch: </strong><span data-content-key="location_taytay"><?php echo htmlspecialchars($siteContent['location_taytay']); ?></span></span></li>
+                        <li><i class="fas fa-phone"></i><span data-content-key="contact_phone"><?php echo htmlspecialchars($siteContent['contact_phone']); ?></span></li>
+                        <li><i class="fas fa-envelope"></i><span data-content-key="contact_email"><?php echo htmlspecialchars($siteContent['contact_email']); ?></span></li>
                     </ul>
                     <p style="margin-top: 20px;">Need detailed directions? Visit our full <a href="location.php" style="color:var(--primary-color); text-decoration: underline;">location page</a>.</p>
                 </div>
@@ -623,17 +638,17 @@ foreach ($defaults as $key => $defaultValue) {
     <section class="contact-section" id="contact-form">
         <div class="container">
             <div class="section-title">
-                <h2><?php echo htmlspecialchars($siteContent['contact_title']); ?></h2>
-                <p><?php echo htmlspecialchars($siteContent['contact_subtitle']); ?></p>
+                <h2 data-content-key="contact_title"><?php echo htmlspecialchars($siteContent['contact_title']); ?></h2>
+                <p data-content-key="contact_subtitle"><?php echo htmlspecialchars($siteContent['contact_subtitle']); ?></p>
             </div>
             <div class="contact-grid">
                 <div class="contact-info-card">
-                    <h3><?php echo htmlspecialchars($siteContent['contact_help_title']); ?></h3>
-                    <p><?php echo htmlspecialchars($siteContent['contact_help_text']); ?></p>
+                    <h3 data-content-key="contact_help_title"><?php echo htmlspecialchars($siteContent['contact_help_title']); ?></h3>
+                    <p data-content-key="contact_help_text"><?php echo htmlspecialchars($siteContent['contact_help_text']); ?></p>
                     <ul style="list-style:none; padding:0; margin:20px 0 0;">
-                        <li style="margin-bottom:12px;"><i class="fas fa-clock" style="color:var(--primary-color); margin-right:10px;"></i><?php echo htmlspecialchars($siteContent['contact_hours']); ?></li>
-                        <li style="margin-bottom:12px;"><i class="fas fa-phone" style="color:var(--primary-color); margin-right:10px;"></i><?php echo htmlspecialchars($siteContent['contact_phone']); ?></li>
-                        <li><i class="fas fa-envelope" style="color:var(--primary-color); margin-right:10px;"></i><?php echo htmlspecialchars($siteContent['contact_email']); ?></li>
+                        <li style="margin-bottom:12px;"><i class="fas fa-clock" style="color:var(--primary-color); margin-right:10px;"></i><span data-content-key="contact_hours"><?php echo htmlspecialchars($siteContent['contact_hours']); ?></span></li>
+                        <li style="margin-bottom:12px;"><i class="fas fa-phone" style="color:var(--primary-color); margin-right:10px;"></i><span data-content-key="contact_phone"><?php echo htmlspecialchars($siteContent['contact_phone']); ?></span></li>
+                        <li><i class="fas fa-envelope" style="color:var(--primary-color); margin-right:10px;"></i><span data-content-key="contact_email"><?php echo htmlspecialchars($siteContent['contact_email']); ?></span></li>
                     </ul>
                 </div>
                 <div class="contact-form-card">
@@ -663,8 +678,8 @@ foreach ($defaults as $key => $defaultValue) {
     <section class="testimonials" id="dentists">
         <div class="container">
             <div class="section-title">
-                <h2><?php echo htmlspecialchars($siteContent['dentist_title']); ?></h2>
-                <p><?php echo htmlspecialchars($siteContent['dentist_subtitle']); ?></p>
+                <h2 data-content-key="dentist_title"><?php echo htmlspecialchars($siteContent['dentist_title']); ?></h2>
+                <p data-content-key="dentist_subtitle"><?php echo htmlspecialchars($siteContent['dentist_subtitle']); ?></p>
             </div>
             
             <div class="dentist-grid">
@@ -673,9 +688,9 @@ foreach ($defaults as $key => $defaultValue) {
                         <img src="../assets/images/dentisticon.png" alt="<?php echo htmlspecialchars($siteContent['dentist_name']); ?>">
                     </div>
                     <div class="dentist-info">
-                        <h4><?php echo htmlspecialchars($siteContent['dentist_name']); ?></h4>
-                        <p class="specialty"><?php echo htmlspecialchars($siteContent['dentist_specialty']); ?></p>
-                        <p class="experience"><?php echo htmlspecialchars($siteContent['dentist_experience']); ?></p>
+                        <h4 data-content-key="dentist_name"><?php echo htmlspecialchars($siteContent['dentist_name']); ?></h4>
+                        <p class="specialty" data-content-key="dentist_specialty"><?php echo htmlspecialchars($siteContent['dentist_specialty']); ?></p>
+                        <p class="experience" data-content-key="dentist_experience"><?php echo htmlspecialchars($siteContent['dentist_experience']); ?></p>
                     </div>
                 </div>
             </div>
@@ -732,19 +747,19 @@ foreach ($defaults as $key => $defaultValue) {
                     <ul class="contact-info">
                         <li>
                             <i class="fas fa-map-marker-alt"></i>
-                            <span><?php echo htmlspecialchars($siteContent['location_comembo']); ?></span>
+                            <span data-content-key="location_comembo"><?php echo htmlspecialchars($siteContent['location_comembo']); ?></span>
                         </li>
                         <li>
                             <i class="fas fa-phone"></i>
-                            <span><?php echo htmlspecialchars($siteContent['contact_phone']); ?></span>
+                            <span data-content-key="contact_phone"><?php echo htmlspecialchars($siteContent['contact_phone']); ?></span>
                         </li>
                         <li>
                             <i class="fas fa-envelope"></i>
-                            <span><?php echo htmlspecialchars($siteContent['contact_email']); ?></span>
+                            <span data-content-key="contact_email"><?php echo htmlspecialchars($siteContent['contact_email']); ?></span>
                         </li>
                         <li>
                             <i class="fas fa-clock"></i>
-                            <span><?php echo htmlspecialchars($siteContent['contact_hours']); ?></span>
+                            <span data-content-key="contact_hours"><?php echo htmlspecialchars($siteContent['contact_hours']); ?></span>
                         </li>
                     </ul>
                 </div>
@@ -806,10 +821,12 @@ foreach ($defaults as $key => $defaultValue) {
 
                     <div class="form-group">
                         <label for="popup_payment_method">Payment Method</label>
-                        <select id="popup_payment_method" name="payment_mode" required>
-                            <option value="digital" selected>Digital Payment</option>
-                            <option value="walkin">Walk-In Payment</option>
-                        </select>
+						<select id="popup_payment_method" name="payment_mode" required>
+							<option value="digital" selected>Digital Payment</option>
+							<?php if ($__walkInsEnabled): ?>
+								<option value="walkin">Walk-In Payment</option>
+							<?php endif; ?>
+						</select>
                     </div>
                 </div>
 
@@ -870,6 +887,276 @@ foreach ($defaults as $key => $defaultValue) {
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>                    
    <script>
+	// Expose select system settings to client (read-only; keeps current behaviors intact)
+	window.appSettings = {
+		appointmentSlotDurationMinutes: <?php echo (int)$__slotDuration; ?>,
+		maxAppointmentsPerDay: <?php echo (int)$__maxPerDay; ?>,
+		walkInsEnabled: <?php echo $__walkInsEnabled ? 'true' : 'false'; ?>,
+		maintenanceMode: <?php echo $__maintenanceMode ? 'true' : 'false'; ?>
+	};
+
+	// Real-time settings polling (non-intrusive, safe fallbacks)
+	(function initRealtimeSettings() {
+		const SETTINGS_URL = '../controllers/getSystemSettings.php';
+		const MAINTENANCE_TEXT = 'System maintenance is ongoing. Booking and payments unavailable.';
+		let lastState = {
+			maintenance_mode: <?php echo $__maintenanceMode ? 'true' : 'false'; ?>,
+			walk_ins_enabled: <?php echo $__walkInsEnabled ? 'true' : 'false'; ?>,
+			advance_booking_limit: <?php echo (int)$__advanceDays; ?>,
+			appointment_slot_duration: <?php echo (int)$__slotDuration; ?>,
+			max_appointments_per_day: <?php echo (int)$__maxPerDay; ?>
+		};
+
+		function ensureMaintenanceBanner(isOn) {
+			const existing = document.querySelector('[data-maintenance-banner="1"]');
+			if (isOn) {
+				if (!existing) {
+					const div = document.createElement('div');
+					div.setAttribute('data-maintenance-banner', '1');
+					div.style.background = '#FEF3C7';
+					div.style.color = '#92400E';
+					div.style.padding = '10px 16px';
+					div.style.textAlign = 'center';
+					div.style.borderBottom = '1px solid #FDE68A';
+					div.style.fontSize = '14px';
+					div.textContent = MAINTENANCE_TEXT;
+					document.body.insertBefore(div, document.body.firstChild);
+				}
+				if (existing && existing.textContent !== MAINTENANCE_TEXT) {
+					existing.textContent = MAINTENANCE_TEXT;
+				}
+			} else if (existing) {
+				existing.remove();
+			}
+		}
+
+		function ensureWalkInOption(enabled) {
+			const select = document.getElementById('popup_payment_method');
+			if (!select) return;
+
+			const opt = Array.from(select.options).find(o => o.value === 'walkin');
+			if (enabled) {
+				if (!opt) {
+					const newOpt = document.createElement('option');
+					newOpt.value = 'walkin';
+					newOpt.text = 'Walk-In Payment';
+					select.appendChild(newOpt);
+				}
+			} else {
+				if (opt) {
+					// If currently selected, switch to digital to avoid breaking submission
+					if (select.value === 'walkin') {
+						select.value = 'digital';
+						const evt = new Event('change');
+						select.dispatchEvent(evt);
+					}
+					opt.remove();
+				}
+			}
+		}
+
+		function updateDateMax(advanceDays) {
+			const dateInput = document.getElementById('popup_date');
+			if (!dateInput) return;
+			const maxDate = (() => {
+				const d = new Date();
+				d.setDate(d.getDate() + (parseInt(advanceDays, 10) || 30));
+				const yyyy = d.getFullYear();
+				const mm = String(d.getMonth() + 1).padStart(2, '0');
+				const dd = String(d.getDate()).padStart(2, '0');
+				return `${yyyy}-${mm}-${dd}`;
+			})();
+			dateInput.max = maxDate;
+			// Clear invalid selection if exceeds new max
+			if (dateInput.value && dateInput.value > maxDate) {
+				dateInput.value = '';
+			}
+		}
+
+		function applyTyped(typed) {
+			if (!typed) return;
+
+			// Maintenance
+			if (typeof typed.maintenance_mode === 'boolean' && typed.maintenance_mode !== lastState.maintenance_mode) {
+				ensureMaintenanceBanner(typed.maintenance_mode);
+				window.appSettings.maintenanceMode = !!typed.maintenance_mode;
+				lastState.maintenance_mode = typed.maintenance_mode;
+			}
+
+			// Walk-ins
+			if (typeof typed.walk_ins_enabled === 'boolean' && typed.walk_ins_enabled !== lastState.walk_ins_enabled) {
+				ensureWalkInOption(typed.walk_ins_enabled);
+				window.appSettings.walkInsEnabled = !!typed.walk_ins_enabled;
+				lastState.walk_ins_enabled = typed.walk_ins_enabled;
+			}
+
+			// Advance booking limit -> date max
+			if (Number.isFinite(typed.advance_booking_limit) && typed.advance_booking_limit !== lastState.advance_booking_limit) {
+				updateDateMax(typed.advance_booking_limit);
+				lastState.advance_booking_limit = typed.advance_booking_limit;
+			}
+
+			// Slot duration + Max/day — surface to appSettings for any client logic
+			if (Number.isFinite(typed.appointment_slot_duration) && typed.appointment_slot_duration !== lastState.appointment_slot_duration) {
+				window.appSettings.appointmentSlotDurationMinutes = typed.appointment_slot_duration;
+				lastState.appointment_slot_duration = typed.appointment_slot_duration;
+			}
+			if (Number.isFinite(typed.max_appointments_per_day) && typed.max_appointments_per_day !== lastState.max_appointments_per_day) {
+				window.appSettings.maxAppointmentsPerDay = typed.max_appointments_per_day;
+				lastState.max_appointments_per_day = typed.max_appointments_per_day;
+			}
+		}
+
+		async function poll() {
+			try {
+				const res = await fetch(SETTINGS_URL, { cache: 'no-store' });
+				if (!res.ok) return;
+				const data = await res.json();
+				applyTyped(data && data.typed);
+			} catch (e) {
+				// Silent fail; keep UI stable
+			}
+		}
+
+		// Initial application based on current server-side values
+		ensureMaintenanceBanner(lastState.maintenance_mode);
+		ensureWalkInOption(lastState.walk_ins_enabled);
+		updateDateMax(lastState.advance_booking_limit);
+
+		// Poll immediately, then every 3 seconds for near-instant updates
+		poll();
+		setInterval(poll, 3000);
+	})();
+
+	// Maintenance-mode aware helpers
+	function isMaintenanceEnabled() {
+		return !!(window.appSettings && window.appSettings.maintenanceMode);
+	}
+
+	function showMaintenancePopup() {
+		// Reuse closure modal styles for a consistent popup
+		const modalOverlay = document.createElement('div');
+		modalOverlay.className = 'closure-modal-overlay show';
+		modalOverlay.id = 'maintenanceModalOverlay';
+
+		const modalContainer = document.createElement('div');
+		modalContainer.className = 'closure-modal-container';
+
+		const modalContent = document.createElement('div');
+		modalContent.className = 'closure-modal-content';
+		modalContent.innerHTML = `
+			<div class="closure-modal-header" style="background: linear-gradient(135deg, #6b7280 0%, #374151 100%);">
+				<div class="closure-icon">
+					<i class="fas fa-tools"></i>
+				</div>
+				<h2>Maintenance Mode</h2>
+			</div>
+			<div class="closure-modal-body">
+				<div class="closure-reason-info">
+					<i class="fas fa-info-circle"></i>
+					<div>
+						<strong>Booking Temporarily Unavailable</strong>
+						<p>The system is currently under maintenance. Please try booking again later.</p>
+					</div>
+				</div>
+			</div>
+			<div class="closure-modal-footer">
+				<button class="btn-close-modal" onclick="closeMaintenancePopup()">
+					<i class="fas fa-times"></i> Close
+				</button>
+			</div>
+		`;
+
+		modalContainer.appendChild(modalContent);
+		modalOverlay.appendChild(modalContainer);
+		document.body.appendChild(modalOverlay);
+	}
+
+	function closeMaintenancePopup() {
+		const overlay = document.getElementById('maintenanceModalOverlay');
+		if (overlay) {
+			overlay.classList.remove('show');
+			setTimeout(() => overlay.remove(), 250);
+		}
+	}
+
+	// === Real-time site content sync (storage event) ===
+	(function realtimeContentSync(){
+		const ENDPOINT = '../controllers/fetch_site_content.php';
+		function applyContent(map){
+			if (!map) return;
+			document.querySelectorAll('[data-content-key]').forEach(function(node){
+				const key = node.getAttribute('data-content-key');
+				if (!key) return;
+				if (Object.prototype.hasOwnProperty.call(map, key)) {
+					node.textContent = map[key] ?? '';
+				}
+			});
+			// Update alt for dentist image if present
+			const dentistImg = document.querySelector('.dentist-image img');
+			if (dentistImg && map.dentist_name) {
+				dentistImg.alt = map.dentist_name;
+			}
+			// Handle announcement banner create/remove/toggle
+			const text = (map.announcement_text || '').trim();
+			let banner = document.getElementById('siteAnnouncement');
+			if (text !== '') {
+				if (!banner) {
+					// Create inline announcement below hero section
+					const section = document.createElement('section');
+					section.id = 'site-announcement-section';
+					section.style.background = '#FEF3C7';
+					section.style.borderTop = '1px solid #FDE68A';
+					section.style.borderBottom = '1px solid #FDE68A';
+					section.innerHTML = `
+						<div class="container" style="padding-top:14px;padding-bottom:14px;">
+							<div id="siteAnnouncement" style="display:flex;gap:10px;align-items:flex-start;color:#92400E;">
+								<i class="fas fa-bullhorn" style="margin-top:2px;"></i>
+								<div data-content-key="announcement_text"></div>
+							</div>
+						</div>
+					`;
+					// Insert after hero section
+					const heroSection = document.querySelector('.hero');
+					if (heroSection && heroSection.parentNode) {
+						heroSection.parentNode.insertBefore(section, heroSection.nextSibling);
+					} else {
+						document.body.insertBefore(section, document.body.firstChild);
+					}
+					banner = section.querySelector('#siteAnnouncement');
+				}
+				const node = banner.querySelector('[data-content-key="announcement_text"]');
+				if (node) node.textContent = text;
+			} else {
+				// Remove banner if exists and text is empty
+				const section = document.getElementById('site-announcement-section');
+				if (section) section.remove();
+			}
+		}
+		async function fetchAndApply(){
+			try{
+				const res = await fetch(ENDPOINT, { cache: 'no-store' });
+				if (!res.ok) return;
+				const json = await res.json();
+				if (json && json.success) {
+					applyContent(json.data);
+				}
+			}catch(e){
+				// silent
+			}
+		}
+		// Listen for storage event to update instantly across tabs
+		window.addEventListener('storage', function(e){
+			if (e && e.key === 'site_content_updated') {
+				fetchAndApply();
+			}
+		});
+		// Also periodically refresh in case a tab missed the storage event
+		setInterval(fetchAndApply, 5000);
+		// Initial refresh to ensure latest data
+		fetchAndApply();
+	})();
+
     // Mobile menu toggle
     document.querySelector('.menu-toggle').addEventListener('click', function() {
         document.querySelector('.nav-links').classList.toggle('active');
@@ -1043,6 +1330,12 @@ foreach ($defaults as $key => $defaultValue) {
             card.addEventListener("click", function() {
                 console.log("Clicked service button"); // Debug
                 console.log("isLoggedIn:", isLoggedIn);
+
+				// Block booking attempts during maintenance
+				if (isMaintenanceEnabled()) {
+					showMaintenancePopup();
+					return;
+				}
 
                 if (!isLoggedIn) {
                     if (confirm("You need to log in before booking. Do you want to log in now?")) {
@@ -1275,6 +1568,13 @@ foreach ($defaults as $key => $defaultValue) {
     const appointmentForm = document.getElementById('appointmentForm');
     if (appointmentForm) {
         appointmentForm.addEventListener('submit', function(e) {
+			// Block submitting booking during maintenance
+			if (isMaintenanceEnabled()) {
+				e.preventDefault();
+				showMaintenancePopup();
+				return;
+			}
+
             if (!isLoggedIn) {
                 e.preventDefault();
                 if (confirm("You need to log in before booking. Do you want to log in now?")) {

@@ -60,6 +60,7 @@ $topUsersQuery = "
     LEFT JOIN appointments a ON p.patient_id = a.patient_id
     WHERE ua.role != 'super-admin'
     GROUP BY ua.user_id, ua.first_name, ua.last_name, ua.role
+    HAVING COUNT(DISTINCT a.appointment_id) > 0
     ORDER BY appointment_count DESC
     LIMIT 5
 ";
@@ -434,6 +435,24 @@ while ($row = mysqli_fetch_assoc($topUsersResult)) {
             color: #48A6A7;
         }
 
+        .top-user-chart-wrapper {
+            position: relative;
+            width: 100%;
+            height: 290px;
+        }
+
+        .top-user-chart-empty {
+            height: 290px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+            font-size: 14px;
+            border: 1px dashed #e5e7eb;
+            border-radius: 12px;
+            background: #f9fafb;
+        }
+
         .no-data-message {
             grid-column: 1 / -1;
             text-align: center;
@@ -649,27 +668,96 @@ while ($row = mysqli_fetch_assoc($topUsersResult)) {
                 <h2>Top Active Users</h2>
                 <div class="top-user-card">
                     <?php if (count($topUsers) > 0): ?>
-                        <?php foreach ($topUsers as $index => $user): ?>
-                            <div class="top-user-card-item">
-                                <div class="top-user-card-info">
-                                    <div class="top-user-card-name"><?php echo htmlspecialchars($user['first_name'] . ' ' . $user['last_name']); ?></div>
-                                    <div class="top-user-card-role"><?php echo ucfirst($user['role']); ?></div>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <div class="top-user-card-count"><?php echo number_format($user['appointment_count']); ?> Appointments</div>
-                                    
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
+                        <div class="top-user-chart-wrapper">
+                            <canvas id="topActiveUsersChart" aria-label="Top Active Users Appointment Chart"></canvas>
+                        </div>
                     <?php else: ?>
-                        <div style="padding: 20px; text-align: center; color: #9ca3af;">No data available</div>
+                        <div class="top-user-chart-empty">No data available</div>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        const topUsersChartData = <?php echo json_encode($topUsers, JSON_UNESCAPED_UNICODE); ?>;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const topUsersCanvas = document.getElementById('topActiveUsersChart');
+            if (!topUsersCanvas || typeof Chart === 'undefined' || !Array.isArray(topUsersChartData) || topUsersChartData.length === 0) {
+                return;
+            }
+
+            const labels = topUsersChartData.map(function(user) {
+                return [user.first_name, user.last_name].join(' ').trim();
+            });
+            const appointmentCounts = topUsersChartData.map(function(user) {
+                return Number(user.appointment_count) || 0;
+            });
+
+            new Chart(topUsersCanvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Appointments',
+                        data: appointmentCounts,
+                        backgroundColor: 'rgba(72, 166, 167, 0.85)',
+                        borderColor: '#48A6A7',
+                        borderWidth: 1,
+                        borderRadius: 8,
+                        borderSkipped: false,
+                        hoverBackgroundColor: '#2f8f90'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = Number(context.raw) || 0;
+                                    return value + (value === 1 ? ' appointment' : ' appointments');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: '#6b7280',
+                                maxRotation: 0,
+                                autoSkip: false
+                            },
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0,
+                                color: '#6b7280'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Appointments',
+                                color: '#4b5563'
+                            },
+                            grid: {
+                                color: 'rgba(107, 114, 128, 0.16)'
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
         // Simple sidebar toggle copied from admin.php behavior (simplified)
         function toggleSidebar() {
             const sidebar = document.getElementById("sidebar");

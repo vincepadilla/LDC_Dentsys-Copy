@@ -542,6 +542,27 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
                                             ?>
                                         </select>
                                     </div>
+                                    
+                                    <div class="treatment-group form-group">
+                                        <label>Appointment/Consultation Fee (₱) <span class="required">*</span></label>
+                                        <input
+                                            id="add_appointment_fee"
+                                            name="appointment_fee"
+                                            type="number"
+                                            inputmode="numeric"
+                                            min="0"
+                                            max="9999"
+                                            step="1"
+                                            placeholder="Enter amount (min ₱500)"
+                                            required
+                                            disabled
+                                            oninput="
+                                                this.value = this.value.replace(/[^0-9]/g,'').slice(0,4);
+                                                if (this.value !== '' && parseInt(this.value,10) < 0) this.value = '';
+                                            "
+                                        >
+                                        <small class="form-help">Enter appointment fee (set to 0 if none)</small>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2785,7 +2806,8 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
             document.getElementById('add_team_id'),
             document.getElementById('add_branch'),
             document.getElementById('add_appointment_date'),
-            document.getElementById('add_time_slot')
+            document.getElementById('add_time_slot'),
+            document.getElementById('add_appointment_fee')
         ];
 
         fieldsToDisable.forEach(field => {
@@ -2828,7 +2850,8 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
             document.getElementById('add_team_id'),
             document.getElementById('add_branch'),
             document.getElementById('add_appointment_date'),
-            document.getElementById('add_time_slot')
+            document.getElementById('add_time_slot'),
+            document.getElementById('add_appointment_fee')
         ];
 
         fields.forEach(field => {
@@ -2970,6 +2993,8 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
         const serviceId = document.getElementById('add_service_id')?.value || '';
         const teamId = document.getElementById('add_team_id')?.value || '';
         const branch = document.getElementById('add_branch')?.value || '';
+        const feeInput = document.getElementById('add_appointment_fee');
+        const appointmentFee = feeInput ? feeInput.value.trim() : '';
 
         if (!patientId) {
             showNotification('error', 'Validation Error', 'Please select a patient ID first.');
@@ -2978,6 +3003,20 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
         }
         if (!serviceId || !teamId || !branch || !appointmentDate || !selectedTime) {
             showNotification('error', 'Validation Error', 'Please complete all required fields.');
+            return;
+        }
+        // Validate fee
+        if (!appointmentFee) {
+            showNotification('error', 'Validation Error', 'Please enter the appointment/consultation fee.');
+            if (feeInput) feeInput.focus();
+            return;
+        }
+        const feeNum = parseInt(appointmentFee, 10);
+        const isNoFee = feeNum === 0;
+        const isValidPaidFee = feeNum >= 500 && feeNum <= 9999;
+        if (Number.isNaN(feeNum) || (!isNoFee && !isValidPaidFee)) {
+            showNotification('error', 'Validation Error', 'Fee must be 0 (if none) or between ₱500 and ₱9,999.');
+            if (feeInput) feeInput.focus();
             return;
         }
 

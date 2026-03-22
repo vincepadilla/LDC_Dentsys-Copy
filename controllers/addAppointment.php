@@ -25,10 +25,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $appointment_date = trim($_POST['appointment_date'] ?? '');
     $time_slot = trim($_POST['time_slot'] ?? '');
     $branch = trim($_POST['branch'] ?? '');
+    $appointment_fee_raw = trim($_POST['appointment_fee'] ?? '0');
+    $appointment_fee = is_numeric($appointment_fee_raw) ? (float)$appointment_fee_raw : -1;
 
     // Validate required fields
     if (empty($patient_id) || empty($service_id) || empty($team_id) || empty($appointment_date) || empty($time_slot) || empty($branch)) {
         echo json_encode(['success' => false, 'message' => 'All fields are required.']);
+        exit();
+    }
+    // Fee rule for admin walk-ins: allow 0 for no-fee, otherwise minimum 500, maximum 9999.
+    if ($appointment_fee < 0 || $appointment_fee > 9999 || ($appointment_fee > 0 && $appointment_fee < 500)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid appointment fee. Use 0 (if none) or between 500 and 9,999.']);
         exit();
     }
 
@@ -95,18 +102,103 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
         return 'A001';
     }
+    function generatePaymentID($con) {
+        $query = "SELECT payment_id FROM payment ORDER BY payment_id DESC LIMIT 1";
+        $result = mysqli_query($con, $query);
+        if ($result && mysqli_num_rows($result) > 0) {
+            $row = mysqli_fetch_assoc($result);
+            $lastID = $row['payment_id'];
+            $number = intval(substr($lastID, 2));
+            $newNumber = $number + 1;
+            return 'PY' . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
+        }
+        return 'PY001';
+    }
 
     $appointment_id = generateAppointmentID($con);
 
-    // Insert appointment
-    $insert = $con->prepare("
-        INSERT INTO appointments 
-        (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())
-    ");
-    $insert->bind_param("ssssssss", $appointment_id, $patient_id, $team_id, $service_id, $branch, $appointment_date, $appointment_time, $time_slot);
+    $con->begin_transaction();
+    try {
+        // Insert appointment
+        $insert = $con->prepare("
+            INSERT INTO appointments 
+            (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())
+        ");
+        if (!$insert) {
+            throw new \Exception('Failed to prepare appointment insert: ' . $con->error);
+        }
+        $insert->bind_param("ssssssss", $appointment_id, $patient_id, $team_id, $service_id, $branch, $appointment_date, $appointment_time, $time_slot);
+        if (!$insert->execute()) {
+            throw new \Exception('Failed to add appointment: ' . $insert->error);
+        }
+        $insert->close();
 
-    if ($insert->execute()) {
+        // Prevent duplicates: only create walk-in payment if this appointment has no payment yet.
+        $checkPayment = $con->prepare("SELECT payment_id FROM payment WHERE appointment_id = ? LIMIT 1");
+        if (!$checkPayment) {
+            throw new \Exception('Failed to prepare payment check: ' . $con->error);
+        }
+        $checkPayment->bind_param("s", $appointment_id);
+        $checkPayment->execute();
+        $existingPaymentResult = $checkPayment->get_result();
+        $hasPayment = ($existingPaymentResult && $existingPaymentResult->num_rows > 0);
+        $checkPayment->close();
+
+        if (!$hasPayment) {
+            // Fetch patient name to use as account_name in walk-in payment
+            $walkinPatientName = 'N/A';
+            $pstmt = $con->prepare("SELECT first_name, last_name FROM patient_information WHERE patient_id = ? LIMIT 1");
+            if ($pstmt) {
+                $pstmt->bind_param("s", $patient_id);
+                $pstmt->execute();
+                $pRes = $pstmt->get_result();
+                if ($pRes && $pRes->num_rows > 0) {
+                    $prow = $pRes->fetch_assoc();
+                    $walkinPatientName = trim(($prow['first_name'] ?? '') . ' ' . ($prow['last_name'] ?? ''));
+                    if ($walkinPatientName === '') {
+                        $walkinPatientName = 'N/A';
+                    }
+                }
+                $pstmt->close();
+            }
+            $payment_id = generatePaymentID($con);
+            $method = 'N/A';
+            $account_name = $walkinPatientName;
+            $account_number = 'N/A';
+            $reference_no = 'N/A';
+            $proof_image = 'Walk-in';
+            $payment_status = 'paid';
+            $payment_amount = round($appointment_fee, 2);
+
+            $insertPayment = $con->prepare("
+                INSERT INTO payment
+                (payment_id, appointment_id, method, account_name, account_number, amount, reference_no, proof_image, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+            if (!$insertPayment) {
+                throw new \Exception('Failed to prepare payment insert: ' . $con->error);
+            }
+            $insertPayment->bind_param(
+                "sssssdsss",
+                $payment_id,
+                $appointment_id,
+                $method,
+                $account_name,
+                $account_number,
+                $payment_amount,
+                $reference_no,
+                $proof_image,
+                $payment_status
+            );
+            if (!$insertPayment->execute()) {
+                throw new \Exception('Failed to create walk-in transaction: ' . $insertPayment->error);
+            }
+            $insertPayment->close();
+        }
+
+        $con->commit();
+
         // Get patient and service details for email
         $patientQuery = $con->prepare("
             SELECT p.first_name, p.last_name, p.email
@@ -179,13 +271,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 error_log("Email sending failed: " . $mail->ErrorInfo);
             }
         }
-
-        $insert->close();
         echo json_encode(['success' => true, 'message' => 'Appointment added successfully.', 'appointment_id' => $appointment_id]);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Failed to add appointment: ' . $insert->error]);
+    } catch (\Exception $e) {
+        $con->rollback();
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
     }
-    $insert->close();
 } else {
     echo json_encode(['success' => false, 'message' => 'Invalid request method.']);
 }
