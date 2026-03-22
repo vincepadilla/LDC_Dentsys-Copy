@@ -2,7 +2,7 @@
 
 
 // Include database configuration
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 // Include PHPMailer
 use PHPMailer\PHPMailer\PHPMailer;

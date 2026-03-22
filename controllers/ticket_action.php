@@ -1,6 +1,6 @@
 <?php
 // Allow patients to confirm or cancel appointments via email link
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 $action = $_GET['action'] ?? '';
 $appointment_id = $_GET['appointment_id'] ?? '';

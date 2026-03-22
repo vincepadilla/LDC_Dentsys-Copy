@@ -5,7 +5,7 @@ header('Content-Type: application/json; charset=utf-8');
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
-require_once(__DIR__ . '/../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 // Check if admin is logged in
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {

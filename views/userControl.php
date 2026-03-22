@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'super-admin') {
     header("Location: login.php");
@@ -135,16 +135,14 @@ $usersResult = mysqli_query($con, $usersQuery);
         body {
             font-family: 'Poppins', sans-serif;
             background-color: #f3f4f6;
-            height: 100vh;
-            padding: 20px;
             margin: 0;
-            overflow-y: auto;
+            padding: 0;
         }
 
         .content-container {
             width: 100%;
-            margin: 0 auto;
-            max-height: 95vh;
+            margin: 0;
+            max-height: 100vh;
             display: flex;
             flex-direction: column;
         }
@@ -235,54 +233,180 @@ $usersResult = mysqli_query($con, $usersQuery);
             box-shadow: 0 4px 12px rgba(72, 166, 167, 0.3);
         }
 
+        .main-content-wrapper {
+            margin-left: 250px;
+            padding: 30px;
+            min-height: 100vh;
+            background: #f3f4f6;
+            transition: margin-left 0.3s ease;
+            animation: pageFadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes pageFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
         .main-content {
             width: 100%;
             margin: 0;
             padding: 0;
         }
 
-        .main-content {
-            animation: pageFadeIn 0.3s ease-in-out;
-        }
-        @keyframes pageFadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        /* Top Controls Wrapper */
-        .controls-wrapper {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-            margin-bottom: 24px;
-            align-items: stretch;
-        }
-
-        /* Action Buttons Section */
-        .action-buttons-container {
+        /* Sidebar Styles */
+        .sidebar {
+            width: 250px;
+            background-color: var(--secondary-color);
+            color: var(--white);
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            padding: 15px 0 10px 0;
+            transition: all 0.3s ease;
+            position: fixed;
+            height: 100vh;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .sidebar-header {
+            padding: 0 18px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .sidebar-header img {
+            width: 65%;
+            height: auto;
+            max-width: 150px;
+        }
+
+        .sidebar-nav {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .sidebar a {
+            color: var(--white);
+            text-decoration: none;
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            border-left: 3px solid transparent;
+            font-size: 14px;
+            margin: 2px 0;
+        }
+
+        .sidebar a i {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        .sidebar a:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-left-color: var(--accent-color);
+        }
+
+        .sidebar a.active {
+            background-color: rgba(255, 255, 255, 0.15);
+            border-left-color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .sidebar-text {
+            white-space: nowrap;
+        }
+
+        /* Menu Toggle Button */
+        .menu-toggle {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: var(--secondary-color);
+            z-index: 1001;
+            background: var(--white);
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        .menu-toggle:hover {
+            background: #f3f4f6;
+            transform: scale(1.05);
+        }
+
+        .menu-toggle.active {
+            left: 270px;
+        }
+
+        /* Sidebar Overlay for Mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* Top Controls Wrapper - Second Row */
+        .controls-wrapper {
+            display: flex;
             justify-content: space-between;
+            align-items: center;
+            gap: 24px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        /* Action Buttons Section - Horizontal Layout */
+        .action-buttons-container {
+            display: flex;
+            flex-direction: row;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
         }
 
         .action-buttons-container button {
-            width: 100%;
-            padding: 14px 24px;
-            font-size: 15px;
+            padding: 12px 20px;
+            font-size: 14px;
             font-weight: 600;
             white-space: nowrap;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             transition: all 0.2s ease;
             border: none;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
+            flex: 0 1 auto;
         }
 
         .action-buttons-container button:hover {
@@ -290,41 +414,60 @@ $usersResult = mysqli_query($con, $usersQuery);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
-        /* Filter and Search Section */
-        .filter-container {
+        /* Filter Section - Right Aligned */
+        .filter-section {
             display: flex;
-            flex-direction: column;
-            gap: 20px;
-            padding: 20px;
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            width: 100%;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-            box-sizing: border-box;
-            height: 100%;
-            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
         }
 
-        .filter-group {
+        .filter-section label {
+            font-weight: 500;
+            color: #374151;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .filter-section select {
+            padding: 10px 14px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+            background: white;
+            min-width: 150px;
+            cursor: pointer;
+        }
+
+        .filter-section select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(72, 166, 167, 0.1);
+        }
+
+        /* Search Section - Third Row */
+        .search-section {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            width: 100%;
+            margin-bottom: 24px;
         }
 
-        .filter-group label {
+        .search-section label {
             font-weight: 500;
             color: #374151;
-            font-size: 13px;
+            font-size: 14px;
             display: flex;
             align-items: center;
             gap: 6px;
         }
 
-        .filter-group select,
-        .filter-group input {
-            padding: 8px 12px;
+        .search-section input {
+            padding: 12px 16px;
             border: 2px solid #e5e7eb;
             border-radius: 8px;
             font-size: 14px;
@@ -334,12 +477,12 @@ $usersResult = mysqli_query($con, $usersQuery);
             background: white;
         }
 
-        .filter-group select:focus,
-        .filter-group input:focus {
+        .search-section input:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(72, 166, 167, 0.1);
         }
+
 
         /* Table Styles */
         .table-responsive {
@@ -1095,6 +1238,23 @@ $usersResult = mysqli_query($con, $usersQuery);
                 text-align: center;
             }
 
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .sidebar.active {
+                transform: translateX(0);
+            }
+
+            .main-content-wrapper {
+                margin-left: 0;
+                padding: 20px 16px;
+            }
+
+            .menu-toggle {
+                display: flex;
+            }
+
             .content-body {
                 padding: 16px;
             }
@@ -1125,16 +1285,29 @@ $usersResult = mysqli_query($con, $usersQuery);
             }
 
             .controls-wrapper {
-                grid-template-columns: 1fr;
+                flex-direction: column;
+                align-items: stretch;
                 gap: 16px;
             }
 
             .action-buttons-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .action-buttons-container button {
+                width: 100%;
+            }
+
+            .filter-section {
+                flex-direction: column;
+                align-items: stretch;
                 gap: 8px;
             }
 
-            .filter-container {
-                gap: 16px;
+            .filter-section select {
+                width: 100%;
+                min-width: auto;
             }
 
             .data-table {
@@ -1185,9 +1358,44 @@ $usersResult = mysqli_query($con, $usersQuery);
     <!-- Notification Container -->
     <div class="notification-container" id="notificationContainer"></div>
 
-    <div class="content-container">
-        <div class="content-body">
-            <div class="main-content">
+    <!-- Sidebar Overlay (for mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar Toggle (mobile) -->
+    <div class="menu-toggle" onclick="toggleSidebar()">
+        <i class="fas fa-bars"></i>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <img src="../assets/images/landerologo.png" alt="Clinic Logo">
+        </div>
+        <nav class="sidebar-nav">
+            <a href="super_admin_portal.php">
+                <i class="fas fa-tachometer-alt"></i>
+                <span class="sidebar-text">Dashboard</span>
+            </a>
+            <a href="userControl.php" class="active">
+                <i class="fas fa-users-cog"></i>
+                <span class="sidebar-text">User Control</span>
+            </a>
+            <a href="edit_content.php">
+                <i class="fas fa-edit"></i>
+                <span class="sidebar-text">Edit Content</span>
+            </a>
+            <a href="../controllers/logout.php">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                <span class="sidebar-text">Logout</span>
+            </a>
+        </nav>
+    </div>
+
+    <!-- Main Content Wrapper -->
+    <div class="main-content-wrapper">
+        <div class="content-container">
+            <div class="content-body">
+                <div class="main-content">
                 <!-- Compact Page Header -->
                 <div class="page-header">
                     <div class="page-header-content">
@@ -1204,38 +1412,37 @@ $usersResult = mysqli_query($con, $usersQuery);
                     </a>
                 </div>
         
-                <!-- Top Controls -->
+                <!-- Second Row: Action Buttons + Filter -->
                 <div class="controls-wrapper">
-                    <!-- Action Buttons -->
+                    <!-- Action Buttons - Left -->
                     <div class="action-buttons-container">
                         <button class="btn-success" onclick="openAddUserModal()">
                             <i class="fas fa-user-plus"></i> Add New User
                         </button>
                         <button class="promo-btn" onclick="openPromotionalEmailModal()">
-                            <i class="fas fa-paper-plane"></i> Send Promotional Campaign
+                            <i class="fas fa-paper-plane"></i> Send Campaign
                         </button>
                         <button class="btn-info" onclick="exportUsersList()">
-                            <i class="fas fa-download"></i> Export Users List
+                            <i class="fas fa-download"></i> Export List
                         </button>
                     </div>
             
-                    <!-- Filter and Search -->
-                    <div class="filter-container">
-                        <div class="filter-group">
-                            <label for="filter-user-status"><i class="fas fa-filter"></i> Filter by Status:</label>
-                            <select id="filter-user-status" onchange="filterUsers()">
-                                <option value="">All Users</option>
-                                <option value="active">Active</option>
-                                <option value="blocked">Blocked</option>
-                                <option value="has_appointments">Has Appointments</option>
-                            </select>
-                        </div>
-                        
-                        <div class="filter-group">
-                            <label for="search-users"><i class="fas fa-search"></i> Search Users:</label>
-                            <input type="text" id="search-users" placeholder="Search by name, email..." onkeyup="filterUsers()">
-                        </div>
+                    <!-- Filter Section - Right -->
+                    <div class="filter-section">
+                        <label for="filter-user-status"><i class="fas fa-filter"></i> Filter by Status:</label>
+                        <select id="filter-user-status" onchange="filterUsers()">
+                            <option value="">All Users</option>
+                            <option value="active">Active</option>
+                            <option value="blocked">Blocked</option>
+                            <option value="has_appointments">Has Appointments</option>
+                        </select>
                     </div>
+                </div>
+
+                <!-- Third Row: Search Section -->
+                <div class="search-section">
+                    <label for="search-users"><i class="fas fa-search"></i> Search Users:</label>
+                    <input type="text" id="search-users" placeholder="Search by name, email..." onkeyup="filterUsers()">
                 </div>
         
                 <!-- Users Table -->
@@ -1245,8 +1452,6 @@ $usersResult = mysqli_query($con, $usersQuery);
                             <tr>
                                 <th>User ID</th>
                                 <th>Name</th>
-                                <th>Email</th>
-                                <th>Phone</th>
                                 <th>Role</th>
                                 <th>Appointments</th>
                                 <th>Last Appointment</th>
@@ -1277,8 +1482,7 @@ $usersResult = mysqli_query($con, $usersQuery);
                             echo "<tr class='{$rowClass}' data-status='{$statusText}' data-search='" . strtolower($user['first_name'] . ' ' . $user['last_name'] . ' ' . $user['email']) . "' data-has-appointments='" . ($hasAppointments ? 'yes' : 'no') . "'>";
                             echo "<td style='color: #64748b; font-weight: 500;'>{$user['user_id']}</td>";
                             echo "<td><strong style='color: #1e293b; font-size: 15px;'>{$user['first_name']} {$user['last_name']}</strong><br><small style='color: #94a3b8; font-size: 13px;'>@{$user['username']}</small></td>";
-                            echo "<td style='color: #475569;'>{$user['email']}</td>";
-                            echo "<td style='color: #475569;'>" . ($user['phone'] ? $user['phone'] : 'N/A') . "</td>";
+                            
                             echo "<td><span class='{$roleBadgeClass}' style='text-transform: capitalize;'>{$roleText}</span></td>";
                             echo "<td><span class='badge'>" . ($user['appointment_count'] > 0 ? $user['appointment_count'] : '0') . "</span></td>";
                             echo "<td style='color: #64748b;'>{$lastAppt}</td>";
@@ -1288,9 +1492,7 @@ $usersResult = mysqli_query($con, $usersQuery);
                             echo "<button class='action-btn btn-warning' onclick='openEditUserModal(\"{$user['user_id']}\", \"" . htmlspecialchars($user['username'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['first_name'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['last_name'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['email'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['phone'] ?? '', ENT_QUOTES) . "\", \"{$user['role']}\")' title='Edit User'>";
                             echo "<i class='fas fa-edit'></i>";
                             echo "</button>";
-                            echo "<button class='action-btn btn-info' style='background: #e0e7ff; color: #4338ca;' onclick='openChangeRoleModal(\"{$user['user_id']}\", \"" . htmlspecialchars($user['first_name'] . ' ' . $user['last_name'], ENT_QUOTES) . "\", \"{$user['role']}\")' title='Change Role'>";
-                            echo "<i class='fas fa-user-tag'></i>";
-                            echo "</button>";
+                            
                             if ($user['account_status'] !== 'blocked' && $user['account_status'] !== 'Blocked') {
                                 echo "<button class='action-btn btn-danger' onclick='blockUser(\"{$user['user_id']}\", \"{$user['first_name']} {$user['last_name']}\")' title='Block User'>";
                                 echo "<i class='fas fa-ban'></i>";
@@ -1375,6 +1577,7 @@ $usersResult = mysqli_query($con, $usersQuery);
                 <?php endif; ?>
             </div>
         </div>
+    </div>
     </div>
 
 <!-- Edit User Modal -->
@@ -2191,6 +2394,56 @@ $usersResult = mysqli_query($con, $usersQuery);
         }
         if (event.target === changeRoleModal) {
             closeChangeRoleModal();
+        }
+    });
+
+    // Sidebar Toggle Function
+    function toggleSidebar() {
+        const sidebar = document.getElementById("sidebar");
+        const menuToggle = document.querySelector(".menu-toggle");
+        const overlay = document.getElementById("sidebarOverlay");
+
+        sidebar.classList.toggle("active");
+        menuToggle.classList.toggle("active");
+
+        if (window.innerWidth <= 768) {
+            if (overlay) {
+                overlay.classList.toggle("active");
+            }
+        }
+    }
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        const sidebar = document.getElementById("sidebar");
+        const menuToggle = document.querySelector(".menu-toggle");
+        const overlay = document.getElementById("sidebarOverlay");
+
+        if (!sidebar || !menuToggle) return;
+
+        const isClickInsideSidebar = sidebar.contains(event.target);
+        const isClickOnToggle = menuToggle.contains(event.target);
+
+        if (window.innerWidth <= 768 && sidebar.classList.contains('active') && !isClickInsideSidebar && !isClickOnToggle) {
+            sidebar.classList.remove('active');
+            menuToggle.classList.remove('active');
+            if (overlay) {
+                overlay.classList.remove('active');
+            }
+        }
+    });
+
+    // Adjust main content margin on window resize
+    window.addEventListener('resize', function() {
+        const sidebar = document.getElementById("sidebar");
+        const mainContentWrapper = document.querySelector(".main-content-wrapper");
+        
+        if (window.innerWidth > 768) {
+            if (sidebar && !sidebar.classList.contains('active')) {
+                mainContentWrapper.style.marginLeft = '250px';
+            }
+        } else {
+            mainContentWrapper.style.marginLeft = '0';
         }
     });
 

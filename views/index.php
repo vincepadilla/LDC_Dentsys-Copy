@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 include_once('chat.php');
 
 $isLoggedIn = isset($_SESSION['valid'], $_SESSION['userID']) && $_SESSION['valid'] === true;

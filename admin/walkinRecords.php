@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     header("Location: ../views/login.php");
@@ -19,6 +19,8 @@ $walkinSql = "SELECT w.walkin_id, w.patient_id, w.service, w.sub_service, w.dent
               LEFT JOIN patient_information p ON w.patient_id = p.patient_id
               ORDER BY w.walkin_id DESC";
 $walkinResult = mysqli_query($con, $walkinSql);
+$totalRecords = $walkinResult ? mysqli_num_rows($walkinResult) : 0;
+$lastUpdated = date('M d, Y h:i A');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -36,6 +38,78 @@ $walkinResult = mysqli_query($con, $walkinSql);
     <link rel="stylesheet" href="walkinrecordsDesign.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
+        :root {
+            --bg-page: #f3f4f6;
+            --bg-surface: #ffffff;
+            --border-soft: #e5e7eb;
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --accent: #2563eb;
+            --accent-soft: #eff6ff;
+        }
+
+        body {
+            font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--bg-page);
+            color: var(--text-main);
+        }
+
+        .main-content {
+            padding: 24px 16px 32px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            color: #4b5563;
+            text-decoration: none;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .back-button i {
+            font-size: 12px;
+        }
+
+        .back-button:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+            color: #111827;
+            box-shadow: 0 1px 3px rgba(15,23,42,0.12);
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin: 12px 0 20px;
+        }
+
+        .page-title-group h2 {
+            margin: 0 0 4px;
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--text-main);
+        }
+
+        .page-title-group p {
+            margin: 0;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
         /* Notification System Styles */
         .notification-container {
             position: fixed;
@@ -175,49 +249,62 @@ $walkinResult = mysqli_query($con, $walkinSql);
             color: #374151;
         }
 
-        /* Table Styles */
+        /* Table & Layout Styles */
         .table-responsive {
             overflow-x: auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            margin-top: 20px;
+            background: var(--bg-surface);
+            border-radius: 14px;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+            margin-top: 16px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-        }
-
-        thead {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            border: none;
         }
 
         thead th {
-            padding: 15px;
+            padding: 12px 16px;
             text-align: left;
-            font-weight: 600;
-            font-size: 14px;
+            font-weight: 500;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.08em;
+            color: #ffffff;
+            background: linear-gradient(135deg, #48A6A7 0%, #2a9d8f 100%);
+            border-bottom: none;
+            border: none;
+            white-space: nowrap;
         }
 
         tbody tr {
-            border-bottom: 1px solid #E5E7EB;
+            border-bottom: none;
             transition: background-color 0.2s;
         }
 
+        /* Zebra striping: odd = light gray, even = white */
+        tbody tr:nth-child(odd) {
+            background-color: #f3f4f6;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #ffffff;
+        }
+
         tbody tr:hover {
-            background-color: #F9FAFB;
+            background-color: #e5e7eb;
         }
 
         tbody td {
-            padding: 15px;
+            padding: 12px 16px;
             color: #1F2937;
             font-size: 14px;
+            border: none;
         }
 
+        /* Status pill */
         .status {
             padding: 6px 12px;
             border-radius: 20px;
@@ -237,41 +324,82 @@ $walkinResult = mysqli_query($con, $walkinSql);
             color: #065F46;
         }
 
+        /* Action buttons - compact icon buttons */
         .action-buttons {
             display: flex;
             gap: 8px;
             align-items: center;
         }
 
-        .btn-complete {
-            background: #10B981;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.2s;
-            display: flex;
+        .btn-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            display: inline-flex;
             align-items: center;
-            gap: 6px;
+            justify-content: center;
+            color: #4b5563;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
         }
 
-        .btn-complete:hover {
-            background: #059669;
+        .btn-icon:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+            color: #111827;
             transform: translateY(-1px);
-            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+            box-shadow: 0 2px 4px rgba(15, 23, 42, 0.12);
         }
 
-        .btn-complete:disabled {
-            background: #9CA3AF;
+        .btn-icon:disabled {
+            opacity: 0.5;
             cursor: not-allowed;
             transform: none;
+            box-shadow: none;
         }
 
-        .btn-complete i {
-            font-size: 12px;
+        .btn-add-appointment.btn-icon {
+            border-color: #bfdbfe;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .btn-add-appointment.btn-icon:hover {
+            background: #dbeafe;
+            border-color: #93c5fd;
+            color: #1d4ed8;
+        }
+
+        .btn-complete.btn-icon {
+            border-color: #a7f3d0;
+            background: #ecfdf5;
+            color: #047857;
+        }
+
+        .btn-complete.btn-icon:hover {
+            background: #d1fae5;
+            border-color: #6ee7b7;
+            color: #047857;
+        }
+
+        .btn-complete.btn-icon:disabled {
+            background: #f3f4f6;
+            border-color: #e5e7eb;
+            color: #9ca3af;
+        }
+
+        .btn-icon-label {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
         }
 
         .patient-link {
@@ -307,11 +435,52 @@ $walkinResult = mysqli_query($con, $walkinSql);
 
         /* Filter Container Styles */
         .filter-container {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
+            background: var(--bg-surface);
+            padding: 16px 18px;
+            border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+            border: 1px solid var(--border-soft);
+            margin-bottom: 16px;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group {
+            flex: 1;
+            min-width: 220px;
+        }
+
+        .filter-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #374151;
+            font-size: 13px;
+        }
+
+        .filter-input,
+        .filter-select {
+            width: 100%;
+            padding: 9px 14px;
+            border-radius: 999px;
+            border: 1px solid #d1d5db;
+            font-size: 14px;
+            background: #f9fafb;
+            font-family: inherit;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+
+        .filter-input:focus,
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+            background: #ffffff;
         }
 
         .filter-group input:focus,
@@ -323,6 +492,10 @@ $walkinResult = mysqli_query($con, $walkinSql);
 
         .filter-group input::placeholder {
             color: #9CA3AF;
+        }
+
+        .filter-select {
+            cursor: pointer;
         }
 
         /* Mobile Card View Styles */
@@ -427,10 +600,11 @@ $walkinResult = mysqli_query($con, $walkinSql);
             border-top: 1px solid #E5E7EB;
         }
 
-        .walkin-card-actions .btn-complete {
-            flex: 1;
-            justify-content: center;
-        }
+            .walkin-card-actions .btn-complete,
+            .walkin-card-actions .btn-add-appointment {
+                flex: 1;
+                justify-content: center;
+            }
 
         /* Responsive Styles */
         @media (max-width: 1024px) {
@@ -448,7 +622,7 @@ $walkinResult = mysqli_query($con, $walkinSql);
                 grid-template-columns: repeat(2, 1fr);
             }
 
-            .filter-container {
+            .filter-row {
                 flex-direction: column;
             }
 
@@ -483,18 +657,17 @@ $walkinResult = mysqli_query($con, $walkinSql);
             }
 
             .filter-container {
-                padding: 15px;
-                flex-direction: column;
+                padding: 14px;
             }
 
             .filter-group {
                 width: 100%;
             }
 
-            .filter-group input,
-            .filter-group select {
+            .filter-input,
+            .filter-select {
                 font-size: 14px;
-                padding: 8px 12px;
+                padding: 9px 14px;
             }
 
             .notification-container {
@@ -509,6 +682,44 @@ $walkinResult = mysqli_query($con, $walkinSql);
             }
         }
 
+        /* Table footer */
+        .table-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            padding: 10px 4px 0;
+            margin-top: 8px;
+        }
+
+        .table-footer-left {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .table-footer-right {
+            text-align: right;
+        }
+
+        .table-footer-label {
+            font-weight: 500;
+            color: #4b5563;
+        }
+
+        @media (max-width: 640px) {
+            .table-footer {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+
+            .table-footer-right {
+                text-align: left;
+            }
+        }
+
         @media (min-width: 1025px) {
             /* Desktop - show table, hide cards */
             .mobile-card-view {
@@ -517,6 +728,257 @@ $walkinResult = mysqli_query($con, $walkinSql);
 
             .table-responsive {
                 display: block !important;
+            }
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.65);
+            z-index: 900;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .modal-panel {
+            background: #fff;
+            width: min(900px, 95%);
+            max-height: 95vh;
+            border-radius: 18px;
+            padding: 35px;
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+            position: relative;
+            overflow-y: auto;
+            overflow-x: hidden;
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: #f3f4f6;
+            color: #374151;
+            font-size: 16px;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+
+        .modal-close:hover {
+            background: #e5e7eb;
+            transform: translateY(-2px);
+        }
+
+        .modal-heading {
+            margin-bottom: 28px;
+        }
+
+        .modal-heading h3 {
+            margin: 8px 0;
+            font-size: 22px;
+            color: #111827;
+        }
+
+        .modal-heading p {
+            margin: 0;
+            color: #4b5563;
+            font-size: 14px;
+        }
+
+        .modal-badge {
+            display: inline-flex;
+            padding: 6px 12px;
+            background: #ecfeff;
+            color: #036466;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .modal-badge.accent {
+            background: #e0f2fe;
+            color: #0f172a;
+        }
+
+        .modal-form .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px 24px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .form-label {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6b7280;
+            margin-bottom: 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .form-label .required {
+            color: #EF4444;
+            font-weight: 700;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 11px 14px;
+            border-radius: 10px;
+            border: 1px solid #d1d5db;
+            font-size: 15px;
+            background: #f8fafc;
+            transition: border 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+            font-family: inherit;
+        }
+
+        .form-control:focus {
+            border-color: #48a6a7;
+            box-shadow: 0 0 0 2px rgba(72, 166, 167, 0.15);
+            outline: none;
+            background: #fff;
+        }
+
+        .form-control::placeholder {
+            color: #9ca3af;
+            opacity: 1;
+        }
+
+        select.form-control {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            padding-right: 40px;
+        }
+
+        .form-control.is-valid {
+            border-color: #10B981;
+            background: #f0fdf4;
+        }
+
+        .form-control.is-invalid {
+            border-color: #EF4444;
+            background: #fef2f2;
+        }
+
+        .modal-actions {
+            margin-top: 28px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .btn-wide {
+            flex: 0 1 auto;
+            min-width: 180px;
+        }
+
+        .btn-success {
+            background: #10B981;
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-link {
+            border: 2px solid #6b7280;
+            background: #f3f4f6;
+            color: #374151;
+            font-weight: 600;
+            padding: 12px 28px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 15px;
+            min-width: 120px;
+        }
+
+        .btn-link:hover {
+            background: #e5e7eb;
+            border-color: #4b5563;
+            color: #111827;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .modal-panel {
+                width: calc(100% - 20px);
+                padding: 20px;
+                max-height: 90vh;
+            }
+
+            .modal-form .form-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .form-group.full-width {
+                grid-column: 1;
+            }
+
+            .modal-actions {
+                flex-direction: column-reverse;
+                gap: 10px;
+            }
+
+            .btn-wide,
+            .btn-link {
+                width: 100%;
+                min-width: auto;
             }
         }
     </style>
@@ -529,35 +991,43 @@ $walkinResult = mysqli_query($con, $walkinSql);
 <div class="main-content">
     <div class="container">
         <a href="../views/admin.php" class="back-button" onclick="navigateBack(event)">
-            <i class="fas fa-arrow-left"></i> Back to Admin
+            <i class="fas fa-arrow-left"></i>
+            <span>Back to Admin</span>
         </a>
-        <h2><i class="fas fa-clipboard-list"></i> WALK-IN RECORDS</h2>
-        <p style="color: #6b7280; margin-bottom: 30px;">Manage walk-in patient appointments and mark them as completed.</p>
+
+        <div class="page-header">
+            <div class="page-title-group">
+                <h2>Walk-In Records</h2>
+                <p>Manage walk-in patient appointments and mark them as completed.</p>
+            </div>
+        </div>
         
         <!-- Filter Container -->
-        <div class="filter-container" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-end;">
-            <div class="filter-group" style="flex: 1; min-width: 200px;">
-                <label for="search-walkin" style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151; font-size: 14px;">
-                    <i class="fas fa-search"></i> Search
-                </label>
+        <div class="filter-container">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label for="search-walkin" class="filter-label">
+                        <i class="fas fa-search"></i> Search
+                    </label>
                 <input type="text" 
                        id="search-walkin" 
                        placeholder="Search by Walk-in ID or Patient Name..." 
                        onkeyup="filterWalkinRecords()"
-                       style="width: 100%; padding: 10px 15px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; transition: border-color 0.3s; font-family: 'Poppins', sans-serif;">
-            </div>
-            
-            <div class="filter-group" style="flex: 1; min-width: 200px;">
-                <label for="filter-branch" style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151; font-size: 14px;">
-                    <i class="fas fa-building"></i> Branch
-                </label>
-                <select id="filter-branch" 
-                        onchange="filterWalkinRecords()"
-                        style="width: 100%; padding: 10px 15px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; background: white; cursor: pointer; transition: border-color 0.3s; font-family: 'Poppins', sans-serif;">
-                    <option value="">All Branches</option>
-                    <option value="Comembo Branch">Comembo Branch</option>
-                    <option value="Taytay Rizal Branch">Taytay Rizal Branch</option>
-                </select>
+                       class="filter-input">
+                </div>
+                
+                <div class="filter-group">
+                    <label for="filter-branch" class="filter-label">
+                        <i class="fas fa-building"></i> Branch
+                    </label>
+                    <select id="filter-branch" 
+                            onchange="filterWalkinRecords()"
+                            class="filter-select">
+                        <option value="">All Branches</option>
+                        <option value="Comembo Branch">Comembo Branch</option>
+                        <option value="Taytay Rizal Branch">Taytay Rizal Branch</option>
+                    </select>
+                </div>
             </div>
         </div>
         
@@ -607,11 +1077,19 @@ $walkinResult = mysqli_query($con, $walkinSql);
                             </td>
                             <td>
                                 <div class="action-buttons">
-                                    <button class="btn-complete" 
+                                    <button class="btn-add-appointment btn-icon" 
+                                            onclick="openAddAppointmentModal('<?php echo htmlspecialchars($row['walkin_id']); ?>', '<?php echo htmlspecialchars($row['patient_id']); ?>', '<?php echo htmlspecialchars($patientName ?: 'N/A'); ?>', '<?php echo htmlspecialchars($row['sub_service'] ?: $row['service']); ?>', '<?php echo htmlspecialchars($row['dentist_name']); ?>', '<?php echo htmlspecialchars($row['branch']); ?>')"
+                                            title="Add to Appointment">
+                                        <i class="fas fa-calendar-plus"></i>
+                                        <span class="btn-icon-label">Add to Appointment</span>
+                                    </button>
+                                    <button class="btn-complete btn-icon" 
                                             onclick="markAsCompleted('<?php echo htmlspecialchars($row['walkin_id']); ?>', this)"
                                             <?php echo $isCompleted ? 'disabled' : ''; ?>>
                                         <i class="fas fa-check-circle"></i>
-                                        <?php echo $isCompleted ? 'Completed' : 'Mark as Completed'; ?>
+                                        <span class="btn-icon-label">
+                                            <?php echo $isCompleted ? 'Completed' : 'Mark as Completed'; ?>
+                                        </span>
                                     </button>
                                 </div>
                             </td>
@@ -629,6 +1107,19 @@ $walkinResult = mysqli_query($con, $walkinSql);
                     <?php } ?>
                 </tbody>
             </table>
+        </div>
+        <div class="table-footer">
+            <div class="table-footer-left">
+                <span class="table-footer-label">Showing</span>
+                <span id="records-visible-count"><?php echo (int)$totalRecords; ?></span>
+                <span>of</span>
+                <span id="records-total-count"><?php echo (int)$totalRecords; ?></span>
+                <span>records</span>
+            </div>
+            <div class="table-footer-right">
+                <span class="table-footer-label">Last updated:</span>
+                <span id="records-last-updated"><?php echo htmlspecialchars($lastUpdated); ?></span>
+            </div>
         </div>
 
         <!-- Mobile Card View -->
@@ -694,11 +1185,19 @@ $walkinResult = mysqli_query($con, $walkinSql);
                         </div>
                     </div>
                     <div class="walkin-card-actions">
-                        <button class="btn-complete" 
+                        <button class="btn-add-appointment btn-icon" 
+                                onclick="openAddAppointmentModal('<?php echo htmlspecialchars($row['walkin_id']); ?>', '<?php echo htmlspecialchars($row['patient_id']); ?>', '<?php echo htmlspecialchars($patientName ?: 'N/A'); ?>', '<?php echo htmlspecialchars($row['sub_service'] ?: $row['service']); ?>', '<?php echo htmlspecialchars($row['dentist_name']); ?>', '<?php echo htmlspecialchars($row['branch']); ?>')"
+                                title="Add to Appointment">
+                            <i class="fas fa-calendar-plus"></i>
+                            <span class="btn-icon-label">Add to Appointment</span>
+                        </button>
+                        <button class="btn-complete btn-icon" 
                                 onclick="markAsCompleted('<?php echo htmlspecialchars($row['walkin_id']); ?>', this)"
                                 <?php echo $isCompleted ? 'disabled' : ''; ?>>
                             <i class="fas fa-check-circle"></i>
-                            <?php echo $isCompleted ? 'Completed' : 'Mark as Completed'; ?>
+                            <span class="btn-icon-label">
+                                <?php echo $isCompleted ? 'Completed' : 'Mark as Completed'; ?>
+                            </span>
                         </button>
                     </div>
                 </div>
@@ -712,6 +1211,78 @@ $walkinResult = mysqli_query($con, $walkinSql);
                 </div>
             <?php } ?>
         </div>
+    </div>
+</div>
+
+<!-- Add to Appointment Modal -->
+<div id="addAppointmentModal" class="modal-overlay" style="display: none;">
+    <div class="modal-panel">
+        <button class="modal-close" onclick="closeAddAppointmentModal()" aria-label="Close add appointment dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge">New Appointment</span>
+            <h3>Add walk-in to appointment schedule</h3>
+            <p>Convert this walk-in record into a scheduled appointment.</p>
+        </div>
+        <form id="addAppointmentForm" class="modal-form" onsubmit="handleAddAppointmentSubmit(event)">
+            <input type="hidden" id="appointment_walkin_id" name="walkin_id">
+            <input type="hidden" id="appointment_patient_id" name="patient_id">
+            <input type="hidden" id="appointment_dentist_name" name="dentist_name">
+            <input type="hidden" id="appointment_service_name" name="service_name">
+            <input type="hidden" id="appointment_branch_hidden" name="branch">
+            
+            <div class="form-grid">
+                <div class="form-group full-width">
+                    <label class="form-label" for="appointment_patient_name">Patient Name</label>
+                    <input type="text" id="appointment_patient_name" class="form-control" readonly style="background: #f3f4f6; cursor: not-allowed;">
+                </div>
+
+                <div class="form-group full-width">
+                    <label class="form-label" for="appointment_service">Service</label>
+                    <input type="text" id="appointment_service" class="form-control" readonly style="background: #f3f4f6; cursor: not-allowed;">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="appointment_dentist">Dentist</label>
+                    <input type="text" id="appointment_dentist" class="form-control" readonly style="background: #f3f4f6; cursor: not-allowed;">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="appointment_branch">Branch</label>
+                    <input type="text" id="appointment_branch" class="form-control" readonly style="background: #f3f4f6; cursor: not-allowed;">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="appointment_date">Appointment Date <span class="required">*</span></label>
+                    <input type="date" id="appointment_date" name="appointment_date" class="form-control" required min="<?php echo date('Y-m-d'); ?>">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="appointment_time_slot">Time Slot <span class="required">*</span></label>
+                    <select id="appointment_time_slot" name="time_slot" class="form-control" required>
+                        <option value="" disabled selected>Select time slot</option>
+                        <option value="firstBatch">Morning (8:00AM-9:00AM)</option>
+                        <option value="secondBatch">Morning (9:00AM-10:00AM)</option>
+                        <option value="thirdBatch">Morning (10:00AM-11:00AM)</option>
+                        <option value="fourthBatch">Afternoon (11:00AM-12:00PM)</option>
+                        <option value="fifthBatch">Afternoon (1:00PM-2:00PM)</option>
+                        <option value="sixthBatch">Afternoon (2:00PM-3:00PM)</option>
+                        <option value="sevenBatch">Afternoon (3:00PM-4:00PM)</option>
+                        <option value="eightBatch">Afternoon (4:00PM-5:00PM)</option>
+                        <option value="nineBatch">Afternoon (5:00PM-6:00PM)</option>
+                        <option value="tenBatch">Evening (6:00PM-7:00PM)</option>
+                        <option value="lastBatch">Evening (7:00PM-8:00PM)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-success btn-wide">
+                    <i class="fas fa-calendar-check"></i> Add Appointment
+                </button>
+                <button type="button" onclick="closeAddAppointmentModal()" class="btn btn-link">Cancel</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -966,6 +1537,8 @@ $walkinResult = mysqli_query($con, $walkinSql);
         // Get all rows (both table and cards)
         const tableRows = document.querySelectorAll('#walkin-table tbody .walkin-row');
         const cardRows = document.querySelectorAll('.mobile-card-view .walkin-card');
+        const visibleCountEl = document.getElementById('records-visible-count');
+        const totalCountEl = document.getElementById('records-total-count');
         
         let visibleCount = 0;
         
@@ -1056,6 +1629,100 @@ $walkinResult = mysqli_query($con, $walkinSql);
         }
     }
     
+    // Add to Appointment Modal Functions
+    function openAddAppointmentModal(walkinId, patientId, patientName, serviceName, dentistName, branch) {
+        const modal = document.getElementById('addAppointmentModal');
+        if (!modal) {
+            showNotification('error', 'Error', 'Modal not found. Please refresh the page.');
+            return;
+        }
+        
+        // Set form values
+        document.getElementById('appointment_walkin_id').value = walkinId;
+        document.getElementById('appointment_patient_id').value = patientId;
+        document.getElementById('appointment_patient_name').value = patientName;
+        document.getElementById('appointment_service').value = serviceName;
+        document.getElementById('appointment_service_name').value = serviceName;
+        document.getElementById('appointment_dentist').value = dentistName;
+        document.getElementById('appointment_dentist_name').value = dentistName;
+        document.getElementById('appointment_branch').value = branch;
+        const branchHidden = document.getElementById('appointment_branch_hidden');
+        if (branchHidden) {
+            branchHidden.value = branch;
+        }
+        
+        // Reset date and time slot
+        document.getElementById('appointment_date').value = '';
+        document.getElementById('appointment_time_slot').value = '';
+        
+        // Set minimum date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('appointment_date').setAttribute('min', today);
+        
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function closeAddAppointmentModal() {
+        const modal = document.getElementById('addAppointmentModal');
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+            const form = document.getElementById('addAppointmentForm');
+            if (form) {
+                form.reset();
+                // Clear validation states
+                form.querySelectorAll('.form-control').forEach(input => {
+                    input.classList.remove('is-invalid', 'is-valid');
+                });
+            }
+        }
+    }
+    
+    function handleAddAppointmentSubmit(event) {
+        event.preventDefault();
+        
+        const form = event.target;
+        const formData = new FormData(form);
+        
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+        
+        fetch('../controllers/addAppointmentFromWalkin.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok: ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success === true) {
+                showNotification('success', 'Appointment Added', data.message || 'Walk-in record has been successfully added to appointment schedule.');
+                closeAddAppointmentModal();
+                setTimeout(() => {
+                    // Optionally reload the page to show updated data
+                    // location.reload();
+                }, 2000);
+            } else {
+                const errorMsg = data.message || 'Failed to add appointment. Please try again.';
+                showNotification('error', 'Error', errorMsg);
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
+        })
+        .catch(error => {
+            console.error('Fetch error:', error);
+            showNotification('error', 'Error', 'An error occurred while adding appointment: ' + error.message);
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        });
+    }
+
     // Event listeners for modal
     document.addEventListener('DOMContentLoaded', function() {
         const completeModal = document.getElementById('complete-walkin-modal');
@@ -1074,6 +1741,24 @@ $walkinResult = mysqli_query($con, $walkinSql);
             window.addEventListener('click', function(event) {
                 if (event.target === completeModal) {
                     closeCompleteWalkinModal();
+                }
+            });
+        }
+
+        // Initialize footer counts on load
+        const initialVisibleCountEl = document.getElementById('records-visible-count');
+        const totalCountEl = document.getElementById('records-total-count');
+        if (initialVisibleCountEl && totalCountEl) {
+            // On initial load, visible count equals total records
+            initialVisibleCountEl.textContent = totalCountEl.textContent;
+        }
+        
+        // Add to Appointment Modal event listeners
+        const addAppointmentModal = document.getElementById('addAppointmentModal');
+        if (addAppointmentModal) {
+            window.addEventListener('click', function(event) {
+                if (event.target === addAppointmentModal) {
+                    closeAddAppointmentModal();
                 }
             });
         }

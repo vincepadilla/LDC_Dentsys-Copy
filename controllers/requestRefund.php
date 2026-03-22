@@ -7,7 +7,7 @@ require '../libraries/PhpMailer/src/PHPMailer.php';
 require '../libraries/PhpMailer/src/SMTP.php';
 
 session_start();
-require_once __DIR__ . '/../database/config.php';
+require_once(__DIR__ . "/../database/config.php");
 
 // Detect AJAX request
 $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&

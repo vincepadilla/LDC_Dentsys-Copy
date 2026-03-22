@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 // Function to generate new prefixed ID
 function generateID($prefix, $table, $column, $con) {
@@ -624,11 +624,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Use prepared statement for better security and reliability
             $insertPaymentStmt = $con->prepare("INSERT INTO payment 
                 (payment_id, appointment_id, method, account_name, account_number, amount, reference_no, proof_image, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')");
             
             if ($insertPaymentStmt) {
                 $emptyStr = '';
-                $insertPaymentStmt->bind_param("sssssdsss", 
+                $insertPaymentStmt->bind_param("sssssdss", 
                     $payment_id, 
                     $appointment_id, 
                     $paymentMethod, 
@@ -636,8 +636,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $emptyStr, 
                     $paymentAmount, 
                     $emptyStr, 
-                    $emptyStr, 
-                    $paymentStatus
+                    $emptyStr
                 );
                 
                 if ($insertPaymentStmt->execute()) {
@@ -745,10 +744,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Use prepared statement for better security and reliability
             $insertPaymentStmt = $con->prepare("INSERT INTO payment 
                 (payment_id, appointment_id, method, account_name, account_number, amount, reference_no, proof_image, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')");
             
             if ($insertPaymentStmt) {
-                $insertPaymentStmt->bind_param("sssssdsss", 
+                $insertPaymentStmt->bind_param("sssssdss", 
                     $payment_id, 
                     $appointment_id, 
                     $paymentMethod, 
@@ -756,8 +755,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $paymentNumber, 
                     $paymentAmount, 
                     $paymentRefNum, 
-                    $proofImagePath, 
-                    $paymentStatus
+                    $proofImagePath
                 );
                 
                 if ($insertPaymentStmt->execute()) {

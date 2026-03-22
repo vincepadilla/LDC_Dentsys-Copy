@@ -1,5 +1,5 @@
 <?php
-include '../database/config.php'; 
+require_once(__DIR__ . "/../database/config.php");
 
 header('Content-Type: application/json'); // Return data in JSON format
 

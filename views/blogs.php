@@ -1,5 +1,5 @@
 <?php
-include('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 require_once('../config/api_key_helper.php');
 define("TITLE", "Blogs");
 include_once('../layouts/header.php');

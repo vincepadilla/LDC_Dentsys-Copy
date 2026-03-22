@@ -9,7 +9,7 @@ if (!isset($_SESSION['userID'])) {
 }
 
 define("TITLE", "Payment");
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 // Include PHPMailer for email functionality
 use PHPMailer\PHPMailer\PHPMailer;

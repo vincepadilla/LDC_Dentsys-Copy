@@ -7,7 +7,7 @@ require '../libraries/PhpMailer/src/PHPMailer.php';
 require '../libraries/PhpMailer/src/SMTP.php';
 
 session_start();
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 // Check if admin is logged in
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin' || empty($_SESSION['admin_verified'])) {

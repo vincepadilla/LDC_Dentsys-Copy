@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     header("Location: login.php");
@@ -32,6 +32,7 @@ $dentistResult = mysqli_query($con, $dentistSql);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="../assets/css/adminstyle.css">
     <link rel="stylesheet" href="staffsDesign.css">
+    <link rel="stylesheet" href="serviceDesign.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         /* Notification System Styles */
@@ -97,6 +98,79 @@ $dentistResult = mysqli_query($con, $dentistSql);
                 opacity: 0;
             }
         }
+
+        /* Staffs table styling (match Patients palette/layout) */
+        #staffs-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            table-layout: auto;
+        }
+        #staffs-table thead th {
+            background: linear-gradient(135deg, #48A6A7, #2a9d8f);
+            color: #fff;
+            border: none !important;
+            border-bottom: none !important;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 800;
+            font-size: 0.85em;
+            padding: 14px 12px;
+        }
+        #staffs-table th,
+        #staffs-table td {
+            border: none !important;
+            border-bottom: none !important;
+        }
+        #staffs-table tbody td {
+            padding: 10px 12px;
+            font-size: 0.90em;
+            font-weight: 600;
+        }
+        #staffs-table tbody tr:nth-child(odd) {
+            background-color: #fff;
+        }
+        #staffs-table tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        #staffs-table tbody tr:hover {
+            background-color: rgba(233, 196, 106, 0.14);
+        }
+        /* Column alignment */
+        #staffs-table .staffs-id-cell,
+        #staffs-table .staffs-actions-cell,
+        #staffs-table .staffs-id-col,
+        #staffs-table .staffs-actions-col {
+            text-align: center;
+            white-space: nowrap;
+        }
+        /* Action buttons compact like patients */
+        #staffs-table .action-btns {
+            justify-content: center;
+        }
+        #staffs-table .action-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: none;
+        }
+        #staffs-table .action-btn i {
+            font-size: 14px;
+        }
+        #staffs-table .action-btn:hover {
+            filter: brightness(1.08);
+        }
+        @media (max-width: 900px) {
+            #staffs-table thead th,
+            #staffs-table tbody td {
+                padding: 10px 10px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -147,14 +221,14 @@ $dentistResult = mysqli_query($con, $dentistSql);
             <table id="staffs-table">
                 <thead>
                     <tr>
-                        <th>Team ID</th>
+                        <th class="staffs-id-col">Team ID</th>
                         <th>First Name</th>
                         <th>Last Name</th>
                         <th>Specialization</th>
                         <th>Email</th>
                         <th>Phone</th>
                         <th>Status</th>
-                        <th>Actions</th>
+                        <th class="staffs-actions-col">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -168,7 +242,7 @@ $dentistResult = mysqli_query($con, $dentistSql);
                         <tr class="staff-row" 
                             data-status="<?php echo htmlspecialchars(strtolower($row['status'])); ?>"
                             data-search="<?php echo htmlspecialchars($searchText); ?>">
-                            <td><?php echo htmlspecialchars($row['team_id']); ?></td>
+                            <td class="staffs-id-cell"><?php echo htmlspecialchars($row['team_id']); ?></td>
                             <td><?php echo htmlspecialchars($row['first_name']); ?></td>
                             <td><?php echo htmlspecialchars($row['last_name']); ?></td>
                             <td><?php echo htmlspecialchars($row['specialization']); ?></td>
@@ -179,7 +253,7 @@ $dentistResult = mysqli_query($con, $dentistSql);
                                     <?php echo htmlspecialchars($row['status']); ?>
                                 </span>
                             </td>
-                            <td>
+                            <td class="staffs-actions-cell">
                                 <div class="action-btns">
                                     <button class="action-btn btn-primary" title="Edit" onclick="editDentist('<?php echo $row['team_id']; ?>')">
                                         <i class="fas fa-edit"></i>
@@ -280,128 +354,122 @@ $dentistResult = mysqli_query($con, $dentistSql);
 </div>
 
 <!-- Add Staff Modal -->
-<div id="addDentistModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <h3><i class="fa-solid fa-user-doctor"></i> ADD DENTIST/STAFF</h3>
-        <form action="../controllers/addStaff.php" method="POST" id="addStaffForm">
-            <!-- User ID Section -->
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="userid">User ID:</label>
-                    <select name="userid" id="userid" required>
-                        <option value="">Select User ID</option>
+<div id="addDentistModal" class="modal-overlay" style="display: none;">
+    <div class="modal-panel">
+        <button class="modal-close" onclick="closeDentistModal()" aria-label="Close add staff dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge">New Staff</span>
+            <h3>Add a dentist or staff member</h3>
+            <p>Register a new team member with their specialization and contact details.</p>
+        </div>
+        <form action="../controllers/addStaff.php" method="POST" class="modal-form" id="addStaffForm">
+            <div class="form-grid">
+                <div class="form-group full-width">
+                    <label class="form-label" for="userid">User ID <span class="required">*</span></label>
+                    <select name="userid" id="userid" required class="form-control">
+                        <option value="" disabled selected>Select User ID</option>
                         <!-- Admin users will be populated here by JavaScript -->
                     </select>
                 </div>
-            </div>
 
-            <!-- Name Section -->
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="addFirstName">First Name:</label>
-                    <input type="text" name="first_name" id="addFirstName" required readonly>
+                <div class="form-group">
+                    <label class="form-label" for="addFirstName">First Name <span class="required">*</span></label>
+                    <input type="text" name="first_name" id="addFirstName" required readonly class="form-control" placeholder="Auto-filled from user selection">
                 </div>
-                <div style="flex: 1;">
-                    <label for="addLastName">Last Name:</label>
-                    <input type="text" name="last_name" id="addLastName" required readonly>
-                </div>
-            </div>
 
-            <!-- Specialization & Email Section -->
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="addSpecialization">Specialization:</label>
-                    <input type="text" name="specialization" id="addSpecialization" required>
+                <div class="form-group">
+                    <label class="form-label" for="addLastName">Last Name <span class="required">*</span></label>
+                    <input type="text" name="last_name" id="addLastName" required readonly class="form-control" placeholder="Auto-filled from user selection">
                 </div>
-                <div style="flex: 1;">
-                    <label for="addEmail">Email:</label>
-                    <input type="email" name="email" id="addEmail" required readonly>
-                </div>
-            </div>
 
-            <!-- Phone & Status Section -->
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="addPhone">Phone:</label>
-                    <input type="text" name="phone" id="addPhone" required readonly>
+                <div class="form-group">
+                    <label class="form-label" for="addSpecialization">Specialization <span class="required">*</span></label>
+                    <input type="text" name="specialization" id="addSpecialization" required class="form-control" placeholder="e.g., General Dentistry, Orthodontics">
                 </div>
-                <div style="flex: 1;">
-                    <label for="addStatus">Status:</label>
-                    <select name="status" id="addStatus" required>
+
+                <div class="form-group">
+                    <label class="form-label" for="addStatus">Status <span class="required">*</span></label>
+                    <select name="status" id="addStatus" required class="form-control">
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
                     </select>
                 </div>
-            </div>
 
-            <!-- Buttons -->
-            <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-save"></i> Add Staff
+                <div class="form-group">
+                    <label class="form-label" for="addEmail">Email <span class="required">*</span></label>
+                    <input type="email" name="email" id="addEmail" required readonly class="form-control" placeholder="Auto-filled from user selection">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="addPhone">Phone <span class="required">*</span></label>
+                    <input type="text" name="phone" id="addPhone" required readonly class="form-control" placeholder="Auto-filled from user selection">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-success btn-wide">
+                    <i class="fas fa-plus-circle"></i> Add Staff
                 </button>
-                <button type="button" onclick="closeDentistModal()" class="modal-close-btn">
-                    <i class="fas fa-times"></i> Close
-                </button>
+                <button type="button" onclick="closeDentistModal()" class="btn btn-link">Cancel</button>
             </div>
         </form>
     </div>
 </div>
 
 <!-- Edit Dentist Modal -->
-<div id="editDentistModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <h3><i class="fa-solid fa-user-doctor"></i> EDIT DENTIST/STAFF</h3>
-        <form id="editDentistForm" method="POST" action="../controllers/updateStaff.php">
+<div id="editDentistModal" class="modal-overlay" style="display:none;">
+    <div class="modal-panel">
+        <button class="modal-close" onclick="closeEditDentistModal()" aria-label="Close edit staff dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge accent">Edit staff</span>
+            <h3>Update staff member details</h3>
+            <p>Modify specialization, contact information, or status without losing context.</p>
+        </div>
+        <form id="editDentistForm" method="POST" action="../controllers/updateStaff.php" class="modal-form">
             <input type="hidden" name="team_id" id="editDentistId">
             <input type="hidden" name="user_id" id="editDentistUserId">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label" for="editDentistFirstName">First Name <span class="required">*</span></label>
+                    <input type="text" name="first_name" id="editDentistFirstName" required class="form-control" placeholder="Enter first name">
+                </div>
 
-            <!-- Name Section -->
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="editDentistFirstName">First Name:</label>
-                    <input type="text" name="first_name" id="editDentistFirstName" required>
+                <div class="form-group">
+                    <label class="form-label" for="editDentistLastName">Last Name <span class="required">*</span></label>
+                    <input type="text" name="last_name" id="editDentistLastName" required class="form-control" placeholder="Enter last name">
                 </div>
-                <div style="flex: 1;">
-                    <label for="editDentistLastName">Last Name:</label>
-                    <input type="text" name="last_name" id="editDentistLastName" required>
-                </div>
-            </div>
 
-            <!-- Specialization & Status Section -->
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="editDentistSpecialization">Specialization:</label>
-                    <input type="text" name="specialization" id="editDentistSpecialization" required>
+                <div class="form-group">
+                    <label class="form-label" for="editDentistSpecialization">Specialization <span class="required">*</span></label>
+                    <input type="text" name="specialization" id="editDentistSpecialization" required class="form-control" placeholder="e.g., General Dentistry, Orthodontics">
                 </div>
-                <div style="flex: 1;">
-                    <label for="editDentistStatus">Status:</label>
-                    <select name="status" id="editDentistStatus" required>
+
+                <div class="form-group">
+                    <label class="form-label" for="editDentistStatus">Status <span class="required">*</span></label>
+                    <select name="status" id="editDentistStatus" required class="form-control">
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
                     </select>
                 </div>
-            </div>
 
-            <!-- Email & Phone Section -->
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="editDentistEmail">Email:</label>
-                    <input type="email" name="email" id="editDentistEmail" required>
+                <div class="form-group">
+                    <label class="form-label" for="editDentistEmail">Email <span class="required">*</span></label>
+                    <input type="email" name="email" id="editDentistEmail" required class="form-control" placeholder="Enter email address">
                 </div>
-                <div style="flex: 1;">
-                    <label for="editDentistPhone">Phone:</label>
-                    <input type="text" name="phone" id="editDentistPhone" required>
+
+                <div class="form-group">
+                    <label class="form-label" for="editDentistPhone">Phone <span class="required">*</span></label>
+                    <input type="text" name="phone" id="editDentistPhone" required class="form-control" placeholder="Enter phone number">
                 </div>
             </div>
-
-            <!-- Buttons -->
-            <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-save"></i> Update Details
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-success btn-wide">
+                    <i class="fas fa-pencil-alt"></i> Update Staff
                 </button>
-                <button type="button" onclick="closeEditDentistModal()" class="modal-close-btn">
-                    <i class="fas fa-times"></i> Close
-                </button>
+                <button type="button" onclick="closeEditDentistModal()" class="btn btn-link">Cancel</button>
             </div>
         </form>
     </div>
@@ -615,6 +683,11 @@ $dentistResult = mysqli_query($con, $dentistSql);
         openDentistBtn.addEventListener('click', function() {
             dentistModal.style.display = 'flex';
             populateAdminUsers(); // Populate when modal opens
+            // Focus on first input for better UX
+            setTimeout(() => {
+                const firstInput = dentistModal.querySelector('#userid');
+                if (firstInput) firstInput.focus();
+            }, 100);
         });
     }
 
@@ -624,6 +697,15 @@ $dentistResult = mysqli_query($con, $dentistSql);
         }
         
         // Reset form when closing
+        const addForm = document.getElementById('addStaffForm');
+        if (addForm) {
+            addForm.reset();
+            // Clear any validation states
+            addForm.querySelectorAll('.form-control').forEach(input => {
+                input.classList.remove('is-invalid', 'is-valid');
+            });
+        }
+        
         const userSelect = document.getElementById('userid');
         if (userSelect) userSelect.selectedIndex = 0;
         
@@ -652,11 +734,47 @@ $dentistResult = mysqli_query($con, $dentistSql);
         }
         
         // Close modal when clicking outside
-        if (dentistModal) {
-            dentistModal.addEventListener('click', function(event) {
-                if (event.target === dentistModal) {
-                    closeDentistModal();
-                }
+        window.addEventListener('click', function(event) {
+            if (event.target === dentistModal) {
+                closeDentistModal();
+            }
+            const editDentistModal = document.getElementById('editDentistModal');
+            if (editDentistModal && event.target === editDentistModal) {
+                closeEditDentistModal();
+            }
+        });
+
+        // Add form validation feedback for Add Staff Form
+        const addForm = document.getElementById('addStaffForm');
+        if (addForm) {
+            // Real-time validation feedback
+            addForm.querySelectorAll('.form-control').forEach(input => {
+                input.addEventListener('blur', function() {
+                    if (this.hasAttribute('required') && !this.value.trim()) {
+                        this.classList.add('is-invalid');
+                        this.classList.remove('is-valid');
+                    } else if (this.value.trim()) {
+                        this.classList.add('is-valid');
+                        this.classList.remove('is-invalid');
+                    }
+                });
+            });
+        }
+
+        // Add form validation feedback for Edit Staff Form
+        const editForm = document.getElementById('editDentistForm');
+        if (editForm) {
+            // Real-time validation feedback
+            editForm.querySelectorAll('.form-control').forEach(input => {
+                input.addEventListener('blur', function() {
+                    if (this.hasAttribute('required') && !this.value.trim()) {
+                        this.classList.add('is-invalid');
+                        this.classList.remove('is-valid');
+                    } else if (this.value.trim()) {
+                        this.classList.add('is-valid');
+                        this.classList.remove('is-invalid');
+                    }
+                });
             });
         }
     });
@@ -683,7 +801,13 @@ $dentistResult = mysqli_query($con, $dentistSql);
                     document.getElementById('editDentistStatus').value = staff.status || 'active';
                     
                     // Show the modal
-                    document.getElementById('editDentistModal').style.display = 'flex';
+                    const editModal = document.getElementById('editDentistModal');
+                    editModal.style.display = 'flex';
+                    // Focus on first input for better UX
+                    setTimeout(() => {
+                        const firstInput = editModal.querySelector('#editDentistFirstName');
+                        if (firstInput) firstInput.focus();
+                    }, 100);
                 } else {
                     showNotification('error', 'Error Loading Staff', data.message || 'Unknown error occurred.');
                 }
@@ -695,16 +819,19 @@ $dentistResult = mysqli_query($con, $dentistSql);
     }
 
     function closeEditDentistModal() {
-        document.getElementById('editDentistModal').style.display = 'none';
+        const editModal = document.getElementById('editDentistModal');
+        const editForm = document.getElementById('editDentistForm');
+        if (editModal) {
+            editModal.style.display = 'none';
+        }
+        if (editForm) {
+            // Clear any validation states
+            editForm.querySelectorAll('.form-control').forEach(input => {
+                input.classList.remove('is-invalid', 'is-valid');
+            });
+        }
     }
 
-    // Close modal when clicking outside
-    window.addEventListener("click", function(event) {
-        const editModal = document.getElementById("editDentistModal");
-        if (event.target === editModal) {
-            closeEditDentistModal();
-        }
-    });
 
     // Delete Staff function
     function deleteStaff(teamId, staffName) {

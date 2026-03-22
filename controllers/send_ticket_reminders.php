@@ -5,7 +5,7 @@ use PHPMailer\PHPMailer\Exception;
 require '../libraries/PhpMailer/src/Exception.php';
 require '../libraries/PhpMailer/src/PHPMailer.php';
 require '../libraries/PhpMailer/src/SMTP.php';
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 $now = date('Y-m-d H:i:s');
 $windowEnd = date('Y-m-d H:i:s', strtotime('+24 hours'));

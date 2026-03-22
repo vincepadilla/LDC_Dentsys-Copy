@@ -1,5 +1,5 @@
 <?php
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 // Get all blocked slots (for admin display)
 $query = "

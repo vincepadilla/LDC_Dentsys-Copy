@@ -1,5 +1,5 @@
 <?php
-include_once('../database/config.php'); // Make sure to include your database connection
+require_once(__DIR__ . "/../database/config.php"); // Make sure to include your database connection
 
 // Check if the form is submitted
 if ($_SERVER["REQUEST_METHOD"] == "POST") {

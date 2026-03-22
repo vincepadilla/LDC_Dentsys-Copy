@@ -1,6 +1,6 @@
 <?php
 require('../fpdf/fpdf.php');
-include_once("config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if (!isset($_GET['id'])) {
     die("Invalid request.");

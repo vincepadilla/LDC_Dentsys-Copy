@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 // Check if user is logged in (admin)
 if (!isset($_SESSION['valid']) || $_SESSION['valid'] !== true) {

@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     header("Location: login.php");
@@ -45,6 +45,7 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="../assets/css/adminstyle.css">
     <link rel="stylesheet" href="patientsDesign.css">
+    <link rel="stylesheet" href="serviceDesign.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         
@@ -112,6 +113,110 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
                 opacity: 0;
             }
         }
+
+        /* Patients table styling (scoped to this page) */
+        #patients-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            table-layout: auto;
+        }
+
+        #patients-table thead th {
+            background: linear-gradient(135deg, #48A6A7, #2a9d8f);
+            color: #fff;
+            border: none !important;
+            border-bottom: none !important;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 800;
+            font-size: 0.85em;
+            padding: 14px 12px;
+        }
+
+        #patients-table th,
+        #patients-table td {
+            border: none !important; /* Remove visible grid lines */
+            border-bottom: none !important;
+        }
+
+        #patients-table tbody td {
+            padding: 10px 12px; /* Compact rows */
+            font-size: 0.90em;
+            font-weight: 600;
+        }
+
+        #patients-table tbody tr:nth-child(odd) {
+            background-color: #fff;
+        }
+
+        #patients-table tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        #patients-table tbody tr:hover {
+            background-color: rgba(233, 196, 106, 0.14);
+        }
+
+        /* Column alignment */
+        #patients-table .patients-id-cell,
+        #patients-table .patients-actions-cell,
+        #patients-table .patients-id-col,
+        #patients-table .patients-actions-col {
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        #patients-table .patients-desc-cell {
+            max-width: 320px;
+            overflow: hidden;
+        }
+
+        #patients-table .patients-desc {
+            max-width: 320px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.3;
+            text-overflow: ellipsis;
+        }
+
+        /* Action buttons: compact, icon-only look */
+        #patients-table .action-btns {
+            justify-content: center;
+        }
+
+        #patients-table .action-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: none;
+        }
+
+        #patients-table .action-btn i {
+            font-size: 14px;
+        }
+
+        #patients-table .action-btn:hover {
+            filter: brightness(1.08);
+        }
+
+        @media (max-width: 900px) {
+            #patients-table .patients-desc {
+                -webkit-line-clamp: 2;
+            }
+
+            #patients-table thead th,
+            #patients-table tbody td {
+                padding: 10px 10px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -169,14 +274,14 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
             <table id="patients-table">
                 <thead>
                     <tr>
-                        <th>Patient ID</th>
+                        <th class="patients-id-col">Patient ID</th>
                         <th>Name</th>
                         <th>Birthdate</th>
                         <th>Gender</th>
                         <th>Email</th>
                         <th>Phone</th>
-                        <th>Address</th>
-                        <th>Actions</th>
+                        <th class="patients-address-col">Address</th>
+                        <th class="patients-actions-col">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -205,18 +310,23 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
                             $searchText = strtolower($row['patient_id'] . ' ' . $fullName . ' ' . $row['email']);
                     ?>
                         <tr class="patient-row" 
+                            data-patient-id="<?php echo htmlspecialchars($row['patient_id']); ?>"
                             data-gender="<?php echo htmlspecialchars(strtolower($row['gender'])); ?>"
                             data-age-category="<?php echo htmlspecialchars($ageCategory); ?>"
                             data-search="<?php echo htmlspecialchars($searchText); ?>"
                             data-age="<?php echo $age; ?>">
-                            <td><?php echo htmlspecialchars($row['patient_id']); ?></td>
+                            <td class="patients-id-cell"><?php echo htmlspecialchars($row['patient_id']); ?></td>
                             <td><?php echo htmlspecialchars($row['first_name'] . " " . $row['last_name']); ?></td>
                             <td><?php echo date('M j, Y', strtotime($row['birthdate'])); ?></td>
                             <td><?php echo htmlspecialchars($row['gender']); ?></td>
                             <td><?php echo htmlspecialchars($row['email']); ?></td>
                             <td><?php echo htmlspecialchars($row['phone']); ?></td>
-                            <td><?php echo htmlspecialchars($row['address']); ?></td>
-                            <td>
+                            <td class="patients-desc-cell">
+                                <div class="patients-desc" title="<?php echo htmlspecialchars($row['address']); ?>">
+                                    <?php echo htmlspecialchars($row['address']); ?>
+                                </div>
+                            </td>
+                            <td class="patients-actions-cell">
                                 <div class="action-btns">
                                     <button class="action-btn btn-primary" title="Edit" onclick="editPatient('<?php echo $row['patient_id']; ?>')">
                                         <i class="fas fa-edit"></i>
@@ -276,6 +386,7 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
                     $searchText = strtolower($row['patient_id'] . ' ' . $fullName . ' ' . $row['email']);
             ?>
                 <div class="patient-card patient-row" 
+                     data-patient-id="<?php echo htmlspecialchars($row['patient_id']); ?>"
                      data-gender="<?php echo htmlspecialchars(strtolower($row['gender'])); ?>"
                      data-age-category="<?php echo htmlspecialchars($ageCategory); ?>"
                      data-search="<?php echo htmlspecialchars($searchText); ?>"
@@ -310,13 +421,13 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
                     </div>
                     <div class="patient-card-actions">
                         <button class="action-btn btn-primary" title="Edit" onclick="editPatient('<?php echo $row['patient_id']; ?>')">
-                            <i class="fas fa-edit"></i> Edit
+                            <i class="fas fa-edit"></i>
                         </button>
                         <button class="action-btn btn-danger" title="Archive" onclick="archivePatient(<?php echo $row['patient_id']; ?>)">
-                            <i class="fa-solid fa-box-archive"></i> Archive
+                            <i class="fa-solid fa-box-archive"></i>
                         </button>
                         <button class="action-btn btn-gray" title="See More" onclick="seeMoreDetails('<?php echo $row['patient_id']; ?>', event)">
-                            <i class="fa-solid fa-circle-info"></i> Details
+                            <i class="fa-solid fa-circle-info"></i>
                         </button>
                     </div>
                 </div>
@@ -348,61 +459,62 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
 </div>
 
 <!-- Edit Patient Modal -->
-<div id="editPatientModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <h3>EDIT PATIENT</h3>
-        <form id="editPatientForm" onsubmit="handleEditPatientSubmit(event)">
+<div id="editPatientModal" class="modal-overlay" style="display:none;">
+    <div class="modal-panel">
+        <button class="modal-close" onclick="closeEditPatientModal()" aria-label="Close edit patient dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge accent">Edit patient</span>
+            <h3>Update patient information</h3>
+            <p>Modify personal details, contact information, or address without losing context.</p>
+        </div>
+        <form id="editPatientForm" onsubmit="handleEditPatientSubmit(event)" class="modal-form">
             <input type="hidden" name="patient_id" id="editPatientId">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label" for="editFirstName">First Name <span class="required">*</span></label>
+                    <input type="text" name="first_name" id="editFirstName" required class="form-control" placeholder="Enter first name">
+                </div>
 
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="editFirstName">First Name:</label>
-                    <input type="text" name="first_name" id="editFirstName" required>
+                <div class="form-group">
+                    <label class="form-label" for="editLastName">Last Name <span class="required">*</span></label>
+                    <input type="text" name="last_name" id="editLastName" required class="form-control" placeholder="Enter last name">
                 </div>
-                <div style="flex: 1;">
-                    <label for="editLastName">Last Name:</label>
-                    <input type="text" name="last_name" id="editLastName" required>
-                </div>
-            </div>
 
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="editBirthdate">Birthdate:</label>
-                    <input type="date" name="birthdate" id="editBirthdate" required>
+                <div class="form-group">
+                    <label class="form-label" for="editBirthdate">Birthdate <span class="required">*</span></label>
+                    <input type="date" name="birthdate" id="editBirthdate" required class="form-control">
                 </div>
-                <div style="flex: 1;">
-                    <label for="editGender">Gender:</label>
-                    <select name="gender" id="editGender" required>
+
+                <div class="form-group">
+                    <label class="form-label" for="editGender">Gender <span class="required">*</span></label>
+                    <select name="gender" id="editGender" required class="form-control">
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
                     </select>
                 </div>
-            </div>
 
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="editEmail">Email:</label>
-                    <input type="email" name="email" id="editEmail" required>
+                <div class="form-group">
+                    <label class="form-label" for="editEmail">Email <span class="required">*</span></label>
+                    <input type="email" name="email" id="editEmail" required class="form-control" placeholder="Enter email address">
                 </div>
 
-                <div style="flex: 1;">
-                    <label for="editPhone">Phone:</label>
-                    <input type="text" name="phone" id="editPhone" required>
+                <div class="form-group">
+                    <label class="form-label" for="editPhone">Phone <span class="required">*</span></label>
+                    <input type="text" name="phone" id="editPhone" required class="form-control" placeholder="Enter phone number">
+                </div>
+
+                <div class="form-group full-width">
+                    <label class="form-label" for="editAddress">Address <span class="required">*</span></label>
+                    <input type="text" name="address" id="editAddress" required class="form-control" placeholder="Enter full address">
                 </div>
             </div>
-
-            <div>
-                <label for="editAddress">Address:</label>
-                <input type="text" name="address" id="editAddress" required>
-            </div>
-
-            <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-save"></i> Update Patient
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-success btn-wide">
+                    <i class="fas fa-pencil-alt"></i> Update Patient
                 </button>
-                <button type="button" onclick="closeEditPatientModal()" class="modal-close-btn">
-                    <i class="fas fa-times"></i> Close
-                </button>
+                <button type="button" onclick="closeEditPatientModal()" class="btn btn-link">Cancel</button>
             </div>
         </form>
     </div>
@@ -1115,11 +1227,17 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
         .then(data => {
             if (data.success || data.status === 'success' || !data.message) {
                 showPatientUpdatedNotification(patientId, patientName);
+                applyPatientEditToUI({
+                    patientId: patientId,
+                    firstName: document.getElementById('editFirstName').value.trim(),
+                    lastName: document.getElementById('editLastName').value.trim(),
+                    birthdate: document.getElementById('editBirthdate').value,
+                    gender: document.getElementById('editGender').value.trim(),
+                    email: document.getElementById('editEmail').value.trim(),
+                    phone: document.getElementById('editPhone').value.trim(),
+                    address: document.getElementById('editAddress').value.trim()
+                });
                 closeEditPatientModal();
-                // Reload page after 1.5 seconds to show updated patient
-                setTimeout(() => {
-                    location.reload();
-                }, 1500);
             } else {
                 showNotification('error', 'Error', data.message || 'Failed to update patient. Please try again.');
                 submitBtn.disabled = false;
@@ -1134,8 +1252,74 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
         });
     }
 
+    function applyPatientEditToUI(updatedPatient) {
+        if (!updatedPatient || !updatedPatient.patientId) return;
+
+        const fullName = `${updatedPatient.firstName} ${updatedPatient.lastName}`.trim();
+        const birthDateObj = new Date(updatedPatient.birthdate);
+        const validBirthDate = !Number.isNaN(birthDateObj.getTime());
+        const today = new Date();
+        let age = 0;
+        if (validBirthDate) {
+            age = today.getFullYear() - birthDateObj.getFullYear();
+            const monthDiff = today.getMonth() - birthDateObj.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDateObj.getDate())) {
+                age--;
+            }
+        }
+        let ageCategory = 'senior';
+        if (age <= 12) ageCategory = 'child';
+        else if (age <= 19) ageCategory = 'teen';
+        else if (age <= 59) ageCategory = 'adult';
+        const searchText = `${updatedPatient.patientId} ${fullName} ${updatedPatient.email}`.toLowerCase();
+
+        // Update desktop row
+        const desktopRow = document.querySelector(`tr.patient-row[data-patient-id="${updatedPatient.patientId}"]`);
+        if (desktopRow) {
+            desktopRow.setAttribute('data-gender', (updatedPatient.gender || '').toLowerCase());
+            desktopRow.setAttribute('data-age-category', ageCategory);
+            desktopRow.setAttribute('data-search', searchText);
+            desktopRow.setAttribute('data-age', String(age));
+
+            const cells = desktopRow.querySelectorAll('td');
+            if (cells[1]) cells[1].textContent = fullName;
+            if (cells[2]) cells[2].textContent = validBirthDate ? birthDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : updatedPatient.birthdate;
+            if (cells[3]) cells[3].textContent = updatedPatient.gender;
+            if (cells[4]) cells[4].textContent = updatedPatient.email;
+            if (cells[5]) cells[5].textContent = updatedPatient.phone;
+            const addressWrap = desktopRow.querySelector('.patients-desc');
+            if (addressWrap) {
+                addressWrap.textContent = updatedPatient.address;
+                addressWrap.setAttribute('title', updatedPatient.address);
+            }
+        }
+
+        // Update mobile card
+        const mobileCard = document.querySelector(`.patient-card.patient-row[data-patient-id="${updatedPatient.patientId}"]`);
+        if (mobileCard) {
+            mobileCard.setAttribute('data-gender', (updatedPatient.gender || '').toLowerCase());
+            mobileCard.setAttribute('data-age-category', ageCategory);
+            mobileCard.setAttribute('data-search', searchText);
+            mobileCard.setAttribute('data-age', String(age));
+
+            const nameEl = mobileCard.querySelector('.patient-card-name');
+            if (nameEl) nameEl.textContent = fullName;
+
+            const valueEls = mobileCard.querySelectorAll('.patient-card-value');
+            if (valueEls[0]) valueEls[0].textContent = `${validBirthDate ? birthDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : updatedPatient.birthdate} (${age} years old)`;
+            if (valueEls[1]) valueEls[1].textContent = updatedPatient.gender;
+            if (valueEls[2]) valueEls[2].textContent = updatedPatient.email;
+            if (valueEls[3]) valueEls[3].textContent = updatedPatient.phone;
+            if (valueEls[4]) valueEls[4].textContent = updatedPatient.address;
+        }
+
+        // Re-apply active filters and pagination so UI stays consistent.
+        filterPatients();
+    }
+
     function editPatient(patientId) {
-        document.getElementById('editPatientModal').style.display = 'flex';
+        const editModal = document.getElementById('editPatientModal');
+        editModal.style.display = 'flex';
         
         fetch('../controllers/getPatients.php?patient_id=' + encodeURIComponent(patientId))
             .then(response => {
@@ -1152,13 +1336,19 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
                 }
                 
                 document.getElementById('editPatientId').value = data.patient_id;
-                document.getElementById('editFirstName').value = data.first_name;
-                document.getElementById('editLastName').value = data.last_name;
-                document.getElementById('editBirthdate').value = data.birthdate;
-                document.getElementById('editGender').value = data.gender;
-                document.getElementById('editEmail').value = data.email;
-                document.getElementById('editPhone').value = data.phone;
-                document.getElementById('editAddress').value = data.address;
+                document.getElementById('editFirstName').value = data.first_name || '';
+                document.getElementById('editLastName').value = data.last_name || '';
+                document.getElementById('editBirthdate').value = data.birthdate || '';
+                document.getElementById('editGender').value = data.gender || 'Male';
+                document.getElementById('editEmail').value = data.email || '';
+                document.getElementById('editPhone').value = data.phone || '';
+                document.getElementById('editAddress').value = data.address || '';
+                
+                // Focus on first input for better UX
+                setTimeout(() => {
+                    const firstInput = editModal.querySelector('#editFirstName');
+                    if (firstInput) firstInput.focus();
+                }, 100);
             })
             .catch(error => {
                 console.error('Error fetching patient:', error);
@@ -1167,7 +1357,17 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
     }
 
     function closeEditPatientModal() {
-        document.getElementById('editPatientModal').style.display = 'none';
+        const editModal = document.getElementById('editPatientModal');
+        const editForm = document.getElementById('editPatientForm');
+        if (editModal) {
+            editModal.style.display = 'none';
+        }
+        if (editForm) {
+            // Clear any validation states
+            editForm.querySelectorAll('.form-control').forEach(input => {
+                input.classList.remove('is-invalid', 'is-valid');
+            });
+        }
     }
 
     function archivePatient(patientId) {
@@ -1479,12 +1679,29 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
         setTimeout(() => {
             filterPatients();
         }, 100);
+
+        // Add form validation feedback for Edit Patient Form
+        const editForm = document.getElementById('editPatientForm');
+        if (editForm) {
+            // Real-time validation feedback
+            editForm.querySelectorAll('.form-control').forEach(input => {
+                input.addEventListener('blur', function() {
+                    if (this.hasAttribute('required') && !this.value.trim()) {
+                        this.classList.add('is-invalid');
+                        this.classList.remove('is-valid');
+                    } else if (this.value.trim()) {
+                        this.classList.add('is-valid');
+                        this.classList.remove('is-invalid');
+                    }
+                });
+            });
+        }
     });
 
     // Close modal when clicking outside
     window.addEventListener("click", function(event) {
         const editModal = document.getElementById("editPatientModal");
-        if (event.target === editModal) {
+        if (editModal && event.target === editModal) {
             closeEditPatientModal();
         }
     });

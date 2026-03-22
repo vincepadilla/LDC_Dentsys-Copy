@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 define("TITLE", "Reschedule Appointment");
 include_once('../layouts/header.php');
 

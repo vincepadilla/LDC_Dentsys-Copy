@@ -10,7 +10,7 @@ ini_set('display_errors', 0);
 $config_output = '';
 try {
     ob_start();
-    include '../database/config.php';
+    require_once(__DIR__ . "/../database/config.php");
     $config_output = ob_get_clean();
     
     // If config output anything (like from die()), we have a connection problem

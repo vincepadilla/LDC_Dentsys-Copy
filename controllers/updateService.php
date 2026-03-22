@@ -1,5 +1,5 @@
 <?php
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = trim($_POST['service_id']);

@@ -1,6 +1,6 @@
 <?php 
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -148,6 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/registerstyle.css?v=<?php echo time(); ?>">
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
     
@@ -301,10 +302,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <div class="terms-agreement compact-terms">
                         <input type="checkbox" id="terms" name="terms" <?php echo $terms_checked ? 'checked' : ''; ?> required>
-                        <label for="terms">I agree to the <a href="#" class="terms-link">Terms</a> and <a href="#" class="terms-link">Privacy Policy</a></label>
+                        <label for="terms">I agree to the <a href="#" id="openTerms" class="terms-link text-blue-600 underline">Terms</a> and <a href="#" id="openPrivacy" class="terms-link text-blue-600 underline">Privacy Policy</a></label>
                     </div>
 
-                    <button type="submit" name="submit" class="auth-btn compact-btn">
+                    <button type="submit" name="submit" id="submitBtn" class="auth-btn compact-btn">
                         <span>Create Account</span>
                         <i class="fas fa-user-plus"></i>
                     </button>
@@ -315,6 +316,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </p>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Terms Modal -->
+    <div id="termsModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50 transition-opacity"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl shadow-lg max-w-xl w-full p-6 transform transition-all duration-200 ease-out opacity-0 scale-95">
+                <div class="flex items-start justify-between mb-4">
+                    <h3 class="text-xl font-semibold">Terms and Conditions</h3>
+                    <button type="button" class="close-modal text-gray-500 hover:text-gray-700" data-modal="termsModal" aria-label="Close">
+                        <span class="fas fa-times"></span>
+                    </button>
+                </div>
+                <div class="text-sm text-gray-700 space-y-2">
+                    <p>- Users must provide accurate personal and appointment information.</p>
+                    <p>- Appointments depend on availability and confirmation.</p>
+                    <p>- Cancellation or rescheduling must be done at least 24 hours before.</p>
+                    <p>- The clinic has the right to modify or cancel appointments.</p>
+                    <p>- Misuse of the system may result in restricted access.</p>
+                </div>
+                <div class="mt-6 text-right">
+                    <button type="button" class="close-modal inline-flex items-center px-4 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition" data-modal="termsModal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Policy Modal -->
+    <div id="privacyModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50 transition-opacity"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl shadow-lg max-w-xl w-full p-6 transform transition-all duration-200 ease-out opacity-0 scale-95">
+                <div class="flex items-start justify-between mb-4">
+                    <h3 class="text-xl font-semibold">Privacy Policy</h3>
+                    <button type="button" class="close-modal text-gray-500 hover:text-gray-700" data-modal="privacyModal" aria-label="Close">
+                        <span class="fas fa-times"></span>
+                    </button>
+                </div>
+                <div class="text-sm text-gray-700 space-y-3 max-h-80 overflow-y-auto pr-2">
+                    <p>This Dental Clinic Appointment System complies with the Data Privacy Act of 2012 (RA 10173). We are committed to protecting your personal data and ensuring its confidentiality, integrity, and security.</p>
+                    <ul class="list-disc pl-5 space-y-2">
+                        <li>We collect personal information such as name, email, phone number, and appointment details solely for dental service and appointment management purposes.</li>
+                        <li>Your data will not be shared, sold, or disclosed to third parties without your consent, unless required by law.</li>
+                        <li>All personal data is stored securely in our system and protected against unauthorized access, alteration, or disclosure.</li>
+                        <li>You have the right to access, update, or request deletion of your personal data.</li>
+                        <li>We implement appropriate organizational, physical, and technical security measures to safeguard your information.</li>
+                        <li>By using this system, you consent to the collection and processing of your data in accordance with this policy.</li>
+                    </ul>
+                    <p class="text-xs text-gray-600 italic">For concerns regarding your data privacy, you may contact the clinic administration.</p>
+                </div>
+                <div class="mt-6 text-right">
+                    <button type="button" class="close-modal inline-flex items-center px-4 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition" data-modal="privacyModal">Close</button>
+                </div>
             </div>
         </div>
     </div>
@@ -365,6 +421,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const today = new Date();
         const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
         birthdateInput.max = maxDate.toISOString().split('T')[0];
+
+        // Modal utilities (reusable)
+        const getModalElements = (id) => {
+            const container = document.getElementById(id);
+            if (!container) return {};
+            const panel = container.querySelector('.bg-white.rounded-xl.shadow-lg');
+            const overlay = container.querySelector('.bg-black\\/50');
+            return { container, panel, overlay };
+        };
+
+        const openModal = (id) => {
+            const { container, panel } = getModalElements(id);
+            if (!container || !panel) return;
+            container.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                panel.classList.remove('opacity-0', 'scale-95');
+                panel.classList.add('opacity-100', 'scale-100');
+            });
+            const firstClose = container.querySelector('.close-modal');
+            if (firstClose) firstClose.focus();
+        };
+
+        const closeModal = (id) => {
+            const { container, panel } = getModalElements(id);
+            if (!container || !panel) return;
+            panel.classList.add('opacity-0', 'scale-95');
+            panel.classList.remove('opacity-100', 'scale-100');
+            panel.addEventListener('transitionend', function handler() {
+                container.classList.add('hidden');
+                panel.removeEventListener('transitionend', handler);
+            });
+        };
+
+        // Openers
+        const termsLink = document.getElementById('openTerms');
+        const privacyLink = document.getElementById('openPrivacy');
+        if (termsLink) {
+            termsLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                openModal('termsModal');
+            });
+        }
+        if (privacyLink) {
+            privacyLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                openModal('privacyModal');
+            });
+        }
+
+        // Closers (buttons)
+        document.querySelectorAll('.close-modal').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.getAttribute('data-modal');
+                if (id) closeModal(id);
+            });
+        });
+
+        // Close on overlay click
+        ['termsModal', 'privacyModal'].forEach(id => {
+            const { container, panel } = getModalElements(id);
+            if (!container || !panel) return;
+            container.addEventListener('click', function(e) {
+                if (!panel.contains(e.target)) {
+                    closeModal(id);
+                }
+            });
+        });
+
+        // Esc to close
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal('termsModal');
+                closeModal('privacyModal');
+            }
+        });
+
+        // Client-side validation for Terms checkbox (show alert if not checked)
+        const submitBtn = document.getElementById('submitBtn');
+        const termsCheckbox = document.getElementById('terms');
+        if (submitBtn && termsCheckbox) {
+            submitBtn.addEventListener('click', function(e) {
+                if (!termsCheckbox.checked) {
+                    e.preventDefault();
+                    alert('You must agree to the Terms and Privacy Policy.');
+                    termsCheckbox.focus();
+                }
+            });
+        }
     </script>
 </body>
 </html>

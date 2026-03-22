@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 // Base path for controller URLs (works when admin is in subfolder)
 $basePath = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/\\');
@@ -19,17 +19,50 @@ if (empty($_SESSION['admin_verified'])) {
     exit();
 }
 
+// Ensure archived_appointments table exists so transaction joins remain safe
+$createArchivedAppointmentsTable = "CREATE TABLE IF NOT EXISTS archived_appointments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  appointment_id VARCHAR(20),
+  patient_name VARCHAR(100),
+  service VARCHAR(100),
+  dentist VARCHAR(100),
+  appointment_date DATE,
+  appointment_time VARCHAR(50),
+  status VARCHAR(50),
+  archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)";
+mysqli_query($con, $createArchivedAppointmentsTable);
+
+// Shared archived appointments source (same table used by views/archives.php)
+$archivedAppointmentsSource = "(SELECT appointment_id, patient_name, service, dentist, appointment_date, appointment_time, status, archived_at
+                               FROM archived_appointments) aa";
+
 // Get payment transactions data
 $paymentSql = "SELECT p.payment_id, p.appointment_id, p.method, p.account_name, 
                       p.account_number, p.amount, p.reference_no, p.proof_image, p.status,
-                      a.patient_id, a.appointment_date
+                      a.patient_id,
+                      COALESCE(a.appointment_date, aa.appointment_date) as appointment_date,
+                      COALESCE(NULLIF(TRIM(CONCAT(COALESCE(pi.first_name, ''), ' ', COALESCE(pi.last_name, ''))), ''), aa.patient_name, 'N/A') as patient_name,
+                      CASE
+                          WHEN COALESCE(a.is_archived, 0) = 1 OR LOWER(COALESCE(a.status, '')) = 'archived' THEN 'archived'
+                          WHEN a.appointment_id IS NULL AND aa.appointment_id IS NOT NULL THEN 'archived'
+                          ELSE 'active'
+                      END as appointment_record_source
                FROM payment p
                LEFT JOIN appointments a ON p.appointment_id = a.appointment_id
-               ORDER BY a.appointment_date DESC, p.payment_id DESC";
+               LEFT JOIN $archivedAppointmentsSource ON p.appointment_id = aa.appointment_id
+               LEFT JOIN patient_information pi ON a.patient_id = pi.patient_id
+               WHERE COALESCE(p.is_archived, 0) = 0
+               ORDER BY COALESCE(a.appointment_date, aa.appointment_date) DESC, p.payment_id DESC";
 $paymentResult = mysqli_query($con, $paymentSql);
 
 // Get unique payment methods for filter
-$methodsQuery = "SELECT DISTINCT method FROM payment WHERE method IS NOT NULL AND method != '' ORDER BY method";
+$methodsQuery = "SELECT DISTINCT method
+                 FROM payment
+                 WHERE method IS NOT NULL
+                   AND method != ''
+                   AND COALESCE(is_archived, 0) = 0
+                 ORDER BY method";
 $methodsResult = mysqli_query($con, $methodsQuery);
 $paymentMethods = [];
 while ($methodRow = mysqli_fetch_assoc($methodsResult)) {
@@ -37,7 +70,7 @@ while ($methodRow = mysqli_fetch_assoc($methodsResult)) {
 }
 
 // Get unique payment statuses for filter
-$statusQuery = "SELECT DISTINCT status FROM payment WHERE status IS NOT NULL AND status != '' ORDER BY 
+$statusQuery = "SELECT DISTINCT status FROM payment WHERE status IS NOT NULL AND status != '' AND COALESCE(is_archived, 0) = 0 ORDER BY 
                 CASE status 
                     WHEN 'pending' THEN 1 
                     WHEN 'paid' THEN 2 
@@ -88,12 +121,15 @@ mysqli_query($con, $createBillStatusTable);
 $refundSql = "SELECT rr.id, rr.payment_id, rr.appointment_id, rr.user_id, rr.status, rr.created_at,
                      p.amount, p.method, p.status as payment_status,
                      pi.first_name, pi.last_name, pi.email,
-                     a.appointment_date, a.appointment_time,
-                     s.service_category, s.sub_service
+                     COALESCE(a.appointment_date, aa.appointment_date) as appointment_date,
+                     COALESCE(a.appointment_time, aa.appointment_time) as appointment_time,
+                     COALESCE(s.service_category, aa.service) as service_category,
+                     COALESCE(s.sub_service, aa.service) as sub_service
               FROM refund_requests rr
-              LEFT JOIN payment p ON rr.payment_id = p.payment_id
+              LEFT JOIN payment p ON rr.payment_id = p.payment_id AND COALESCE(p.is_archived, 0) = 0
               LEFT JOIN patient_information pi ON rr.user_id = pi.user_id
               LEFT JOIN appointments a ON rr.appointment_id = a.appointment_id
+              LEFT JOIN $archivedAppointmentsSource ON rr.appointment_id = aa.appointment_id
               LEFT JOIN services s ON a.service_id = s.service_id
               ORDER BY rr.created_at DESC";
 $refundResult = mysqli_query($con, $refundSql);
@@ -109,6 +145,7 @@ $allTransactionsSql = "SELECT
                         th.prescription_given,
                         th.notes,
                         CONCAT(pi.first_name, ' ', pi.last_name) as patient_name,
+                        pi.email as patient_email,
                         a.appointment_id,
                         a.appointment_date,
                         a.status as appointment_status,
@@ -126,9 +163,12 @@ $allTransactionsSql = "SELECT
                            AND a.appointment_date <= DATE_ADD(th.created_at, INTERVAL 30 DAY)
                            AND a.appointment_date >= DATE_SUB(th.created_at, INTERVAL 7 DAY)
                        LEFT JOIN payment p ON a.appointment_id = p.appointment_id
+                           AND COALESCE(p.is_archived, 0) = 0
                        LEFT JOIN services s ON a.service_id = s.service_id
                        LEFT JOIN patient_bill_status pbs ON th.patient_id = pbs.patient_id 
+                           AND COALESCE(pbs.is_archived, 0) = 0
                            AND (pbs.treatment_id = th.treatment_id OR (pbs.treatment_id IS NULL AND pbs.appointment_id = a.appointment_id))
+                       WHERE COALESCE(th.is_archived, 0) = 0
                        ORDER BY th.created_at DESC";
 $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
 ?>
@@ -268,6 +308,102 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             font-size: 12px;
             font-weight: 600;
         }
+
+        /* Action button color overrides */
+        .action-btn[title="Mark as failed"] {
+            background: #ef4444;
+            color: #ffffff;
+        }
+
+
+        .action-btn[title="Edit Status"] {
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+        }
+
+        .action-btn[title="Edit Status"]:hover {
+            background: #2563eb;
+            color: #ffffff;
+        }
+
+        .action-btn[title="View Details"] {
+            background: #374151;
+            color: #ffffff;
+            border: none;
+        }
+
+        .action-btn[title="View Details"]:hover {
+            background: #374151;
+            color: #ffffff;
+        }
+
+        .action-btn[title="View Bill Summary"] {
+            background: #facc15;
+            color: #111827;
+            border: none;
+        }
+
+        .action-btn[title="View Bill Summary"]:hover {
+            background: #facc15;
+            color: #111827;
+        }
+
+        .action-btn[title="View Receipt"] {
+            background:rgb(135, 224, 252);
+            color: #111827;
+            border: 1px solid #d1d5db;
+        }
+
+        .action-btn[title="View Receipt"]:hover {
+            background:rgb(233, 233, 233);
+            color: #111827;
+            border-color: #d1d5db;
+        }
+
+        .action-btn[title="Delete Refund Request"],
+        .action-btn[title="Archive Transaction"] {
+            background:rgb(255, 165, 165);
+            border: none;
+        }
+
+        .action-btn[title="Delete Refund Request"]:hover,
+        .action-btn[title="Archive Transaction"]:hover {
+            background:rgb(255, 183, 183);
+            color: #ffffff;
+            border: none;
+        }
+
+        /* Appointment search input styling */
+        #filter-payment-search,
+        #filter-refund-search,
+        #filter-all-transactions-search {
+            min-width: 280px;
+            width: 100%;
+            max-width: 360px;
+            height: 40px;
+            padding: 0 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            background: #ffffff;
+            color: #111827;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        #filter-payment-search::placeholder,
+        #filter-refund-search::placeholder,
+        #filter-all-transactions-search::placeholder {
+            color: #9ca3af;
+        }
+
+        #filter-payment-search:focus,
+        #filter-refund-search:focus,
+        #filter-all-transactions-search:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
     </style>
 </head>
 <body>
@@ -338,10 +474,15 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                     <?php endforeach; ?>
                 </select>
             </div>
+
+            <div class="filter-group">
+                <label for="filter-payment-search"><i class="fas fa-search"></i> Search:</label>
+                <input type="text"
+                       id="filter-payment-search"
+                       placeholder="Appointment ID or patient name"
+                       oninput="filterPayments()">
+            </div>
             
-            <button class="btn btn-accent" onclick="printPayments()">
-                <i class="fas fa-print"></i> Print
-            </button>
         </div>
 
         <div class="table-responsive">
@@ -367,14 +508,29 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                             $appointmentDate = $row['appointment_date'] ?? '';
                             $paymentStatus = strtolower($row['status'] ?? '');
                             $paymentMethod = strtolower($row['method'] ?? '');
-                            $searchText = strtolower($row['payment_id'] . ' ' . $row['appointment_id'] . ' ' . $paymentMethod . ' ' . ($row['account_name'] ?? '') . ' ' . ($row['reference_no'] ?? ''));
+                            $isArchivedAppointment = (($row['appointment_record_source'] ?? 'active') === 'archived');
+                            $recordLabel = $isArchivedAppointment ? 'Archived Appointment' : 'Active Appointment';
+                            $searchText = strtolower(
+                                ($row['payment_id'] ?? '') . ' ' .
+                                ($row['appointment_id'] ?? '') . ' ' .
+                                ($row['patient_name'] ?? '') . ' ' .
+                                $paymentMethod . ' ' .
+                                ($row['account_name'] ?? '') . ' ' .
+                                ($row['reference_no'] ?? '') . ' ' .
+                                $recordLabel
+                            );
                     ?>
                         <tr class="payment-row" 
                             data-date="<?php echo htmlspecialchars($appointmentDate); ?>" 
                             data-status="<?php echo htmlspecialchars($paymentStatus); ?>"
                             data-method="<?php echo htmlspecialchars($paymentMethod); ?>"
                             data-search="<?php echo htmlspecialchars($searchText); ?>">
-                            <td><?php echo htmlspecialchars($row['appointment_id']); ?></td>
+                            <td>
+                                <?php echo htmlspecialchars($row['appointment_id']); ?>
+                                <?php if ($isArchivedAppointment): ?>
+                                    <div style="font-size: 11px; color: #92400e; margin-top: 3px;">Archived Appointment</div>
+                                <?php endif; ?>
+                            </td>
                             <td><?php echo htmlspecialchars($row['method']); ?></td>
                             <td>
                                 <?php 
@@ -430,7 +586,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                                     <?php 
                                     $currentStatus = strtolower($row['status'] ?? '');
                                     // Only show confirm button if status is not 'paid' or 'refunded'
-                                    if ($currentStatus !== 'paid' && $currentStatus !== 'refunded'): 
+                                    if ($currentStatus !== 'paid' && $currentStatus !== 'refunded' && $currentStatus !== 'failed'): 
                                     ?>
                                     <button type="button" class="action-btn btn-primary-confirmedPayment" title="Confirm"
                                         data-payment-id="<?php echo $row['payment_id']; ?>"
@@ -444,23 +600,18 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                                     // Only show failed button if status is not 'failed' or 'refunded'
                                     if ($currentStatus !== 'failed' && $currentStatus !== 'refunded'): 
                                     ?>
-                                    <button type="button" class="action-btn btn-danger" title="Mark as failed"
+                                    <button type="button" class="action-btn" title="Mark as failed"
                                         data-payment-id="<?php echo $row['payment_id']; ?>"
                                         onclick="markPaymentFailed(this)">
                                         <i class="fas fa-times"></i>
                                     </button>
                                     <?php endif; ?>
 
-                                    <?php 
-                                    // Edit Button
-                                    if ($currentStatus != 'paid' && $currentStatus != 'failed'): 
-                                    ?>
                                     <button type="button" class="action-btn btn-primary" title="Edit Status"
                                         data-payment-id="<?php echo $row['payment_id']; ?>" 
                                         onclick="editPayment(this)">
                                         <i class="fas fa-edit"></i>
                                     </button>   
-                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>
@@ -490,7 +641,17 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                     $paymentStatus = strtolower($row['status'] ?? '');
                     $paymentMethod = strtolower($row['method'] ?? '');
                     $paymentMethodDisplay = strtolower(trim($row['method'] ?? ''));
-                    $searchText = strtolower($row['payment_id'] . ' ' . $row['appointment_id'] . ' ' . $paymentMethod . ' ' . ($row['account_name'] ?? '') . ' ' . ($row['reference_no'] ?? ''));
+                    $isArchivedAppointment = (($row['appointment_record_source'] ?? 'active') === 'archived');
+                    $recordLabel = $isArchivedAppointment ? 'Archived Appointment' : 'Active Appointment';
+                    $searchText = strtolower(
+                        ($row['payment_id'] ?? '') . ' ' .
+                        ($row['appointment_id'] ?? '') . ' ' .
+                        ($row['patient_name'] ?? '') . ' ' .
+                        $paymentMethod . ' ' .
+                        ($row['account_name'] ?? '') . ' ' .
+                        ($row['reference_no'] ?? '') . ' ' .
+                        $recordLabel
+                    );
             ?>
                 <div class="payment-card payment-row" 
                      data-date="<?php echo htmlspecialchars($appointmentDate); ?>" 
@@ -501,6 +662,9 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                         <div>
                             <div class="payment-card-id">Payment #<?php echo htmlspecialchars($row['payment_id']); ?></div>
                             <div class="payment-card-appointment">Appointment #<?php echo htmlspecialchars($row['appointment_id']); ?></div>
+                            <?php if ($isArchivedAppointment): ?>
+                                <div style="font-size: 11px; color: #92400e; margin-top: 2px;">Archived Appointment</div>
+                            <?php endif; ?>
                         </div>
                         <span class="status status-<?php echo htmlspecialchars(strtolower($row['status'] ?? 'pending')); ?>">
                             <?php echo htmlspecialchars(ucfirst($row['status'] ?? 'Pending')); ?>
@@ -551,7 +715,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                     <div class="payment-card-actions">
                         <?php 
                         $currentStatus = strtolower($row['status'] ?? '');
-                        if ($currentStatus !== 'paid' && $currentStatus !== 'refunded'): 
+                        if ($currentStatus !== 'paid' && $currentStatus !== 'refunded' && $currentStatus !== 'failed'): 
                         ?>
                         <button type="button" class="action-btn btn-primary-confirmedPayment" title="Confirm"
                             data-payment-id="<?php echo $row['payment_id']; ?>"
@@ -571,15 +735,11 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                         </button>
                         <?php endif; ?>
 
-                        <?php 
-                        if ($currentStatus != 'paid' && $currentStatus != 'failed'): 
-                        ?>
                         <button type="button" class="action-btn btn-primary" title="Edit Status"
                             data-payment-id="<?php echo $row['payment_id']; ?>" 
                             onclick="editPayment(this)">
                             <i class="fas fa-edit"></i> Edit
                         </button>   
-                        <?php endif; ?>
                     </div>
                 </div>
             <?php 
@@ -611,6 +771,15 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
 
         <!-- Refund Requests Tab Content -->
         <div id="refunds-tab" class="tab-content" style="display: none;">
+            <div class="filter-container">
+                <div class="filter-group">
+                    <label for="filter-refund-search"><i class="fas fa-search"></i> Search:</label>
+                    <input type="text"
+                           id="filter-refund-search"
+                           placeholder="Payment ID, appointment ID, patient name"
+                           oninput="filterRefunds()">
+                </div>
+            </div>
             <div class="table-responsive">
                 <table id="refund-table">
                     <thead>
@@ -629,9 +798,16 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                         <?php 
                         if(mysqli_num_rows($refundResult) > 0) {
                             mysqli_data_seek($refundResult, 0);
-                            while ($row = mysqli_fetch_assoc($refundResult)) { 
+                            while ($row = mysqli_fetch_assoc($refundResult)) {
+                                $refundSearchText = strtolower(
+                                    ($row['payment_id'] ?? '') . ' ' .
+                                    ($row['appointment_id'] ?? '') . ' ' .
+                                    (($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')) . ' ' .
+                                    ($row['sub_service'] ?? $row['service_category'] ?? '') . ' ' .
+                                    ($row['status'] ?? '')
+                                );
                         ?>
-                            <tr class="refund-row">
+                            <tr class="refund-row" data-search="<?php echo htmlspecialchars($refundSearchText); ?>">
                                 <td><?php echo htmlspecialchars($row['payment_id']); ?></td>
                                 <td><?php echo htmlspecialchars($row['appointment_id']); ?></td>
                                 <td><?php echo htmlspecialchars(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')); ?></td>
@@ -658,6 +834,11 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                                             onclick="viewRefundDetails(this)">
                                             <i class="fas fa-eye"></i>
                                         </button>
+                                        <button type="button" class="action-btn btn-danger" title="Delete Refund Request"
+                                            data-refund-id="<?php echo htmlspecialchars($row['id']); ?>"
+                                            onclick="openDeleteConfirmModal('refund', this)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -680,6 +861,15 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
 
         <!-- All Transactions Tab Content -->
         <div id="all-transactions-tab" class="tab-content" style="display: none;">
+            <div class="filter-container">
+                <div class="filter-group">
+                    <label for="filter-all-transactions-search"><i class="fas fa-search"></i> Search:</label>
+                    <input type="text"
+                           id="filter-all-transactions-search"
+                           placeholder="Patient name, appointment ID, treatment"
+                           oninput="filterAllTransactions()">
+                </div>
+            </div>
             <div class="table-responsive">
                 <table id="all-transactions-table">
                     <thead>
@@ -700,15 +890,26 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                             while ($row = mysqli_fetch_assoc($allTransactionsResult)) {
                                 $treatmentCost = floatval($row['treatment_cost'] ?? 0);
                                 $appointmentFee = floatval($row['appointment_fee'] ?? 0);
-                                $total = $treatmentCost + $appointmentFee;
+                                // Appointment fee is already paid during booking, so the remaining due is treatment - appointment.
+                                $total = $treatmentCost - $appointmentFee;
+                                if ($total < 0) $total = 0;
                                 $transactionDate = $row['treatment_date'] ?? $row['appointment_date'];
                                 $billStatus = strtolower($row['bill_payment_status'] ?? 'unpaid');
                                 $billStatusId = $row['bill_status_id'] ?? null;
+                                $allTransactionsSearchText = strtolower(
+                                    ($row['patient_name'] ?? '') . ' ' .
+                                    ($row['patient_id'] ?? '') . ' ' .
+                                    ($row['appointment_id'] ?? '') . ' ' .
+                                    ($row['treatment'] ?? $row['service_name'] ?? '') . ' ' .
+                                    ($row['payment_method'] ?? '') . ' ' .
+                                    $billStatus
+                                );
                         ?>
                             <tr class="all-tx-row" 
                                 data-patient-id="<?php echo htmlspecialchars($row['patient_id']); ?>"
                                 data-date="<?php echo htmlspecialchars($transactionDate); ?>"
-                                data-bill-status-id="<?php echo htmlspecialchars($billStatusId); ?>">
+                                data-bill-status-id="<?php echo htmlspecialchars($billStatusId); ?>"
+                                data-search="<?php echo htmlspecialchars($allTransactionsSearchText); ?>">
                                 <td><?php echo htmlspecialchars($row['patient_name'] ?? 'N/A'); ?></td>
                                 <td><?php echo htmlspecialchars($row['treatment'] ?? $row['service_name'] ?? 'N/A'); ?></td>
                                 <td>₱<?php echo number_format($appointmentFee, 2); ?></td>
@@ -726,6 +927,20 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                                                 title="View Bill Summary"
                                                 onclick="viewBillSummary('<?php echo htmlspecialchars($row['patient_id']); ?>', '<?php echo htmlspecialchars($row['treatment_id']); ?>', '<?php echo htmlspecialchars($row['appointment_id']); ?>', '<?php echo htmlspecialchars($billStatusId); ?>', '<?php echo htmlspecialchars($billStatus); ?>', <?php echo $total; ?>)">
                                             <i class="fas fa-file-invoice"></i>
+                                        </button>
+                                        <?php if ($billStatus === 'paid'): ?>
+                                        <button type="button" class="action-btn btn-success" 
+                                                title="View Receipt"
+                                                onclick="openReceiptModal('<?php echo htmlspecialchars($row['patient_id']); ?>', '<?php echo htmlspecialchars($row['patient_name'] ?? 'N/A'); ?>', '<?php echo htmlspecialchars($row['patient_email'] ?? ''); ?>', '<?php echo htmlspecialchars($row['treatment'] ?? $row['service_name'] ?? 'N/A'); ?>', '<?php echo htmlspecialchars($row['payment_method'] ?? 'N/A'); ?>', '<?php echo htmlspecialchars($transactionDate); ?>', <?php echo $appointmentFee; ?>, <?php echo $treatmentCost; ?>, <?php echo $total; ?>, '<?php echo htmlspecialchars($row['appointment_id'] ?? ''); ?>', '<?php echo htmlspecialchars($row['treatment_id'] ?? ''); ?>')">
+                                            <i class="fas fa-receipt"></i>
+                                        </button>
+                                        <?php endif; ?>
+                                        <button type="button" class="action-btn btn-danger" 
+                                                title="Archive Transaction"
+                                                data-treatment-id="<?php echo htmlspecialchars($row['treatment_id'] ?? ''); ?>"
+                                                data-appointment-id="<?php echo htmlspecialchars($row['appointment_id'] ?? ''); ?>"
+                                                onclick="openDeleteConfirmModal('transaction', this)">
+                                            <i class="fa-solid fa-box-archive"></i>
                                         </button>
                                     </div>
                                 </td>
@@ -749,23 +964,50 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
     </div>
 </div>
 
+<!-- Delete Confirmation Modal -->
+<div id="deleteConfirmModal" class="modal-overlay" style="display:none;">
+    <div class="modal-panel" style="max-width: 520px; width: min(520px, 95%);">
+        <button class="modal-close" onclick="closeDeleteConfirmModal()" aria-label="Close delete dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge">Delete</span>
+            <h3 id="deleteConfirmTitle">Confirm deletion</h3>
+            <p id="deleteConfirmMessage">This action cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-link" onclick="closeDeleteConfirmModal()">Cancel</button>
+            <button type="button" class="btn btn-danger btn-wide" id="deleteConfirmBtn">
+                <i class="fa-solid fa-box-archive"></i> Archive
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Image Modal -->
 <div id="imageModal" class="modal" style="display:none;">
     <span onclick="closeModal()" class="close-modal">&times;</span>
     <img id="modalImage" src="" alt="Proof Image" class="modal-image">
 </div>
 
-<!-- Edit Payment Modal -->
-<div id="editPaymentModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <h3><i class="fa-solid fa-money-bill"></i> EDIT PAYMENT STATUS</h3>
-        <form id="editPaymentForm" method="POST" action="../controllers/updatePayment.php">
+<!-- Edit Payment Modal - styled similar to Services "Add Service" modal -->
+<div id="editPaymentModal" class="modal-overlay" style="display:none;">
+    <div class="modal-panel">
+        <button class="modal-close" onclick="closeEditPaymentModal()" aria-label="Close edit payment dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge accent">Update Payment</span>
+            <h3>Edit payment status</h3>
+            <p>Adjust the current payment state while keeping records consistent.</p>
+        </div>
+        <form id="editPaymentForm" method="POST" action="../controllers/updatePayment.php" class="modal-form">
             <input type="hidden" name="payment_id" id="editPaymentId">
 
-            <div style="display: flex; gap: 15px;">
-                <div style="flex: 1;">
-                    <label for="editPaymentStatus">Status:</label>
-                    <select name="status" id="editPaymentStatus" required>
+            <div class="form-grid">
+                <div class="form-group full-width">
+                    <label class="form-label" for="editPaymentStatus">Status <span class="required">*</span></label>
+                    <select name="status" id="editPaymentStatus" required class="form-control">
                         <option value="pending">Pending</option>
                         <option value="paid">Paid</option>
                         <option value="failed">Failed</option>
@@ -774,43 +1016,129 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                 </div>
             </div>
 
-            <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <button type="submit" class="btn btn-success">
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-success btn-wide">
                     <i class="fas fa-save"></i> Update Status
                 </button>
-                <button type="button" onclick="closeEditPaymentModal()" class="modal-close-btn">
-                    <i class="fas fa-times"></i> Close
+                <button type="button" onclick="closeEditPaymentModal()" class="btn btn-link">
+                    Cancel
                 </button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- Refund Details Modal -->
-<div id="refundDetailsModal" class="modal" style="display:none;">
-    <div class="modal-content" style="max-width: 760px;">
-        <h3><i class="fas fa-undo"></i> PAYMENT DETAILS</h3>
+<!-- Refund Details Modal - layout aligned with Edit Payment modal -->
+<div id="refundDetailsModal" class="modal-overlay" style="display:none;">
+    <div class="modal-panel" style="max-width: 760px; width: min(760px, 95%);">
+        <button class="modal-close" onclick="closeRefundDetailsModal()" aria-label="Close refund details dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge accent">Refund Details</span>
+            <h3>Payment & refund information</h3>
+            <p>Review the original payment and its associated refund request.</p>
+        </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px;">
-            <div><strong>Payment ID:</strong> <span id="rd_payment_id">-</span></div>
-            <div><strong>Method:</strong> <span id="rd_method">-</span></div>
-            <div><strong>Account Name:</strong> <span id="rd_account_name">N/A</span></div>
-            <div><strong>Account Number:</strong> <span id="rd_account_number">N/A</span></div>
-            <div><strong>Amount:</strong> <span id="rd_amount">-</span></div>
-            <div style="grid-column: 1 / -1;">
-                <strong>Proof:</strong>
-                <span id="rd_proof_text">-</span>
-                <button type="button" class="view-image-btn" id="rd_view_proof_btn" style="margin-left:10px; display:none;">
-                    View PDF
+        <div class="modal-form">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Payment ID</label>
+                    <span id="rd_payment_id">-</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Method</label>
+                    <span id="rd_method">-</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Account Name</label>
+                    <span id="rd_account_name">N/A</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Account Number</label>
+                    <span id="rd_account_number">N/A</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Amount</label>
+                    <span id="rd_amount">-</span>
+                </div>
+                <div class="form-group full-width">
+                    <label class="form-label">Proof</label>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span id="rd_proof_text">-</span>
+                        <button type="button" class="view-image-btn" id="rd_view_proof_btn" style="display:none;">
+                            View PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" onclick="closeRefundDetailsModal()" class="btn btn-link">
+                    Close
                 </button>
             </div>
         </div>
+    </div>
+</div>
 
-        <div style="margin-top: 16px; display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" onclick="closeRefundDetailsModal()" class="modal-close-btn">
-                <i class="fas fa-times"></i> Close
+<!-- Receipt Preview Modal -->
+<div id="receiptModal" class="modal-overlay" style="display:none;">
+    <div class="modal-panel" style="max-width: 780px; width: min(780px, 95%);">
+        <button class="modal-close" onclick="closeReceiptModal()" aria-label="Close receipt preview dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge accent">Receipt</span>
+            <h3>Official Billing Summary</h3>
+            <p>Review the billing details before printing or sending via email.</p>
+        </div>
+
+        <div class="modal-form" style="height: 70vh; max-height: 600px;">
+            <iframe id="receiptFrame" src="" style="width: 100%; height: 100%; border: 1px solid #e5e7eb; border-radius: 8px; background:#fff;" title="Receipt preview"></iframe>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="btn btn-primary" onclick="openEmailReceiptModal()">
+                <i class="fas fa-envelope"></i> Send to Email
+            </button>
+            
+            <button type="button" class="btn btn-link" onclick="closeReceiptModal()">
+                Close
             </button>
         </div>
+    </div>
+</div>
+
+<!-- Email Receipt Modal -->
+<div id="emailReceiptModal" class="modal-overlay" style="display:none;">
+    <div class="modal-panel" style="max-width: 480px; width: min(480px, 95%);">
+        <button class="modal-close" onclick="closeEmailReceiptModal()" aria-label="Close email receipt dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge accent">Send Receipt</span>
+            <h3>Email billing receipt</h3>
+            <p>Send the receipt summary and dentist signature to the patient's email.</p>
+        </div>
+
+        <form id="emailReceiptForm" class="modal-form">
+            <div class="form-grid">
+                <div class="form-group full-width">
+                    <label class="form-label" for="receiptEmail">Email Address <span class="required">*</span></label>
+                    <input type="email" id="receiptEmail" name="email" class="form-control" required placeholder="patient@example.com">
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-success btn-wide" id="sendReceiptBtn">
+                    <i class="fas fa-paper-plane"></i> Send Receipt
+                </button>
+                <button type="button" class="btn btn-link" onclick="closeEmailReceiptModal()">
+                    Cancel
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -1052,22 +1380,15 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         });
     });
 
-    // View Proof Image - show in modal (image) or open PDF in new tab
+    // View Proof PDF - opens PDF with appointment details, payment details, and proof image
     function viewProofPDF(paymentId) {
         if (!paymentId) {
             alert('Payment ID is missing. Cannot view proof image.');
             return;
         }
         const baseUrl = '<?php echo htmlspecialchars($viewProofImageUrl); ?>';
-        const imageUrl = baseUrl + '?payment_id=' + encodeURIComponent(paymentId) + '&format=image';
-        const modal = document.getElementById("imageModal");
-        const modalImg = document.getElementById("modalImage");
-        if (modal && modalImg) {
-            modalImg.src = imageUrl;
-            modal.style.display = "flex";
-        } else {
-            window.open(baseUrl + '?payment_id=' + encodeURIComponent(paymentId), '_blank', 'noopener,noreferrer');
-        }
+        // Open PDF directly (default format is PDF, includes appointment and payment details)
+        window.open(baseUrl + '?payment_id=' + encodeURIComponent(paymentId), '_blank', 'noopener,noreferrer');
     }
 
     // View Image (kept for backward compatibility if needed)
@@ -1120,6 +1441,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         const selectedDate = document.getElementById("filter-payment-date").value;
         const selectedStatus = document.getElementById("filter-payment-status").value.toLowerCase();
         const selectedMethod = document.getElementById("filter-payment-method").value.toLowerCase();
+        const searchText = (document.getElementById("filter-payment-search")?.value || "").toLowerCase().trim();
         const rows = document.querySelectorAll(".payment-row");
         
         const today = new Date();
@@ -1151,6 +1473,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             const rowDate = row.getAttribute("data-date");
             const rowStatus = row.getAttribute("data-status").toLowerCase();
             const rowMethod = row.getAttribute("data-method").toLowerCase();
+            const rowSearch = (row.getAttribute("data-search") || "").toLowerCase();
             
             let matchesDate = true;
             
@@ -1180,8 +1503,9 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             
             const matchesStatus = selectedStatus === "" || rowStatus === selectedStatus;
             const matchesMethod = selectedMethod === "" || rowMethod === selectedMethod;
+            const matchesSearch = searchText === "" || rowSearch.includes(searchText);
             
-            if (matchesDate && matchesStatus && matchesMethod) {
+            if (matchesDate && matchesStatus && matchesMethod && matchesSearch) {
                 visibleRows.push(row);
             } else {
                 row.style.display = "none";
@@ -1326,6 +1650,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         const selectedDate = document.getElementById("filter-payment-date").value;
         const selectedStatus = document.getElementById("filter-payment-status").value.toLowerCase();
         const selectedMethod = document.getElementById("filter-payment-method").value.toLowerCase();
+        const searchText = (document.getElementById("filter-payment-search")?.value || "").toLowerCase().trim();
         const rows = document.querySelectorAll(".payment-row");
         const visibleRows = [];
         
@@ -1356,6 +1681,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             const rowDate = row.getAttribute("data-date");
             const rowStatus = row.getAttribute("data-status").toLowerCase();
             const rowMethod = row.getAttribute("data-method").toLowerCase();
+            const rowSearch = (row.getAttribute("data-search") || "").toLowerCase();
             
             let matchesDate = true;
             
@@ -1385,8 +1711,9 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             
             const matchesStatus = selectedStatus === "" || rowStatus === selectedStatus;
             const matchesMethod = selectedMethod === "" || rowMethod === selectedMethod;
+            const matchesSearch = searchText === "" || rowSearch.includes(searchText);
             
-            if (matchesDate && matchesStatus && matchesMethod) {
+            if (matchesDate && matchesStatus && matchesMethod && matchesSearch) {
                 visibleRows.push(row);
             }
         });
@@ -1417,6 +1744,26 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
 
     function printPayments() {
         window.print();
+    }
+
+    function filterRefunds() {
+        const searchText = (document.getElementById("filter-refund-search")?.value || "").toLowerCase().trim();
+        const rows = document.querySelectorAll(".refund-row");
+
+        rows.forEach(row => {
+            const rowSearch = (row.getAttribute("data-search") || "").toLowerCase();
+            row.style.display = (searchText === "" || rowSearch.includes(searchText)) ? "table-row" : "none";
+        });
+    }
+
+    function filterAllTransactions() {
+        const searchText = (document.getElementById("filter-all-transactions-search")?.value || "").toLowerCase().trim();
+        const rows = document.querySelectorAll(".all-tx-row");
+
+        rows.forEach(row => {
+            const rowSearch = (row.getAttribute("data-search") || "").toLowerCase();
+            row.style.display = (searchText === "" || rowSearch.includes(searchText)) ? "table-row" : "none";
+        });
     }
 
     // Initialize pagination on page load
@@ -1482,6 +1829,61 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         div.textContent = text;
         return div.innerHTML;
     }
+
+    // Open receipt preview from All Transactions tab (embed invoice page as PDF-style preview)
+    function openReceiptModal(patientId, patientName, patientEmail, treatmentName, paymentMethod, transactionDate, appointmentFee, treatmentCost, totalAmount, appointmentId, treatmentId) {
+        const frame = document.getElementById('receiptFrame');
+        if (!frame) return;
+
+        const urlParams = new URLSearchParams();
+        if (appointmentId) urlParams.append('appointment_id', appointmentId);
+        if (patientId) urlParams.append('patient_id', patientId);
+        if (treatmentId) urlParams.append('treatment_id', treatmentId);
+
+        frame.src = 'invoice.php?' + urlParams.toString();
+
+        const modal = document.getElementById('receiptModal');
+        if (modal) modal.style.display = 'flex';
+
+        // Store minimal data for email sending
+        window.currentReceiptData = {
+            patientId,
+            patientName,
+            patientEmail,
+            treatmentName,
+            paymentMethod,
+            transactionDate,
+            appointmentFee,
+            treatmentCost,
+            totalAmount,
+            appointmentId,
+            treatmentId
+        };
+    }
+
+    function closeReceiptModal() {
+        const modal = document.getElementById('receiptModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function openEmailReceiptModal() {
+        const modal = document.getElementById('emailReceiptModal');
+        if (modal) modal.style.display = 'flex';
+        const emailInput = document.getElementById('receiptEmail');
+        if (emailInput) {
+            emailInput.value = (window.currentReceiptData && window.currentReceiptData.patientEmail)
+                ? window.currentReceiptData.patientEmail
+                : '';
+            if (!emailInput.value) {
+                emailInput.focus();
+            }
+        }
+    }
+
+    function closeEmailReceiptModal() {
+        const modal = document.getElementById('emailReceiptModal');
+        if (modal) modal.style.display = 'none';
+    }
     
     // View Bill Summary function
     function viewBillSummary(patientId, treatmentId, appointmentId, billStatusId = null, currentStatus = 'unpaid', totalAmount = 0) {
@@ -1504,16 +1906,33 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             // Calculate totals
             let totalTreatmentCost = 0;
             let totalAppointmentFee = 0;
+
+            const treatmentIdStr = treatmentId !== null && treatmentId !== undefined ? String(treatmentId) : '';
+            const appointmentIdStr = appointmentId !== null && appointmentId !== undefined ? String(appointmentId) : '';
             
-            if (treatmentData.status === 'success' && treatmentData.data) {
+            if (treatmentData.status === 'success' && Array.isArray(treatmentData.data)) {
                 treatmentData.data.forEach(treatment => {
-                    totalTreatmentCost += parseFloat(treatment.treatment_cost || 0);
+                    // Only compute totals for the selected treatment ID (when provided).
+                    if (treatmentIdStr) {
+                        const currentTreatmentId = treatment.treatment_id !== null && treatment.treatment_id !== undefined
+                            ? String(treatment.treatment_id)
+                            : '';
+                        if (currentTreatmentId !== treatmentIdStr) return;
+                    }
+                    totalTreatmentCost += parseFloat(treatment.treatment_cost || 0) || 0;
                 });
             }
-            
-            if (paymentData.status === 'success' && paymentData.data) {
+
+            if (paymentData.status === 'success' && Array.isArray(paymentData.data)) {
                 paymentData.data.forEach(payment => {
-                    totalAppointmentFee += parseFloat(payment.amount || 0);
+                    // Only compute totals for the selected appointment ID (when provided).
+                    if (appointmentIdStr) {
+                        const currentAppointmentId = payment.appointment_id !== null && payment.appointment_id !== undefined
+                            ? String(payment.appointment_id)
+                            : '';
+                        if (currentAppointmentId !== appointmentIdStr) return;
+                    }
+                    totalAppointmentFee += parseFloat(payment.amount || 0) || 0;
                 });
             }
             
@@ -1537,9 +1956,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                         </div>
                         <div id="billSummaryContent" style="padding: 20px;"></div>
                         <div style="padding: 15px 20px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 10px;">
-                            <button onclick="printBillSummary()" style="background: #374151; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px;">
-                                <i class="fas fa-print"></i> Print
-                            </button>
+                            
                             <button onclick="closeBillSummaryModal()" style="background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px;">
                                 <i class="fas fa-times"></i> Close
                             </button>
@@ -1556,6 +1973,11 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             month: 'long', 
             day: 'numeric' 
         });
+
+        const treatmentFee = totalTreatmentCost || 0;
+        const appointmentFee = totalAppointmentFee || 0;
+        // Remaining due after deducting the appointment fee paid during booking.
+        const totalDue = Math.max(0, treatmentFee - appointmentFee);
         
         let htmlContent = `
             <div style="margin-bottom: 25px;">
@@ -1591,8 +2013,17 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                     <tbody>
         `;
         
-        if (treatmentData.status === 'success' && treatmentData.data && treatmentData.data.length > 0) {
-            treatmentData.data.forEach((treatment) => {
+        const treatmentIdStr = treatmentId !== null && treatmentId !== undefined ? String(treatmentId) : '';
+        const appointmentIdStr = appointmentId !== null && appointmentId !== undefined ? String(appointmentId) : '';
+
+        const treatmentsToRender = (treatmentData.status === 'success' && Array.isArray(treatmentData.data))
+            ? (treatmentIdStr
+                ? treatmentData.data.filter(t => String(t.treatment_id ?? '') === treatmentIdStr)
+                : treatmentData.data)
+            : [];
+
+        if (treatmentsToRender.length > 0) {
+            treatmentsToRender.forEach((treatment) => {
                 // Format date like in image: "Jan 22, 2026 12:47 PM"
                 let formattedDate = 'N/A';
                 if (treatment.created_at) {
@@ -1628,7 +2059,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                     </tbody>
                 </table>
                 <div style="margin-top: 12px; text-align: right;">
-                    <span style="color: #374151; font-size: 14px;">Total Treatment Cost: <strong style="color: #059669;">₱${totalTreatmentCost.toFixed(2)}</strong></span>
+                    <span style="color: #374151; font-size: 14px;">Treatment Fee: <strong style="color: #059669;">₱${treatmentFee.toFixed(2)}</strong></span>
                 </div>
             </div>
             
@@ -1647,8 +2078,14 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                     <tbody>
         `;
         
-        if (paymentData.status === 'success' && paymentData.data && paymentData.data.length > 0) {
-            paymentData.data.forEach((payment) => {
+        const paymentsToRender = (paymentData.status === 'success' && Array.isArray(paymentData.data))
+            ? (appointmentIdStr
+                ? paymentData.data.filter(p => String(p.appointment_id ?? '') === appointmentIdStr)
+                : paymentData.data)
+            : [];
+
+        if (paymentsToRender.length > 0) {
+            paymentsToRender.forEach((payment) => {
                 const statusColor = payment.status === 'paid' ? '#10b981' : payment.status === 'pending' ? '#f59e0b' : '#ef4444';
                 // Format date like in image: "Dec 19, 2025"
                 let formattedDate = 'N/A';
@@ -1681,23 +2118,21 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             `;
         }
         
-        const grandTotal = totalTreatmentCost + totalAppointmentFee;
         const billStatus = currentStatus || 'unpaid';
         const statusColor = billStatus === 'paid' ? '#10b981' : '#ef4444';
-        const statusText = billStatus === 'paid' ? 'Paid' : 'Unpaid';
         
         htmlContent += `
                     </tbody>
                 </table>
                 <div style="margin-top: 12px; text-align: right;">
-                    <span style="color: #374151; font-size: 14px;">Total Appointment Fees: <strong style="color: #059669;">₱${totalAppointmentFee.toFixed(2)}</strong></span>
+                    <span style="color: #374151; font-size: 14px;">Appointment Fee (Deducted): <strong style="color: #ef4444;">-₱${appointmentFee.toFixed(2)}</strong></span>
                 </div>
             </div>
             
             <div style="padding: 15px; background: #f3f4f6; border-radius: 6px; margin-top: 20px; margin-bottom: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <strong style="color: #374151; font-size: 16px;">Total Amount:</strong>
-                    <strong style="color: #059669; font-size: 20px;">₱${grandTotal.toFixed(2)}</strong>
+                    <strong style="color: #374151; font-size: 16px;">Total Due (Remaining Balance):</strong>
+                    <strong style="color: #059669; font-size: 20px;">₱${totalDue.toFixed(2)}</strong>
                 </div>
             </div>
             
@@ -1709,13 +2144,13 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                     </span>
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button onclick="updateBillPaymentStatus('${patientId}', '${treatmentId || ''}', '${appointmentId || ''}', '${billStatusId || ''}', 'paid', ${grandTotal})" 
+                    <button onclick="updateBillPaymentStatus('${patientId}', '${treatmentId || ''}', '${appointmentId || ''}', '${billStatusId || ''}', 'paid', ${totalDue})" 
                             id="markPaidBtn"
                             style="background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; flex: 1; ${billStatus === 'paid' ? 'opacity: 0.6; cursor: not-allowed;' : ''}"
                             ${billStatus === 'paid' ? 'disabled' : ''}>
                         <i class="fas fa-check-circle"></i> Mark as Paid
                     </button>
-                    <button onclick="updateBillPaymentStatus('${patientId}', '${treatmentId || ''}', '${appointmentId || ''}', '${billStatusId || ''}', 'unpaid', ${grandTotal})" 
+                    <button onclick="updateBillPaymentStatus('${patientId}', '${treatmentId || ''}', '${appointmentId || ''}', '${billStatusId || ''}', 'unpaid', ${totalDue})" 
                             id="markUnpaidBtn"
                             style="background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; flex: 1; ${billStatus === 'unpaid' ? 'opacity: 0.6; cursor: not-allowed;' : ''}"
                             ${billStatus === 'unpaid' ? 'disabled' : ''}>
@@ -1731,7 +2166,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             treatmentId: treatmentId || '',
             appointmentId: appointmentId || '',
             billStatusId: billStatusId || '',
-            totalAmount: grandTotal
+            totalAmount: totalDue
         };
         
         content.innerHTML = htmlContent;
@@ -1743,6 +2178,63 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         if (modal) modal.style.display = 'none';
     }
     
+    // Handle send receipt email submission
+    document.getElementById('emailReceiptForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const emailInput = document.getElementById('receiptEmail');
+        const sendBtn = document.getElementById('sendReceiptBtn');
+        const email = emailInput.value.trim();
+        if (!email || !window.currentReceiptData) {
+            showNotification('error', 'Missing Information', 'Please enter a valid email address.');
+            return;
+        }
+        if (sendBtn && sendBtn.disabled) {
+            return; // prevent double-click / duplicate submissions
+        }
+
+        const originalBtnHtml = sendBtn ? sendBtn.innerHTML : '';
+        if (sendBtn) {
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        }
+
+        const formData = new FormData();
+        formData.append('email', email);
+        formData.append('patient_id', window.currentReceiptData.patientId || '');
+        formData.append('patient_name', window.currentReceiptData.patientName || '');
+        formData.append('treatment_name', window.currentReceiptData.treatmentName || '');
+        formData.append('payment_method', window.currentReceiptData.paymentMethod || '');
+        formData.append('transaction_date', window.currentReceiptData.transactionDate || '');
+        formData.append('appointment_fee', window.currentReceiptData.appointmentFee || 0);
+        formData.append('treatment_cost', window.currentReceiptData.treatmentCost || 0);
+        formData.append('total_amount', window.currentReceiptData.totalAmount || 0);
+        formData.append('appointment_id', window.currentReceiptData.appointmentId || '');
+
+        fetch('../controllers/sendReceiptEmail.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('success', 'Receipt Sent', data.message || 'The receipt has been emailed successfully.');
+                closeEmailReceiptModal();
+            } else {
+                showNotification('error', 'Error', data.message || 'Failed to send receipt. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error sending receipt email:', error);
+            showNotification('error', 'Error', 'An error occurred while sending the receipt email.');
+        })
+        .finally(() => {
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = originalBtnHtml;
+            }
+        });
+    });
+
     // Update Bill Payment Status
     function updateBillPaymentStatus(patientId, treatmentId, appointmentId, billStatusId, newStatus, totalAmount) {
         if (!confirm(`Are you sure you want to mark this bill as ${newStatus.toUpperCase()}?`)) {
@@ -1975,11 +2467,116 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         if (modal) modal.style.display = 'none';
     }
 
+    // ==================== DELETE FLOW (Refund Requests / All Transactions) ====================
+    let pendingDelete = { type: '', id: '' };
+
+    function openDeleteConfirmModal(type, button) {
+        const modal = document.getElementById('deleteConfirmModal');
+        const title = document.getElementById('deleteConfirmTitle');
+        const message = document.getElementById('deleteConfirmMessage');
+        const confirmBtn = document.getElementById('deleteConfirmBtn');
+        if (!modal || !title || !message || !confirmBtn) return;
+
+        if (type === 'refund') {
+            const refundId = button.getAttribute('data-refund-id') || '';
+            if (!refundId) {
+                showNotification('error', 'Error', 'Refund request ID not found.');
+                return;
+            }
+            pendingDelete = { type: 'refund', id: refundId };
+            title.textContent = 'Delete refund request?';
+            message.textContent = `Refund request #${refundId} will be removed. This action cannot be undone.`;
+            confirmBtn.innerHTML = '<i class="fas fa-trash"></i> Delete';
+        } else if (type === 'transaction') {
+            const treatmentId = button.getAttribute('data-treatment-id') || '';
+            if (!treatmentId) {
+                showNotification('error', 'Error', 'Transaction treatment ID not found.');
+                return;
+            }
+            const appointmentId = button.getAttribute('data-appointment-id') || '';
+            pendingDelete = { type: 'transaction', id: treatmentId, appointmentId: appointmentId };
+            title.textContent = 'Archive transaction?';
+            message.textContent = 'Are you sure do you want to archieve the other related transaction will also arhieve to avoid cause of conflict';
+            confirmBtn.innerHTML = '<i class="fa-solid fa-box-archive"></i> Archive';
+        } else {
+            return;
+        }
+
+        confirmBtn.onclick = executeDelete;
+        modal.style.display = 'flex';
+    }
+
+    function closeDeleteConfirmModal() {
+        const modal = document.getElementById('deleteConfirmModal');
+        if (modal) modal.style.display = 'none';
+        pendingDelete = { type: '', id: '', appointmentId: '' };
+    }
+
+    function executeDelete() {
+        if (!pendingDelete.type || !pendingDelete.id) return;
+        const confirmBtn = document.getElementById('deleteConfirmBtn');
+        const originalBtn = confirmBtn ? confirmBtn.innerHTML : '';
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        }
+
+        let endpoint = '';
+        const formData = new FormData();
+        if (pendingDelete.type === 'refund') {
+            endpoint = '../controllers/deleteRefundRequest.php';
+            formData.append('refund_id', pendingDelete.id);
+        } else {
+            endpoint = '../controllers/deleteAllTransaction.php';
+            formData.append('treatment_id', pendingDelete.id);
+            formData.append('appointment_id', pendingDelete.appointmentId || '');
+        }
+
+        fetch(endpoint, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                closeDeleteConfirmModal();
+                if (pendingDelete.type === 'transaction') {
+                    showNotification('success', 'Archived', data.message || 'Record archived successfully.');
+                    const rowButton = document.querySelector(`.all-tx-row button[data-treatment-id="${pendingDelete.id}"]`);
+                    const row = rowButton ? rowButton.closest('.all-tx-row') : null;
+                    if (row) {
+                        row.remove();
+                    }
+                } else {
+                    showNotification('success', 'Deleted', data.message || 'Refund request deleted successfully.');
+                    setTimeout(() => location.reload(), 900);
+                }
+            } else {
+                showNotification('error', 'Delete Failed', data.message || 'Unable to delete record.');
+            }
+        })
+        .catch(error => {
+            console.error(error);
+            showNotification('error', 'Error', 'An error occurred while deleting.');
+        })
+        .finally(() => {
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = originalBtn;
+            }
+        });
+    }
+
     // Close refund details modal when clicking outside
     window.addEventListener("click", function(event) {
         const refundModal = document.getElementById("refundDetailsModal");
         if (event.target === refundModal) {
             closeRefundDetailsModal();
+        }
+        const deleteModal = document.getElementById("deleteConfirmModal");
+        if (event.target === deleteModal) {
+            closeDeleteConfirmModal();
         }
     });
 

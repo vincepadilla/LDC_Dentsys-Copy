@@ -1,16 +1,36 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
+
 
 $sql = "SELECT a.appointment_id, p.patient_id, p.first_name, p.last_name, s.service_category, s.sub_service,
                d.first_name as dentist_first, d.last_name as dentist_last,
-               a.appointment_date, a.appointment_time, a.status, a.branch, a.request_note
+               a.appointment_date, a.appointment_time, a.status, a.branch, a.request_note, a.service_id, a.team_id
         FROM appointments a
         LEFT JOIN patient_information p ON a.patient_id = p.patient_id
         LEFT JOIN services s ON a.service_id = s.service_id
         LEFT JOIN multidisciplinary_dental_team d ON a.team_id = d.team_id
+        WHERE COALESCE(a.is_archived, 0) = 0 AND LOWER(COALESCE(a.status, '')) != 'archived'
         ORDER BY a.appointment_date ASC";
 $result = mysqli_query($con, $sql);
+
+// Get all services for follow-up modal
+$servicesSql = "SELECT service_id, service_category, sub_service FROM services ORDER BY service_category, service_id";
+$servicesResult = mysqli_query($con, $servicesSql);
+$patientsSql = "SELECT patient_id, first_name, last_name FROM patient_information ORDER BY first_name, last_name";
+$patientsResult = mysqli_query($con, $patientsSql);
+$dentistsSql = "SELECT team_id, first_name, last_name FROM multidisciplinary_dental_team WHERE status = 'active' ORDER BY first_name, last_name";
+$dentistsResult = mysqli_query($con, $dentistsSql);
+$defaultDentistId = '';
+$defaultDentistName = '';
+if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
+    $firstDentist = mysqli_fetch_assoc($dentistsResult);
+    if ($firstDentist) {
+        $defaultDentistId = $firstDentist['team_id'] ?? '';
+        $defaultDentistName = 'Dr. ' . trim(($firstDentist['first_name'] ?? '') . ' ' . ($firstDentist['last_name'] ?? ''));
+    }
+    mysqli_data_seek($dentistsResult, 0);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -31,6 +51,59 @@ $result = mysqli_query($con, $sql);
 <!-- Notification Container -->
 <div class="notification-container" id="notificationContainer"></div>
 
+<!-- Centered Alert Modal (Appointments) -->
+<style>
+    #aptCenterAlertModal.modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.65);
+        z-index: 10050;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+    }
+    #aptCenterAlertModal .modal-panel {
+        background: #fff;
+        width: min(520px, 92%);
+        border-radius: 16px;
+        padding: 24px 24px 20px 24px;
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+        position: relative;
+        animation: aptAlertIn 0.2s ease-out;
+    }
+    #aptCenterAlertModal .modal-heading h3 {
+        margin: 0 0 6px 0;
+        font-size: 18px;
+        color: #111827;
+    }
+    #aptCenterAlertModal .modal-body {
+        color: #4b5563;
+        font-size: 14px;
+    }
+    #aptCenterAlertModal .modal-actions {
+        margin-top: 18px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+    @keyframes aptAlertIn {
+        from { opacity: 0; transform: scale(0.96); }
+        to { opacity: 1; transform: scale(1); }
+    }
+</style>
+<div id="aptCenterAlertModal" class="modal-overlay">
+    <div class="modal-panel">
+        <div class="modal-heading">
+            <h3 id="aptCenterAlertTitle">Notice</h3>
+        </div>
+        <div class="modal-body" id="aptCenterAlertMessage">Message</div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-success" onclick="closeAptCenterAlert()">OK</button>
+        </div>
+    </div>
+</div>
+
 <div class="main-content">
     <div class="container">
         <a href="../views/admin.php" class="back-button" onclick="navigateBack(event)">
@@ -42,7 +115,7 @@ $result = mysqli_query($con, $sql);
         <!-- Action Buttons -->
         <div class="action-buttons-container" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 30px;">
             <button class="btn btn-primary" onclick="openAddAppointmentModal()">
-                <i class="fas fa-plus-circle"></i> Add New Appointment
+                <i class="fas fa-plus-circle"></i> Add Appointment
             </button>
             <button class="btn btn-accent" onclick="printAppointments()">
                 <i class="fas fa-print"></i> Print Appointments
@@ -73,6 +146,14 @@ $result = mysqli_query($con, $sql);
                     <option value="cancelled">Cancelled</option>
                     <option value="no-show">No-Show</option>
                 </select> 
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-search"><i class="fas fa-search"></i> Search:</label>
+                <input type="text"
+                       id="filter-search"
+                       placeholder="Appointment ID, patient name, service"
+                       oninput="filterAppointments()">
             </div>
         </div>
 
@@ -105,7 +186,9 @@ $result = mysqli_query($con, $sql);
                             data-appointment-time="<?php echo htmlspecialchars($row['appointment_time']); ?>"
                             data-dentist="<?php echo htmlspecialchars(trim($row['dentist_first'] . ' ' . $row['dentist_last'])); ?>"
                             data-request-note="<?php echo htmlspecialchars($row['request_note']); ?>"
-                            data-branch="<?php echo htmlspecialchars($row['branch']); ?>">
+                            data-branch="<?php echo htmlspecialchars($row['branch']); ?>"
+                            data-service-id="<?php echo htmlspecialchars($row['service_id'] ?? ''); ?>"
+                            data-team-id="<?php echo htmlspecialchars($row['team_id'] ?? ''); ?>">
                             <td><?php echo htmlspecialchars($row['appointment_id']); ?></td>
                             <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                             <td><?php echo htmlspecialchars($row['sub_service']); ?></td>
@@ -136,17 +219,13 @@ $result = mysqli_query($con, $sql);
                                         <i class="fas fa-calendar-alt"></i>
                                     </a>
 
-                                    <button type="button" class="action-btn btn-danger" title="Cancel"
-                                        data-appointment-id="<?php echo $row['appointment_id']; ?>"
-                                        onclick="cancelAppointmentByAdmin(this)">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-
+                                    <?php if (strtolower($row['status']) !== 'completed'): ?>
                                     <button type="button" class="action-btn btn-danger" title="No-Show"
                                         data-appointment-id="<?php echo $row['appointment_id']; ?>"
                                         onclick="markNoShow(this)">
                                         <i class="fa-regular fa-eye-slash"></i>
                                     </button>
+                                    <?php endif; ?>
                                     <?php else: ?>
                                     <a href="#" 
                                         class="action-btn btn-accent <?php echo (in_array(strtolower($row['status']), ['completed', 'cancelled', 'no-show']) ? 'disabled-action' : ''); ?>" 
@@ -157,12 +236,20 @@ $result = mysqli_query($con, $sql);
                                         <i class="fas fa-calendar-alt"></i>
                                     </a>
 
+                                    <?php if (strtolower($row['status']) !== 'completed'): ?>
                                     <button type="button" class="action-btn btn-completed" title="Mark as Completed"
                                         data-patientid="<?php echo htmlspecialchars($row['patient_id']); ?>"
                                         data-appointmentid="<?php echo htmlspecialchars($row['appointment_id']); ?>"
                                         onclick="openCompleteAppointmentModal(this)">
                                         <i class="fa-solid fa-calendar-check"></i>
                                     </button>
+                                    <?php else: ?>
+                                    <button type="button" class="action-btn btn-archive" title="Archive"
+                                        data-appointment-id="<?php echo htmlspecialchars($row['appointment_id']); ?>"
+                                        onclick="archiveAppointment(this)">
+                                        <i class="fa-solid fa-box-archive"></i>
+                                    </button>
+                                    <?php endif; ?>
 
                                     <?php if (strtolower($row['status']) === 'completed'): ?>
                                     <button type="button" class="action-btn btn-followup" title="Follow-Up"
@@ -174,11 +261,13 @@ $result = mysqli_query($con, $sql);
                                     </button>
                                     <?php endif; ?>
 
+                                    <?php if (strtolower($row['status']) !== 'completed'): ?>
                                     <button type="button" class="action-btn btn-danger" title="No-Show"
                                         data-appointment-id="<?php echo $row['appointment_id']; ?>"
                                         onclick="markNoShow(this)">
                                         <i class="fa-regular fa-eye-slash"></i>
                                     </button>
+                                    <?php endif; ?>
                                     <?php endif; ?>
                                 </div>
                             </td>
@@ -217,7 +306,9 @@ $result = mysqli_query($con, $sql);
                      data-appointment-time="<?php echo htmlspecialchars($row['appointment_time']); ?>"
                      data-dentist="<?php echo htmlspecialchars(trim($row['dentist_first'] . ' ' . $row['dentist_last'])); ?>"
                      data-request-note="<?php echo htmlspecialchars($row['request_note']); ?>"
-                     data-branch="<?php echo htmlspecialchars($row['branch']); ?>">
+                     data-branch="<?php echo htmlspecialchars($row['branch']); ?>"
+                     data-service-id="<?php echo htmlspecialchars($row['service_id'] ?? ''); ?>"
+                     data-team-id="<?php echo htmlspecialchars($row['team_id'] ?? ''); ?>">
                     <div class="appointment-card-header">
                         <div>
                             <div class="appointment-card-id">Appointment #<?php echo htmlspecialchars($row['appointment_id']); ?></div>
@@ -260,11 +351,6 @@ $result = mysqli_query($con, $sql);
                             title="Reschedule">
                             <i class="fas fa-calendar-alt"></i> Reschedule
                         </a>
-                        <button type="button" class="action-btn btn-danger" title="Cancel"
-                            data-appointment-id="<?php echo $row['appointment_id']; ?>"
-                            onclick="cancelAppointmentByAdmin(this)">
-                            <i class="fas fa-times"></i> Cancel
-                        </button>
                         <button type="button" class="action-btn btn-danger" title="No-Show"
                             data-appointment-id="<?php echo $row['appointment_id']; ?>"
                             onclick="markNoShow(this)">
@@ -279,12 +365,20 @@ $result = mysqli_query($con, $sql);
                             title="<?php echo (in_array(strtolower($row['status']), ['completed', 'cancelled', 'no-show']) ? 'Cannot reschedule this appointment' : 'Reschedule'); ?>">
                             <i class="fas fa-calendar-alt"></i> Reschedule
                         </a>
+                        <?php if (strtolower($row['status']) !== 'completed'): ?>
                         <button type="button" class="action-btn btn-completed" title="Mark as Completed"
                             data-patientid="<?php echo htmlspecialchars($row['patient_id']); ?>"
                             data-appointmentid="<?php echo htmlspecialchars($row['appointment_id']); ?>"
                             onclick="openCompleteAppointmentModal(this)">
                             <i class="fa-solid fa-calendar-check"></i> Complete
                         </button>
+                        <?php else: ?>
+                        <button type="button" class="action-btn btn-archive" title="Archive"
+                            data-appointment-id="<?php echo htmlspecialchars($row['appointment_id']); ?>"
+                            onclick="archiveAppointment(this)">
+                            <i class="fa-solid fa-box-archive"></i> Archive
+                        </button>
+                        <?php endif; ?>
                         <?php if (strtolower($row['status']) === 'completed'): ?>
                         <button type="button" class="action-btn btn-followup" title="Follow-Up"
                             data-appointment-id="<?php echo htmlspecialchars($row['appointment_id']); ?>"
@@ -294,11 +388,13 @@ $result = mysqli_query($con, $sql);
                             <i class="fa-solid fa-arrow-right"></i> Follow-Up
                         </button>
                         <?php endif; ?>
+                        <?php if (strtolower($row['status']) !== 'completed'): ?>
                         <button type="button" class="action-btn btn-danger" title="No-Show"
                             data-appointment-id="<?php echo $row['appointment_id']; ?>"
                             onclick="markNoShow(this)">
                             <i class="fa-regular fa-eye-slash"></i> No-Show
                         </button>
+                        <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -387,193 +483,425 @@ $result = mysqli_query($con, $sql);
     </div>
 </div>
 
-<!-- Reschedule Modal -->
-<div id="reschedModal" class="modal reschedule-modal" style="display: none;">
-    <div class="modal-content reschedule-modal-content">
-        <div class="reschedule-modal-header">
-            <h3><i class="fas fa-calendar-alt"></i> Reschedule Appointment</h3>
-            <span class="close" onclick="closeReschedModal()">&times;</span>
-        </div>
-        
-        <div class="reschedule-modal-body">
-            <!-- Left Side: Current Appointment Info -->
-            <div class="reschedule-left-panel">
-                <div class="current-appointment-info" id="currentAppointmentInfo">
-                    <div class="info-header">
-                        <i class="fas fa-info-circle"></i> Current Appointment Details
-                    </div>
-                    <div class="info-content">
-                        <div class="info-item">
-                            <div class="info-icon">
-                                <i class="fas fa-user"></i>
-                            </div>
-                            <div class="info-details">
-                                <span class="info-label">Patient Name</span>
-                                <span class="info-value" id="currentPatientName">-</span>
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-icon">
-                                <i class="fas fa-tooth"></i>
-                            </div>
-                            <div class="info-details">
-                                <span class="info-label">Service</span>
-                                <span class="info-value" id="currentService">-</span>
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-icon">
-                                <i class="fas fa-calendar-day"></i>
-                            </div>
-                            <div class="info-details">
-                                <span class="info-label">Current Date</span>
-                                <span class="info-value" id="currentDate">-</span>
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-icon">
-                                <i class="fas fa-clock"></i>
-                            </div>
-                            <div class="info-details">
-                                <span class="info-label">Current Time</span>
-                                <span class="info-value" id="currentTime">-</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+<!-- Add Appointment Modal -->
+<div id="addAppointmentModal" class="modal treatment-modal" style="display: none;">
+    <div class="modal-content treatment-modal-content">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Add Appointment</span>
+                </h3>
+                <span class="close" onclick="closeAddAppointmentModal()" aria-label="Close add appointment modal">&times;</span>
             </div>
-            
-            <!-- Right Side: Reschedule Form -->
-            <div class="reschedule-right-panel">
-                <form id="rescheduleForm" onsubmit="handleRescheduleSubmit(event)">
-                    <input type="hidden" id="modalAppointmentID" name="appointment_id">
-                    
-                    <div class="form-group">
-                        <label for="new_date_resched">
-                            <i class="fas fa-calendar-day"></i> Select New Date:
-                        </label>
-                        <input type="date" 
-                               id="new_date_resched" 
-                               name="new_date_resched" 
-                               required 
-                               min="<?= date('Y-m-d') ?>" 
-                               onchange="loadBookedSlots()"
-                               class="form-input">
-                        <small class="form-help">Please select a date from today onwards</small>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="new_time_resched">
-                            <i class="fas fa-clock"></i> Select New Time Slot:
-                        </label>
-                        <select id="new_time_resched" name="new_time_slot" required class="form-input">
-                            <option value="">-- Select Time Slot --</option>
-                            <option value="firstBatch" data-slot="8:00AM-9:00AM">Morning (8:00AM-9:00AM)</option>
-                            <option value="secondBatch" data-slot="9:00AM-10:00AM">Morning (9:00AM-10:00AM)</option>
-                            <option value="thirdBatch" data-slot="10:00AM-11:00AM">Morning (10:00AM-11:00AM)</option>
-                            <option value="fourthBatch" data-slot="11:00AM-12:00PM">Afternoon (11:00AM-12:00PM)</option>
-                            <option value="fifthBatch" data-slot="1:00PM-2:00PM">Afternoon (1:00PM-2:00PM)</option>
-                            <option value="sixthBatch" data-slot="2:00PM-3:00PM">Afternoon (2:00PM-3:00PM)</option>
-                            <option value="sevenBatch" data-slot="3:00PM-4:00PM">Afternoon (3:00PM-4:00PM)</option>
-                            <option value="eightBatch" data-slot="4:00PM-5:00PM">Afternoon (4:00PM-5:00PM)</option>
-                            <option value="nineBatch" data-slot="5:00PM-6:00PM">Afternoon (5:00PM-6:00PM)</option>
-                            <option value="tenBatch" data-slot="6:00PM-7:00PM">Evening (6:00PM-7:00PM)</option>
-                            <option value="lastBatch" data-slot="7:00PM-8:00PM">Evening (7:00PM-8:00PM)</option>
-                        </select>
-                        <small class="form-help" id="timeSlotHelp">Booked slots will be disabled automatically</small>
-                        <div id="loadingSlots" class="loading-indicator" style="display: none;">
-                            <i class="fas fa-spinner fa-spin"></i> Loading available slots...
+            <div class="modal-body treatment-body">
+                <form id="addAppointmentForm" onsubmit="handleAddAppointmentSubmit(event)">
+                    <div class="add-appointment-layout">
+                        <div class="add-appointment-column">
+                            <div class="add-appointment-panel">
+                                <h4 class="add-appointment-panel-title">Appointment Information</h4>
+                                <div class="appointment-info-grid">
+                                    <div class="treatment-group form-group">
+                                        <label>Patient ID <span class="required">*</span></label>
+                                        <select id="add_patient_id" name="patient_id" required onchange="handleAddPatientSelection()">
+                                            <option value="">-- Select Patient --</option>
+                                            <?php if ($patientsResult && mysqli_num_rows($patientsResult) > 0): ?>
+                                                <?php while ($patient = mysqli_fetch_assoc($patientsResult)): ?>
+                                                    <?php $fullName = trim(($patient['first_name'] ?? '') . ' ' . ($patient['last_name'] ?? '')); ?>
+                                                    <option value="<?php echo htmlspecialchars($patient['patient_id']); ?>" data-patient-name="<?php echo htmlspecialchars($fullName); ?>">
+                                                        <?php echo htmlspecialchars($patient['patient_id'] . ' - ' . $fullName); ?>
+                                                    </option>
+                                                <?php endwhile; ?>
+                                            <?php endif; ?>
+                                        </select>
+                                    </div>
+
+                                    <div class="treatment-group form-group">
+                                        <label>Patient Details</label>
+                                        <input type="text" id="add_patient_details" value="" placeholder="Patient details will appear here" readonly disabled>
+                                        <small class="form-help">Auto-filled after selecting Patient ID</small>
+                                    </div>
+
+                                    <div class="treatment-group form-group">
+                                        <label>Service <span class="required">*</span></label>
+                                        <select id="add_service_id" name="service_id" required disabled>
+                                            <option value="">-- Select Service --</option>
+                                            <?php
+                                            mysqli_data_seek($servicesResult, 0);
+                                            if(mysqli_num_rows($servicesResult) > 0) {
+                                                while ($service = mysqli_fetch_assoc($servicesResult)) {
+                                                    $serviceDisplay = !empty($service['sub_service']) ? $service['sub_service'] : $service['service_category'];
+                                            ?>
+                                                <option value="<?php echo htmlspecialchars($service['service_id']); ?>">
+                                                    <?php echo htmlspecialchars($service['service_category'] . ' - ' . $serviceDisplay); ?>
+                                                </option>
+                                            <?php
+                                                }
+                                            }
+                                            ?>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="reschedule_reason">
-                            <i class="fas fa-comment-alt"></i> Reason for Rescheduling:
-                        </label>
-                        <textarea id="reschedule_reason" 
-                                  name="reschedule_reason" 
-                                  class="form-input" 
-                                  rows="4" 
-                                  placeholder="Please provide a reason for rescheduling this appointment (e.g., Dentist availability, Schedule conflict, etc.)"
-                                  required></textarea>
-                        <small class="form-help">This reason will be included in the patient notification email</small>
+                        <div class="add-appointment-column">
+                            <div class="add-appointment-panel">
+                                <h4 class="add-appointment-panel-title">Schedule Details</h4>
+                                <div class="appointment-info-grid">
+                                    <div class="treatment-group form-group">
+                                        <label>Dentist</label>
+                                        <input type="text" value="<?php echo htmlspecialchars($defaultDentistName ?: 'Assigned by system'); ?>" readonly disabled>
+                                        <input type="hidden" id="add_team_id" name="team_id" value="<?php echo htmlspecialchars($defaultDentistId); ?>" required disabled>
+                                    </div>
+
+                                    <div class="treatment-group form-group">
+                                        <label>Branch <span class="required">*</span></label>
+                                        <select id="add_branch" name="branch" required disabled>
+                                            <option value="">-- Select Branch --</option>
+                                            <option value="Comembo Branch">Comembo Branch</option>
+                                            <option value="Taytay Rizal Branch">Taytay Rizal Branch</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="treatment-group form-group">
+                                        <label>Preferred Date <span class="required">*</span></label>
+                                        <input type="date" id="add_appointment_date" name="appointment_date" required min="<?= date('Y-m-d') ?>" disabled onchange="loadAddAppointmentBookedSlots()">
+                                        <small class="form-help">Please select a date from today onwards</small>
+                                    </div>
+
+                                    <div class="treatment-group form-group">
+                                        <label>Preferred Time Slot <span class="required">*</span></label>
+                                        <select id="add_time_slot" name="time_slot" required disabled>
+                                            <option value="">-- Select Time Slot --</option>
+                                            <option value="firstBatch" data-slot="8:00AM-9:00AM" data-label="Morning (8:00AM-9:00AM)">Morning (8:00AM-9:00AM)</option>
+                                            <option value="secondBatch" data-slot="9:00AM-10:00AM" data-label="Morning (9:00AM-10:00AM)">Morning (9:00AM-10:00AM)</option>
+                                            <option value="thirdBatch" data-slot="10:00AM-11:00AM" data-label="Morning (10:00AM-11:00AM)">Morning (10:00AM-11:00AM)</option>
+                                            <option value="fourthBatch" data-slot="11:00AM-12:00PM" data-label="Afternoon (11:00AM-12:00PM)">Afternoon (11:00AM-12:00PM)</option>
+                                            <option value="fifthBatch" data-slot="1:00PM-2:00PM" data-label="Afternoon (1:00PM-2:00PM)">Afternoon (1:00PM-2:00PM)</option>
+                                            <option value="sixthBatch" data-slot="2:00PM-3:00PM" data-label="Afternoon (2:00PM-3:00PM)">Afternoon (2:00PM-3:00PM)</option>
+                                            <option value="sevenBatch" data-slot="3:00PM-4:00PM" data-label="Afternoon (3:00PM-4:00PM)">Afternoon (3:00PM-4:00PM)</option>
+                                            <option value="eightBatch" data-slot="4:00PM-5:00PM" data-label="Afternoon (4:00PM-5:00PM)">Afternoon (4:00PM-5:00PM)</option>
+                                            <option value="nineBatch" data-slot="5:00PM-6:00PM" data-label="Afternoon (5:00PM-6:00PM)">Afternoon (5:00PM-6:00PM)</option>
+                                            <option value="tenBatch" data-slot="6:00PM-7:00PM" data-label="Evening (6:00PM-7:00PM)">Evening (6:00PM-7:00PM)</option>
+                                            <option value="lastBatch" data-slot="7:00PM-8:00PM" data-label="Evening (7:00PM-8:00PM)">Evening (7:00PM-8:00PM)</option>
+                                        </select>
+                                        <small class="form-help" id="addTimeSlotHelp">Select patient and date first</small>
+                                        <div id="loadingAddSlots" class="loading-indicator" style="display: none;">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading available slots...
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
+
+            <div class="treatment-footer modal-footer">
+                <div class="modal-actions">
+                    <button type="button" onclick="closeAddAppointmentModal()" class="btn modal-close-btn">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="submit" form="addAppointmentForm" class="btn btn-success" id="addAppointmentSubmitBtn">
+                        <i class="fas fa-check"></i> Add Appointment
+                    </button>
+                </div>
+            </div>
         </div>
-        
-        <!-- Action Buttons Footer - Always Visible -->
-        <div class="reschedule-modal-footer">
-            <div class="reschedule-modal-actions">
-                <button type="button" onclick="closeReschedModal()" class="btn modal-close-btn">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-                <button type="submit" form="rescheduleForm" class="btn btn-success" id="rescheduleSubmitBtn">
-                    <i class="fas fa-check"></i> Confirm Reschedule
-                </button>
+    </div>
+</div>
+
+<!-- Reschedule Modal -->
+<div id="reschedModal" class="modal treatment-modal" style="display: none;">
+    <div class="modal-content treatment-modal-content">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>Reschedule Appointment</span>
+                </h3>
+                <span class="close" onclick="closeReschedModal()" aria-label="Close reschedule modal">&times;</span>
+            </div>
+
+            <div class="modal-body treatment-body">
+                <div class="reschedule-content-grid">
+                    <!-- Left Side: Current Appointment Info -->
+                    <div class="reschedule-current-info">
+                        <div class="current-appointment-section">
+                            <h4>Current Appointment</h4>
+                            <div class="appointment-info-grid">
+                                <div class="treatment-group form-group">
+                                    <label>Patient Name</label>
+                                    <input type="text" id="currentPatientName" readonly>
+                                </div>
+                                <div class="treatment-group form-group">
+                                    <label>Service</label>
+                                    <input type="text" id="currentService" readonly>
+                                </div>
+                                <div class="treatment-group form-group">
+                                    <label>Current Date</label>
+                                    <input type="text" id="currentDate" readonly>
+                                </div>
+                                <div class="treatment-group form-group">
+                                    <label>Current Time</label>
+                                    <input type="text" id="currentTime" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Side: Reschedule Form -->
+                    <div class="reschedule-form-section">
+                        <form id="rescheduleForm" onsubmit="handleRescheduleSubmit(event)">
+                            <input type="hidden" id="modalAppointmentID" name="appointment_id">
+                            <input type="hidden" id="modalHasRequestNote" value="0">
+                            <input type="hidden" name="reschedule_source" value="admin">
+                            
+                            <div class="appointment-info-grid">
+                                <div class="treatment-group form-group">
+                                    <label>New Date <span class="required">*</span></label>
+                                    <input type="date" 
+                                           id="new_date_resched" 
+                                           name="new_date_resched" 
+                                           required 
+                                           min="<?= date('Y-m-d') ?>" 
+                                           onchange="loadBookedSlots()">
+                                    <small class="form-help">Please select a date from today onwards</small>
+                                </div>
+
+                                <div class="treatment-group form-group">
+                                    <label>New Time Slot <span class="required">*</span></label>
+                                    <select id="new_time_resched" name="new_time_slot" required disabled>
+                                        <option value="">-- Select Time Slot --</option>
+                                        <option value="firstBatch" data-slot="8:00AM-9:00AM">Morning (8:00AM-9:00AM)</option>
+                                        <option value="secondBatch" data-slot="9:00AM-10:00AM">Morning (9:00AM-10:00AM)</option>
+                                        <option value="thirdBatch" data-slot="10:00AM-11:00AM">Morning (10:00AM-11:00AM)</option>
+                                        <option value="fourthBatch" data-slot="11:00AM-12:00PM">Afternoon (11:00AM-12:00PM)</option>
+                                        <option value="fifthBatch" data-slot="1:00PM-2:00PM">Afternoon (1:00PM-2:00PM)</option>
+                                        <option value="sixthBatch" data-slot="2:00PM-3:00PM">Afternoon (2:00PM-3:00PM)</option>
+                                        <option value="sevenBatch" data-slot="3:00PM-4:00PM">Afternoon (3:00PM-4:00PM)</option>
+                                        <option value="eightBatch" data-slot="4:00PM-5:00PM">Afternoon (4:00PM-5:00PM)</option>
+                                        <option value="nineBatch" data-slot="5:00PM-6:00PM">Afternoon (5:00PM-6:00PM)</option>
+                                        <option value="tenBatch" data-slot="6:00PM-7:00PM">Evening (6:00PM-7:00PM)</option>
+                                        <option value="lastBatch" data-slot="7:00PM-8:00PM">Evening (7:00PM-8:00PM)</option>
+                                    </select>
+                                    <small class="form-help" id="timeSlotHelp">Please select a date first</small>
+                                    <small class="form-help" id="twoSlotHint" style="display:none; color:#4b5563;">This appointment has a request note and requires 2 consecutive time slots.</small>
+                                    <div id="loadingSlots" class="loading-indicator" style="display: none;">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading available slots...
+                                    </div>
+                                </div>
+
+                                <div class="treatment-group form-group appointment-info-notes">
+                                    <label>Reason for Rescheduling <span class="required">*</span></label>
+                                    <textarea id="reschedule_reason" 
+                                              name="reschedule_reason" 
+                                              rows="4" 
+                                              placeholder="Please provide a reason for rescheduling this appointment (e.g., Dentist availability, Schedule conflict, etc.)"
+                                              required></textarea>
+                                    <small class="form-help">This reason will be included in the patient notification email</small>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="treatment-footer modal-footer">
+                <div class="modal-actions">
+                    <button type="button" onclick="closeReschedModal()" class="btn modal-close-btn">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="submit" form="rescheduleForm" class="btn btn-success" id="rescheduleSubmitBtn">
+                        <i class="fas fa-check"></i> Confirm Reschedule
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Complete Appointment Modal -->
+<style>
+    /* Keep Complete Appointment modal layout responsive (match Reschedule behavior) */
+    #complete-appointment-modal .complete-appointment-two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+    }
+    #complete-appointment-modal .complete-appointment-column-card {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 20px;
+    }
+    @media (max-width: 768px) {
+        #complete-appointment-modal .complete-appointment-two-col {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Archive confirmation popup with smooth entry animation */
+    #archiveConfirmModal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(17, 24, 39, 0.55);
+        z-index: 1200;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    }
+    #archiveConfirmModal.show {
+        display: flex;
+    }
+    #archiveConfirmModal .archive-confirm-card {
+        width: 100%;
+        max-width: 460px;
+        background: #ffffff;
+        border-radius: 14px;
+        box-shadow: 0 20px 45px rgba(0, 0, 0, 0.2);
+        padding: 22px;
+        animation: archiveConfirmPop 0.25s ease-out;
+    }
+    #archiveConfirmModal .archive-confirm-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+    #archiveConfirmModal .archive-confirm-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #b45309;
+        background: #fef3c7;
+        font-size: 18px;
+    }
+    #archiveConfirmModal .archive-confirm-title {
+        margin: 0;
+        color: #111827;
+        font-size: 18px;
+        font-weight: 600;
+    }
+    #archiveConfirmModal .archive-confirm-message {
+        margin: 8px 0 18px;
+        color: #4b5563;
+        line-height: 1.45;
+    }
+    #archiveConfirmModal .archive-confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+    @keyframes archiveConfirmPop {
+        from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.97);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+</style>
+<div id="archiveConfirmModal" role="dialog" aria-modal="true" aria-labelledby="archiveConfirmTitle">
+    <div class="archive-confirm-card">
+        <div class="archive-confirm-header">
+            <span class="archive-confirm-icon"><i class="fa-solid fa-box-archive"></i></span>
+            <h3 class="archive-confirm-title" id="archiveConfirmTitle">Archive Appointment</h3>
+        </div>
+        <p class="archive-confirm-message" id="archiveConfirmMessage"></p>
+        <div class="archive-confirm-actions">
+            <button type="button" class="btn modal-close-btn" id="archiveConfirmCancelBtn">
+                <i class="fas fa-times"></i> Cancel
+            </button>
+            <button type="button" class="btn btn-completed" id="archiveConfirmProceedBtn">
+                <i class="fas fa-check"></i> Archive
+            </button>
+        </div>
+    </div>
+</div>
 <div id="complete-appointment-modal" class="modal complete-appointment-modal" style="display: none;">
     <div class="modal-content complete-appointment-modal-content">
-        <div class="complete-appointment-header">
-            <h3><i class="fa-solid fa-check-to-slot"></i> Complete Appointment</h3>
-            <span class="close" onclick="closeCompleteAppointmentModal()">&times;</span>
+        <div class="complete-appointment-header" style="background: #ffffff; border-bottom: 1px solid #e5e7eb; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); border-radius: 16px 16px 0 0;">
+            <h3 style="margin: 0; font-size: 1.3rem; font-weight: 600; display: flex; align-items: center; gap: 10px; color: #111827; background: none; padding: 0;">
+                <i class="fa-solid fa-check-to-slot" style="color: var(--primary-color);"></i>
+                <span>Complete Appointment</span>
+            </h3>
+            <span class="close"
+                  onclick="closeCompleteAppointmentModal()"
+                  aria-label="Close complete appointment modal"
+                  style="position: static; background: rgba(0,0,0,0.04); color: #9ca3af; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 24px; cursor: pointer; transition: all 0.2s ease; line-height: 1;">&times;</span>
         </div>
-        
-        <div class="complete-appointment-body">
+
+        <div class="complete-appointment-body" style="padding: 20px 24px 18px;">
             <form id="treatmentForm" onsubmit="handleTreatmentSubmit(event)">
                 <input type="hidden" id="treatment_patient_id" name="patient_id">
                 <input type="hidden" id="treatment_appointment_id" name="appointment_id">
 
-                <div class="complete-appointment-form-group">
-                    <label for="patient_id">
-                        <i class="fas fa-id-card"></i> Patient ID:
-                    </label>
-                    <input type="text" id="patient_id" value="" readonly>
-                    <small>Patient ID is automatically filled</small>
-                </div>
-                
-                <div class="complete-appointment-form-group">
-                    <label for="treatment_type">
-                        <i class="fas fa-stethoscope"></i> Treatment:
-                    </label>
-                    <input type="text" id="treatment_type" name="treatment" placeholder="Enter treatment type (e.g., Cleaning, Extraction, Filling)" required>
-                    <small>Specify the treatment provided to the patient</small>
-                </div>
-                
-                <div class="complete-appointment-form-group">
-                    <label for="prescription_given">
-                        <i class="fas fa-pills"></i> Prescription:
-                    </label>
-                    <textarea id="prescription_given" name="prescription_given" rows="3" placeholder="Enter prescribed medications and instructions" required></textarea>
-                    <small>List all prescribed medications and dosage instructions</small>
-                </div>
-                
-                <div class="complete-appointment-form-group">
-                    <label for="treatment_notes">
-                        <i class="fas fa-notes-medical"></i> Treatment Notes:
-                    </label>
-                    <textarea id="treatment_notes" name="treatment_notes" rows="4" placeholder="Enter detailed notes about the treatment, patient condition, and recommendations" required></textarea>
-                    <small>Add any additional notes or observations about the treatment</small>
-                </div>
-                
-                <div class="complete-appointment-form-group">
-                    <label for="treatment_cost">
-                        <i class="fas fa-peso-sign"></i> Treatment Cost (₱):
-                    </label>
-                    <input type="number" id="treatment_cost" name="treatment_cost" step="0.01" min="0" placeholder="0.00" required>
-                    <small>Enter the total cost of the treatment</small>
+                <div class="complete-appointment-two-col">
+                    <!-- LEFT COLUMN -->
+                    <div class="complete-appointment-column-card">
+                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                            <div class="complete-appointment-form-group" style="margin-bottom: 0;">
+                                <label for="patient_id">
+                                    <i class="fas fa-id-card"></i> Patient ID:
+                                </label>
+                                <input type="text" id="patient_id" value="" readonly>
+                                <small>Patient ID is automatically filled</small>
+                            </div>
+
+                            <div class="complete-appointment-form-group" style="margin-bottom: 0;">
+                                <label for="prescription_given">
+                                    <i class="fas fa-pills"></i> Prescription:
+                                </label>
+                                <textarea id="prescription_given" name="prescription_given" rows="3" placeholder="Enter prescribed medications and instructions" required></textarea>
+                                <small>List all prescribed medications and dosage instructions</small>
+                            </div>
+
+                            <div class="complete-appointment-form-group" style="margin-bottom: 0;">
+                                <label for="treatment_notes">
+                                    <i class="fas fa-notes-medical"></i> Treatment Notes:
+                                </label>
+                                <textarea id="treatment_notes" name="treatment_notes" rows="4" placeholder="Enter detailed notes about the treatment, patient condition, and recommendations" required></textarea>
+                                <small>Add any additional notes or observations about the treatment</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT COLUMN -->
+                    <div class="complete-appointment-column-card">
+                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                            <div class="complete-appointment-form-group" style="margin-bottom: 0;">
+                                <label for="treatment_type">
+                                    <i class="fas fa-stethoscope"></i> Treatment:
+                                </label>
+                                <input type="text" id="treatment_type" name="treatment" placeholder="Enter treatment type (e.g., Cleaning, Extraction, Filling)" required>
+                                <small>Specify the treatment provided to the patient</small>
+                            </div>
+
+                            <div class="complete-appointment-form-group" style="margin-bottom: 0;">
+                                <label for="treatment_cost">
+                                    <i class="fas fa-peso-sign"></i> Treatment Cost (₱):
+                                </label>
+                                <input type="number" id="treatment_cost" name="treatment_cost" step="0.01" min="0" placeholder="0.00" required>
+                                <small>Enter the total cost of the treatment</small>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>
-        
+
         <!-- Action Buttons Footer - Always Visible -->
-        <div class="complete-appointment-footer">
-            <div class="complete-appointment-actions">
+        <div class="complete-appointment-footer" style="padding: 20px 25px;">
+            <div class="complete-appointment-actions" style="justify-content: flex-end; gap: 12px; flex-wrap: wrap;">
                 <button type="button" onclick="closeCompleteAppointmentModal()" class="btn modal-close-btn">
                     <i class="fas fa-times"></i> Cancel
                 </button>
@@ -586,83 +914,123 @@ $result = mysqli_query($con, $sql);
 </div>
 
 <!-- Follow-Up Modal -->
-<div id="followUpModal" class="modal followup-modal" style="display: none;">
-    <div class="modal-content followup-modal-content">
-        <div class="followup-modal-header">
-            <h3><i class="fa-solid fa-arrow-right"></i> Schedule Follow-Up Appointment</h3>
-            <span class="close" onclick="closeFollowUpModal()">&times;</span>
-        </div>
-        
-        <div class="followup-modal-body">
-            <form id="followUpForm" onsubmit="handleFollowUpSubmit(event)">
-                <input type="hidden" id="followup_patient_id" name="patient_id">
-                <input type="hidden" id="followup_appointment_id" name="original_appointment_id">
-                
-                <div class="form-group">
-                    <label for="followup_patient_name">
-                        <i class="fas fa-user"></i> Patient Name:
-                    </label>
-                    <input type="text" id="followup_patient_name" name="patient_name" class="form-input" readonly required>
-                </div>
+<div id="followUpModal" class="modal treatment-modal" style="display: none;">
+    <div class="modal-content treatment-modal-content">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>
+                    <i class="fa-solid fa-arrow-right"></i>
+                    <span>Schedule Follow-Up Appointment</span>
+                </h3>
+                <span class="close" onclick="closeFollowUpModal()" aria-label="Close follow-up modal">&times;</span>
+            </div>
 
-                <div class="form-group">
-                    <label for="followup_date">
-                        <i class="fas fa-calendar-day"></i> Follow-Up Date:
-                    </label>
-                    <input type="date" id="followup_date" name="appointment_date" class="form-input" required min="<?= date('Y-m-d', strtotime('+1 day')) ?>">
-                    <small class="form-help">Please select a date from tomorrow onwards</small>
-                </div>
+            <div class="modal-body treatment-body">
+                <form id="followUpForm" onsubmit="handleFollowUpSubmit(event)">
+                    <input type="hidden" id="followup_patient_id" name="patient_id">
+                    <input type="hidden" id="followup_appointment_id" name="original_appointment_id">
+                    <input type="hidden" id="followup_team_id" name="team_id">
+                    <input type="hidden" id="followup_branch" name="branch">
+                    
+                    <div class="appointment-info-grid">
+                        <div class="treatment-group form-group">
+                            <label>Patient Name <span class="required">*</span></label>
+                            <input type="text" id="followup_patient_name" name="patient_name" readonly required>
+                        </div>
 
-                <div class="form-group">
-                    <label for="followup_time">
-                        <i class="fas fa-clock"></i> Follow-Up Time:
-                    </label>
-                    <select id="followup_time" name="time_slot" class="form-input" required>
-                        <option value="">-- Select Time Slot --</option>
-                        <option value="firstBatch">Morning (8AM-9AM)</option>
-                        <option value="secondBatch">Morning (9AM-10AM)</option>
-                        <option value="thirdBatch">Morning (10AM-11AM)</option>
-                        <option value="fourthBatch">Afternoon (11AM-12PM)</option>
-                        <option value="fifthBatch">Afternoon (1PM-2PM)</option>
-                        <option value="sixthBatch">Afternoon (2PM-3PM)</option>
-                        <option value="sevenBatch">Afternoon (3PM-4PM)</option>
-                        <option value="eightBatch">Afternoon (4PM-5PM)</option>
-                        <option value="nineBatch">Afternoon (5PM-6PM)</option>
-                        <option value="tenBatch">Evening (6PM-7PM)</option>
-                        <option value="lastBatch">Evening (7PM-8PM)</option>
-                    </select>
-                </div>
+                        <div class="treatment-group form-group">
+                            <label>Service <span class="required">*</span></label>
+                            <select name="service_id" id="followup_service_id" required>
+                                <option value="" disabled selected>Select a service</option>
+                                <?php 
+                                mysqli_data_seek($servicesResult, 0);
+                                if(mysqli_num_rows($servicesResult) > 0) {
+                                    while ($service = mysqli_fetch_assoc($servicesResult)) { 
+                                        $serviceDisplay = !empty($service['sub_service']) 
+                                            ? $service['sub_service'] 
+                                            : $service['service_category'];
+                                ?>
+                                    <option value="<?php echo htmlspecialchars($service['service_id']); ?>">
+                                        <?php echo htmlspecialchars($service['service_category'] . ' - ' . $serviceDisplay); ?>
+                                    </option>
+                                <?php 
+                                    }
+                                } 
+                                ?>
+                            </select>
+                            <small class="form-help">Select the service for this follow-up appointment</small>
+                        </div>
 
-                <div class="form-group">
-                    <label for="followup_reason">
-                        <i class="fas fa-comment-alt"></i> Reason for Follow-Up:
-                    </label>
-                    <textarea id="followup_reason" 
-                              name="followup_reason" 
-                              class="form-input" 
-                              rows="4" 
-                              placeholder="Please provide a reason for this follow-up appointment (e.g., Post-treatment check, Additional procedure needed, etc.)"
-                              required></textarea>
-                    <small class="form-help">This reason will be included in the patient notification email</small>
+                        <div class="treatment-group form-group">
+                            <label>Follow-Up Date <span class="required">*</span></label>
+                            <input type="date" id="followup_date" name="appointment_date" required min="<?= date('Y-m-d', strtotime('+1 day')) ?>" onchange="loadFollowUpBookedSlots()">
+                            <small class="form-help">Please select a date from tomorrow onwards</small>
+                        </div>
+
+                        <div class="treatment-group form-group">
+                            <label>Follow-Up Time <span class="required">*</span></label>
+                            <select id="followup_time" name="time_slot" required>
+                                <option value="">-- Select Time Slot --</option>
+                                <option value="firstBatch" data-slot="8:00AM-9:00AM">Morning (8:00AM-9:00AM)</option>
+                                <option value="secondBatch" data-slot="9:00AM-10:00AM">Morning (9:00AM-10:00AM)</option>
+                                <option value="thirdBatch" data-slot="10:00AM-11:00AM">Morning (10:00AM-11:00AM)</option>
+                                <option value="fourthBatch" data-slot="11:00AM-12:00PM">Afternoon (11:00AM-12:00PM)</option>
+                                <option value="fifthBatch" data-slot="1:00PM-2:00PM">Afternoon (1:00PM-2:00PM)</option>
+                                <option value="sixthBatch" data-slot="2:00PM-3:00PM">Afternoon (2:00PM-3:00PM)</option>
+                                <option value="sevenBatch" data-slot="3:00PM-4:00PM">Afternoon (3:00PM-4:00PM)</option>
+                                <option value="eightBatch" data-slot="4:00PM-5:00PM">Afternoon (4:00PM-5:00PM)</option>
+                                <option value="nineBatch" data-slot="5:00PM-6:00PM">Afternoon (5:00PM-6:00PM)</option>
+                                <option value="tenBatch" data-slot="6:00PM-7:00PM">Evening (6:00PM-7:00PM)</option>
+                                <option value="lastBatch" data-slot="7:00PM-8:00PM">Evening (7:00PM-8:00PM)</option>
+                            </select>
+                            <small class="form-help" id="followupTimeSlotHelp">Booked slots will be disabled automatically</small>
+                            <div id="loadingFollowUpSlots" class="loading-indicator" style="display: none;">
+                                <i class="fas fa-spinner fa-spin"></i> Loading available slots...
+                            </div>
+                        </div>
+
+                        <div class="treatment-group form-group appointment-info-notes">
+                            <label>Reason for Follow-Up <span class="required">*</span></label>
+                            <textarea id="followup_reason" 
+                                      name="followup_reason" 
+                                      rows="4" 
+                                      placeholder="Please provide a reason for this follow-up appointment (e.g., Post-treatment check, Additional procedure needed, etc.)"
+                                      required></textarea>
+                            <small class="form-help">This reason will be included in the patient notification email</small>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="treatment-footer modal-footer">
+                <div class="modal-actions">
+                    <button type="button" onclick="closeFollowUpModal()" class="btn modal-close-btn">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="submit" form="followUpForm" class="btn btn-success" id="followUpSubmitBtn">
+                        <i class="fas fa-check"></i> Save Follow-Up
+                    </button>
                 </div>
-            </form>
-        </div>
-        
-        <!-- Action Buttons Footer - Always Visible -->
-        <div class="followup-modal-footer">
-            <div class="followup-modal-actions">
-                <button type="button" onclick="closeFollowUpModal()" class="btn modal-close-btn">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-                <button type="submit" form="followUpForm" class="btn btn-success" id="followUpSubmitBtn">
-                    <i class="fas fa-check"></i> Save Follow-Up
-                </button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
+    // Centered alert helpers (Appointments)
+    function showAptCenterAlert(title, message) {
+        const modal = document.getElementById('aptCenterAlertModal');
+        const titleEl = document.getElementById('aptCenterAlertTitle');
+        const msgEl = document.getElementById('aptCenterAlertMessage');
+        if (!modal || !titleEl || !msgEl) return;
+        titleEl.textContent = title || 'Notice';
+        msgEl.textContent = message || '';
+        modal.style.display = 'flex';
+    }
+    function closeAptCenterAlert() {
+        const modal = document.getElementById('aptCenterAlertModal');
+        if (modal) modal.style.display = 'none';
+    }
     // Notification System
     function showNotification(type, title, message, iconHtml = '', duration = 5000) {
         const container = document.getElementById('notificationContainer');
@@ -695,6 +1063,70 @@ $result = mysqli_query($con, $sql);
             notification.style.animation = 'slideInRight 0.4s ease-out reverse';
             setTimeout(() => notification.remove(), 400);
         }, duration);
+    }
+
+    // Refresh only appointment list containers and preserve current filters/pagination state.
+    let isAppointmentRefreshInProgress = false;
+    function refreshAppointmentList() {
+        if (isAppointmentRefreshInProgress) {
+            return Promise.resolve(false);
+        }
+
+        const tableBody = document.querySelector('#appointments-table tbody');
+        const mobileCardView = document.querySelector('.mobile-card-view');
+        if (!tableBody || !mobileCardView) {
+            return Promise.reject(new Error('Appointment containers not found'));
+        }
+
+        const state = {
+            dateCategory: document.getElementById('filter-date-category')?.value || '',
+            date: document.getElementById('filter-date')?.value || '',
+            status: document.getElementById('filter-status')?.value || '',
+            page: currentPage
+        };
+
+        isAppointmentRefreshInProgress = true;
+        const url = `${window.location.pathname}${window.location.search}${window.location.search ? '&' : '?'}_ts=${Date.now()}`;
+
+        return fetch(url, { cache: 'no-store' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.text();
+            })
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newTableBody = doc.querySelector('#appointments-table tbody');
+                const newMobileCardView = doc.querySelector('.mobile-card-view');
+
+                if (!newTableBody || !newMobileCardView) {
+                    throw new Error('Updated appointment content not found');
+                }
+
+                tableBody.innerHTML = newTableBody.innerHTML;
+                mobileCardView.innerHTML = newMobileCardView.innerHTML;
+
+                const dateCategoryEl = document.getElementById('filter-date-category');
+                const dateEl = document.getElementById('filter-date');
+                const statusEl = document.getElementById('filter-status');
+                if (dateCategoryEl) dateCategoryEl.value = state.dateCategory;
+                if (dateEl) dateEl.value = state.date;
+                if (statusEl) statusEl.value = state.status;
+
+                handleDateCategoryChange();
+                filterAppointments();
+
+                const visibleRows = document.querySelectorAll(".appointment-row[data-visible='true']");
+                const totalPages = Math.max(1, Math.ceil(visibleRows.length / rowsPerPage));
+                currentPage = Math.min(Math.max(1, state.page), totalPages);
+                goToPage(currentPage);
+                return true;
+            })
+            .finally(() => {
+                isAppointmentRefreshInProgress = false;
+            });
     }
     
     // Navigate back to admin
@@ -775,6 +1207,7 @@ $result = mysqli_query($con, $sql);
         const dateCategory = document.getElementById("filter-date-category").value;
         const selectedDate = document.getElementById("filter-date").value;
         const selectedStatus = document.getElementById("filter-status").value.toLowerCase();
+        const searchText = (document.getElementById("filter-search")?.value || "").toLowerCase().trim();
         // Get all appointment rows (includes both table rows TR and mobile cards div since cards have both classes)
         const allRows = document.querySelectorAll(".appointment-row");
         
@@ -825,11 +1258,17 @@ $result = mysqli_query($con, $sql);
         allRows.forEach(row => {
             const rowDate = row.getAttribute("data-date");
             const rowStatus = row.getAttribute("data-status") ? row.getAttribute("data-status").toLowerCase() : "";
+            const rowSearchText = (
+                (row.getAttribute("data-appointment-id") || '') + ' ' +
+                (row.getAttribute("data-patient-name") || '') + ' ' +
+                (row.getAttribute("data-service") || '')
+            ).toLowerCase();
             
             const matchesDate = matchesDateFilter(rowDate, dateCategory, selectedDate, todayStr, weekStart, weekEnd, monthStart, monthEnd);
             const matchesStatus = selectedStatus === "" || rowStatus === selectedStatus;
+            const matchesSearch = searchText === "" || rowSearchText.includes(searchText);
             
-            if (matchesDate && matchesStatus) {
+            if (matchesDate && matchesStatus && matchesSearch) {
                 row.setAttribute("data-visible", "true");
                 visibleRows.push(row);
             } else {
@@ -1064,7 +1503,10 @@ $result = mysqli_query($con, $sql);
             if (isSuccess) {
                 showNotification('success', 'Appointment Confirmed', `Appointment #${appointmentId} has been confirmed.`);
                 setTimeout(() => {
-                    location.reload();
+                    refreshAppointmentList().catch(error => {
+                        console.error('Refresh error:', error);
+                        showNotification('warning', 'Refresh Needed', 'Appointment was updated, but the list could not refresh automatically.');
+                    });
                 }, 1500);
             } else {
                 // If data.success is explicitly false, show the error message
@@ -1121,7 +1563,10 @@ $result = mysqli_query($con, $sql);
             if (data && (data.success === true || data.status === 'success')) {
                 showNotification('success', 'Marked as No-Show', data.message || `Appointment #${appointmentId} has been marked as no-show.`);
                 setTimeout(() => {
-                    location.reload();
+                    refreshAppointmentList().catch(error => {
+                        console.error('Refresh error:', error);
+                        showNotification('warning', 'Refresh Needed', 'Appointment was updated, but the list could not refresh automatically.');
+                    });
                 }, 1500);
             } else {
                 showNotification('error', 'Error', data.message || 'Failed to mark as no-show. Please try again.');
@@ -1134,6 +1579,107 @@ $result = mysqli_query($con, $sql);
             showNotification('error', 'Error', 'An error occurred while marking as no-show. Please try again.');
             button.disabled = false;
             button.innerHTML = originalHTML;
+        });
+    }
+
+    function showArchiveConfirmPopup(appointmentId) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('archiveConfirmModal');
+            const messageEl = document.getElementById('archiveConfirmMessage');
+            const cancelBtn = document.getElementById('archiveConfirmCancelBtn');
+            const proceedBtn = document.getElementById('archiveConfirmProceedBtn');
+
+            if (!modal || !messageEl || !cancelBtn || !proceedBtn) {
+                resolve(false);
+                return;
+            }
+
+            messageEl.textContent = `Archive Appointment #${appointmentId}? This will remove it from the active appointments list.`;
+            modal.classList.add('show');
+
+            let settled = false;
+            const cleanup = () => {
+                cancelBtn.removeEventListener('click', onCancel);
+                proceedBtn.removeEventListener('click', onProceed);
+                modal.removeEventListener('click', onBackdropClick);
+                document.removeEventListener('keydown', onEsc);
+                modal.classList.remove('show');
+            };
+
+            const finish = (value) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve(value);
+            };
+
+            const onCancel = () => finish(false);
+            const onProceed = () => finish(true);
+            const onBackdropClick = (event) => {
+                if (event.target === modal) finish(false);
+            };
+            const onEsc = (event) => {
+                if (event.key === 'Escape') finish(false);
+            };
+
+            cancelBtn.addEventListener('click', onCancel);
+            proceedBtn.addEventListener('click', onProceed);
+            modal.addEventListener('click', onBackdropClick);
+            document.addEventListener('keydown', onEsc);
+        });
+    }
+
+    // Archive completed appointment (move to archived_appointments, then delete from appointments)
+    function archiveAppointment(button) {
+        const appointmentId = button.getAttribute('data-appointment-id');
+        if (!appointmentId) {
+            showNotification('error', 'Error', 'Appointment ID not found. Please refresh the page.');
+            return;
+        }
+
+        showArchiveConfirmPopup(appointmentId).then(confirmed => {
+            if (!confirmed) return;
+
+            const formData = new FormData();
+            formData.append('appointment_id', appointmentId);
+
+            const originalHTML = button.innerHTML;
+            const originalText = button.textContent.trim();
+            button.disabled = true;
+            if (originalText && originalText.length > 0 && !originalText.match(/^[<i]/)) {
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + originalText;
+            } else {
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            }
+
+            fetch('../controllers/archiveAppointment.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data && (data.success === true || data.status === 'success')) {
+                    showNotification('success', 'Appointment Archived', data.message || `Appointment #${appointmentId} has been archived.`);
+                    setTimeout(() => {
+                        window.location.href = '../views/archives.php';
+                    }, 900);
+                } else {
+                    showNotification('error', 'Error', data.message || 'Failed to archive appointment. Please try again.');
+                    button.disabled = false;
+                    button.innerHTML = originalHTML;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('error', 'Error', 'An error occurred while archiving the appointment. Please try again.');
+                button.disabled = false;
+                button.innerHTML = originalHTML;
+            });
         });
     }
     
@@ -1187,7 +1733,10 @@ $result = mysqli_query($con, $sql);
             if (data.success) {
                 showNotification('success', 'Appointment Cancelled', data.message || 'Appointment has been cancelled and email notification sent.');
                 setTimeout(() => {
-                    location.reload();
+                    refreshAppointmentList().catch(error => {
+                        console.error('Refresh error:', error);
+                        showNotification('warning', 'Refresh Needed', 'Appointment was updated, but the list could not refresh automatically.');
+                    });
                 }, 1500);
             } else {
                 showNotification('error', 'Error', data.error || data.message || 'Failed to cancel appointment. Please try again.');
@@ -1214,6 +1763,13 @@ $result = mysqli_query($con, $sql);
         const timeSelect = document.getElementById('new_time_resched');
         const selectedTimeSlot = timeSelect.value;
         const reason = document.getElementById('reschedule_reason').value.trim();
+        const hasRequestNote = document.getElementById('modalHasRequestNote')?.value === '1';
+        const slotOrder = ['firstBatch','secondBatch','thirdBatch','fourthBatch','fifthBatch','sixthBatch','sevenBatch','eightBatch','nineBatch','tenBatch','lastBatch'];
+        const getNextSlot = (slotKey) => {
+            const idx = slotOrder.indexOf(slotKey);
+            if (idx === -1 || idx + 1 >= slotOrder.length) return null;
+            return slotOrder[idx + 1];
+        };
         
         // Validation
         if (!newDate) {
@@ -1239,6 +1795,19 @@ $result = mysqli_query($con, $sql);
             showNotification('error', 'Slot Unavailable', 'The selected time slot is already booked. Please choose another slot.');
             timeSelect.focus();
             return;
+        }
+
+        if (hasRequestNote) {
+            const nextSlot = getNextSlot(selectedTimeSlot);
+            if (!nextSlot) {
+                showNotification('error', 'Invalid Time Slot', 'This appointment requires 2 consecutive slots. Please select an earlier time.');
+                return;
+            }
+            const nextOption = Array.from(timeSelect.options).find(opt => opt.value === nextSlot);
+            if (!nextOption || nextOption.disabled) {
+                showNotification('error', 'Second Slot Unavailable', 'The next consecutive slot is unavailable. Please choose another start time.');
+                return;
+            }
         }
         
         // Validate date is not in the past
@@ -1290,7 +1859,15 @@ $result = mysqli_query($con, $sql);
                 showNotification('success', 'Appointment Rescheduled', `Appointment #${appointmentId} has been rescheduled to ${formattedDate} at ${timeText}.`);
                 closeReschedModal();
                 setTimeout(() => {
-                    location.reload();
+                    refreshAppointmentList()
+                        .catch(error => {
+                            console.error('Refresh error:', error);
+                            showNotification('warning', 'Refresh Needed', 'Appointment was updated, but the list could not refresh automatically.');
+                        })
+                        .finally(() => {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = originalText;
+                        });
                 }, 2000);
             } else {
                 const errorMsg = data.message || 'Failed to reschedule appointment. Please try again.';
@@ -1313,6 +1890,9 @@ $result = mysqli_query($con, $sql);
             event.preventDefault();
         }
         const appointmentID = btn.getAttribute('data-id');
+        const row = btn.closest('.appointment-row');
+        const requestNote = row ? (row.getAttribute('data-request-note') || '').trim() : '';
+        const hasRequestNote = requestNote !== '';
         
         if (!appointmentID) {
             showNotification('error', 'Error', 'Appointment ID not found. Please try again.');
@@ -1322,6 +1902,14 @@ $result = mysqli_query($con, $sql);
         const modalAppointmentIDInput = document.getElementById('modalAppointmentID');
         if (modalAppointmentIDInput) {
             modalAppointmentIDInput.value = appointmentID;
+        }
+        const modalHasRequestNoteInput = document.getElementById('modalHasRequestNote');
+        if (modalHasRequestNoteInput) {
+            modalHasRequestNoteInput.value = hasRequestNote ? '1' : '0';
+        }
+        const twoSlotHint = document.getElementById('twoSlotHint');
+        if (twoSlotHint) {
+            twoSlotHint.style.display = hasRequestNote ? 'block' : 'none';
         }
         
         // Reset form
@@ -1352,19 +1940,16 @@ $result = mysqli_query($con, $sql);
     
     // Fetch appointment details for display
     function fetchAppointmentDetails(appointmentId) {
-        const infoSection = document.getElementById('currentAppointmentInfo');
         const patientNameEl = document.getElementById('currentPatientName');
         const serviceEl = document.getElementById('currentService');
         const dateEl = document.getElementById('currentDate');
         const timeEl = document.getElementById('currentTime');
         
         // Show loading state
-        if (infoSection) {
-            patientNameEl.textContent = 'Loading...';
-            serviceEl.textContent = 'Loading...';
-            dateEl.textContent = 'Loading...';
-            timeEl.textContent = 'Loading...';
-        }
+        if (patientNameEl) patientNameEl.value = 'Loading...';
+        if (serviceEl) serviceEl.value = 'Loading...';
+        if (dateEl) dateEl.value = 'Loading...';
+        if (timeEl) timeEl.value = 'Loading...';
         
         // Find the appointment row to get details
         const appointmentRow = document.querySelector(`[data-appointment-id="${appointmentId}"]`);
@@ -1375,10 +1960,10 @@ $result = mysqli_query($con, $sql);
             const currentDate = appointmentRow.getAttribute('data-appointment-date') || 'N/A';
             const currentTime = appointmentRow.getAttribute('data-appointment-time') || 'N/A';
             
-            if (patientNameEl) patientNameEl.textContent = patientName;
-            if (serviceEl) serviceEl.textContent = service;
-            if (dateEl) dateEl.textContent = currentDate;
-            if (timeEl) timeEl.textContent = currentTime;
+            if (patientNameEl) patientNameEl.value = patientName;
+            if (serviceEl) serviceEl.value = service;
+            if (dateEl) dateEl.value = currentDate;
+            if (timeEl) timeEl.value = currentTime;
             
             return;
         }
@@ -1392,10 +1977,10 @@ $result = mysqli_query($con, $sql);
             .then(data => {
                 if (data.success && data.appointment) {
                     const apt = data.appointment;
-                    if (patientNameEl) patientNameEl.textContent = `${apt.first_name || ''} ${apt.last_name || ''}`.trim() || 'N/A';
-                    if (serviceEl) serviceEl.textContent = apt.sub_service || apt.service_category || 'N/A';
-                    if (dateEl) dateEl.textContent = apt.appointment_date ? new Date(apt.appointment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
-                    if (timeEl) timeEl.textContent = apt.appointment_time || 'N/A';
+                    if (patientNameEl) patientNameEl.value = `${apt.first_name || ''} ${apt.last_name || ''}`.trim() || 'N/A';
+                    if (serviceEl) serviceEl.value = apt.sub_service || apt.service_category || 'N/A';
+                    if (dateEl) dateEl.value = apt.appointment_date ? new Date(apt.appointment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
+                    if (timeEl) timeEl.value = apt.appointment_time || 'N/A';
                 } else {
                     throw new Error('Appointment details not found');
                 }
@@ -1403,10 +1988,10 @@ $result = mysqli_query($con, $sql);
             .catch(error => {
                 console.error('Error fetching appointment details:', error);
                 // Show error message if fetch fails
-                if (patientNameEl) patientNameEl.textContent = 'Unable to load';
-                if (serviceEl) serviceEl.textContent = 'Unable to load';
-                if (dateEl) dateEl.textContent = 'Unable to load';
-                if (timeEl) timeEl.textContent = 'Unable to load';
+                if (patientNameEl) patientNameEl.value = 'Unable to load';
+                if (serviceEl) serviceEl.value = 'Unable to load';
+                if (dateEl) dateEl.value = 'Unable to load';
+                if (timeEl) timeEl.value = 'Unable to load';
             });
     }
 
@@ -1416,6 +2001,13 @@ $result = mysqli_query($con, $sql);
         const loadingIndicator = document.getElementById('loadingSlots');
         const timeSlotHelp = document.getElementById('timeSlotHelp');
         const appointmentId = document.getElementById('modalAppointmentID').value;
+        const hasRequestNote = document.getElementById('modalHasRequestNote')?.value === '1';
+        const slotOrder = ['firstBatch','secondBatch','thirdBatch','fourthBatch','fifthBatch','sixthBatch','sevenBatch','eightBatch','nineBatch','tenBatch','lastBatch'];
+        const getNextSlot = (slotKey) => {
+            const idx = slotOrder.indexOf(slotKey);
+            if (idx === -1 || idx + 1 >= slotOrder.length) return null;
+            return slotOrder[idx + 1];
+        };
         
         if (!dateInput || !timeSelect) return;
         
@@ -1423,6 +2015,8 @@ $result = mysqli_query($con, $sql);
         timeSelect.value = '';
         
         if (!dateInput.value) {
+            // Disable time select when no date is selected
+            timeSelect.disabled = true;
             const options = timeSelect.querySelectorAll('option:not(:first-child)');
             options.forEach(opt => {
                 opt.disabled = false;
@@ -1430,11 +2024,14 @@ $result = mysqli_query($con, $sql);
             });
             if (loadingIndicator) loadingIndicator.style.display = 'none';
             if (timeSlotHelp) {
-                timeSlotHelp.textContent = 'Booked slots will be disabled automatically';
+                timeSlotHelp.textContent = 'Please select a date first';
                 timeSlotHelp.style.color = '';
             }
             return;
         }
+        
+        // Enable time select when date is selected
+        timeSelect.disabled = false;
         
         // Validate date is not in the past
         const today = new Date();
@@ -1533,6 +2130,27 @@ $result = mysqli_query($con, $sql);
                     
                     if (!isUnavailable) availableCount++;
                 });
+
+                // If this appointment has request_note, require the next slot too.
+                if (hasRequestNote) {
+                    options.forEach(opt => {
+                        if (opt.value === '' || opt.disabled) return;
+                        const nextSlot = getNextSlot(opt.value);
+                        if (!nextSlot) {
+                            opt.disabled = true;
+                            opt.textContent = (slotMapping[opt.value] || opt.textContent.split(' (')[0].trim()) + ' (Needs next slot)';
+                            return;
+                        }
+                        if (unavailableSlots.includes(nextSlot)) {
+                            opt.disabled = true;
+                            opt.textContent = (slotMapping[opt.value] || opt.textContent.split(' (')[0].trim()) + ' (Next slot unavailable)';
+                        }
+                    });
+                    availableCount = 0;
+                    options.forEach(opt => {
+                        if (!opt.disabled && opt.value !== '') availableCount++;
+                    });
+                }
                 
                 if (loadingIndicator) loadingIndicator.style.display = 'none';
                 if (timeSlotHelp && !(clinicClosed && closureType === 'full_day')) {
@@ -1601,15 +2219,16 @@ $result = mysqli_query($con, $sql);
                 // Reset time slot help text
                 const timeSlotHelp = document.getElementById('timeSlotHelp');
                 if (timeSlotHelp) {
-                    timeSlotHelp.textContent = 'Booked slots will be disabled automatically';
+                    timeSlotHelp.textContent = 'Please select a date first';
                     timeSlotHelp.style.color = '';
                 }
                 // Hide loading indicator
                 const loadingIndicator = document.getElementById('loadingSlots');
                 if (loadingIndicator) loadingIndicator.style.display = 'none';
-                // Reset all time slot options
+                // Reset all time slot options and disable the select
                 const timeSelect = document.getElementById('new_time_resched');
                 if (timeSelect) {
+                    timeSelect.disabled = true;
                     const options = timeSelect.querySelectorAll('option:not(:first-child)');
                     options.forEach(opt => {
                         opt.disabled = false;
@@ -1619,19 +2238,20 @@ $result = mysqli_query($con, $sql);
                 // Reset reason field
                 const reasonField = document.getElementById('reschedule_reason');
                 if (reasonField) reasonField.value = '';
+                const hasRequestNoteInput = document.getElementById('modalHasRequestNote');
+                if (hasRequestNoteInput) hasRequestNoteInput.value = '0';
+                const twoSlotHint = document.getElementById('twoSlotHint');
+                if (twoSlotHint) twoSlotHint.style.display = 'none';
             }
-                // Reset current appointment info (don't hide, just reset values)
-            const infoSection = document.getElementById('currentAppointmentInfo');
-            if (infoSection) {
-                const patientNameEl = document.getElementById('currentPatientName');
-                const serviceEl = document.getElementById('currentService');
-                const dateEl = document.getElementById('currentDate');
-                const timeEl = document.getElementById('currentTime');
-                if (patientNameEl) patientNameEl.textContent = '-';
-                if (serviceEl) serviceEl.textContent = '-';
-                if (dateEl) dateEl.textContent = '-';
-                if (timeEl) timeEl.textContent = '-';
-            }
+            // Reset current appointment info (don't hide, just reset values)
+            const patientNameEl = document.getElementById('currentPatientName');
+            const serviceEl = document.getElementById('currentService');
+            const dateEl = document.getElementById('currentDate');
+            const timeEl = document.getElementById('currentTime');
+            if (patientNameEl) patientNameEl.value = '-';
+            if (serviceEl) serviceEl.value = '-';
+            if (dateEl) dateEl.value = '-';
+            if (timeEl) timeEl.value = '-';
         }
     }
     
@@ -1763,7 +2383,15 @@ $result = mysqli_query($con, $sql);
                 showNotification('success', 'Appointment Completed', `Appointment #${appointmentId} has been completed and treatment saved successfully.`);
                 closeCompleteAppointmentModal();
                 setTimeout(() => {
-                    location.reload();
+                    refreshAppointmentList()
+                        .catch(error => {
+                            console.error('Refresh error:', error);
+                            showNotification('warning', 'Refresh Needed', 'Appointment was updated, but the list could not refresh automatically.');
+                        })
+                        .finally(() => {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = originalText;
+                        });
                 }, 2000);
             } else {
                 const errorMsg = data.message || 'Failed to save treatment. Please try again.';
@@ -1786,22 +2414,38 @@ $result = mysqli_query($con, $sql);
         const patientId = button.getAttribute('data-patient-id');
         const patientName = button.getAttribute('data-patient-name');
         
+        // Get appointment row to access additional data
+        const appointmentRow = button.closest('.appointment-row');
+        const teamId = appointmentRow ? appointmentRow.getAttribute('data-team-id') : '';
+        const branch = appointmentRow ? appointmentRow.getAttribute('data-branch') : '';
+        const currentServiceId = appointmentRow ? appointmentRow.getAttribute('data-service-id') : '';
+        
         const patientIdInput = document.getElementById('followup_patient_id');
         const appointmentIdInput = document.getElementById('followup_appointment_id');
         const patientNameInput = document.getElementById('followup_patient_name');
+        const teamIdInput = document.getElementById('followup_team_id');
+        const branchInput = document.getElementById('followup_branch');
+        const serviceSelect = document.getElementById('followup_service_id');
         
         if (patientIdInput) patientIdInput.value = patientId;
         if (appointmentIdInput) appointmentIdInput.value = appointmentId;
         if (patientNameInput) patientNameInput.value = patientName;
+        if (teamIdInput) teamIdInput.value = teamId;
+        if (branchInput) branchInput.value = branch;
+        
+        // Set current service as default if available
+        if (serviceSelect && currentServiceId) {
+            serviceSelect.value = currentServiceId;
+        }
         
         const modal = document.getElementById('followUpModal');
         if (modal) {
             modal.style.display = 'block';
             document.body.style.overflow = 'hidden';
-            // Focus on date input
+            // Focus on service select
             setTimeout(() => {
-                const dateInput = document.getElementById('followup_date');
-                if (dateInput) dateInput.focus();
+                const serviceSelect = document.getElementById('followup_service_id');
+                if (serviceSelect) serviceSelect.focus();
             }, 100);
         }
     }
@@ -1816,8 +2460,186 @@ $result = mysqli_query($con, $sql);
                 form.reset();
                 const reasonField = document.getElementById('followup_reason');
                 if (reasonField) reasonField.value = '';
+                
+                // Reset time slot options
+                const timeSelect = document.getElementById('followup_time');
+                if (timeSelect) {
+                    const options = timeSelect.querySelectorAll('option:not(:first-child)');
+                    options.forEach(opt => {
+                        opt.disabled = false;
+                        opt.textContent = opt.getAttribute('data-slot') || opt.textContent.split(' (')[0];
+                    });
+                }
+                
+                // Reset help text
+                const timeSlotHelp = document.getElementById('followupTimeSlotHelp');
+                if (timeSlotHelp) {
+                    timeSlotHelp.textContent = 'Booked slots will be disabled automatically';
+                    timeSlotHelp.style.color = '';
+                }
+                
+                // Hide loading indicator
+                const loadingIndicator = document.getElementById('loadingFollowUpSlots');
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
             }
         }
+    }
+    
+    // Load booked slots for follow-up date
+    function loadFollowUpBookedSlots() {
+        const dateInput = document.getElementById('followup_date');
+        const timeSelect = document.getElementById('followup_time');
+        const loadingIndicator = document.getElementById('loadingFollowUpSlots');
+        const timeSlotHelp = document.getElementById('followupTimeSlotHelp');
+        
+        if (!dateInput || !timeSelect) return;
+        
+        // Reset time select
+        timeSelect.value = '';
+        
+        if (!dateInput.value) {
+            const options = timeSelect.querySelectorAll('option:not(:first-child)');
+            options.forEach(opt => {
+                opt.disabled = false;
+                opt.textContent = opt.getAttribute('data-slot') || opt.textContent.split(' (')[0];
+            });
+            if (loadingIndicator) loadingIndicator.style.display = 'none';
+            if (timeSlotHelp) {
+                timeSlotHelp.textContent = 'Booked slots will be disabled automatically';
+                timeSlotHelp.style.color = '';
+            }
+            return;
+        }
+        
+        // Validate date is not in the past
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(dateInput.value);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate < today) {
+            showNotification('error', 'Invalid Date', 'Please select a date from today onwards.');
+            dateInput.value = '';
+            return;
+        }
+        
+        // Show loading indicator
+        if (loadingIndicator) loadingIndicator.style.display = 'block';
+        if (timeSlotHelp) {
+            timeSlotHelp.textContent = 'Checking available slots...';
+            timeSlotHelp.style.color = '';
+        }
+        
+        // Disable all options while loading
+        const options = timeSelect.querySelectorAll('option:not(:first-child)');
+        options.forEach(opt => {
+            opt.disabled = true;
+        });
+        
+        fetch(`../controllers/getAppointmentsAdminResched.php?new_date_resched=${encodeURIComponent(dateInput.value)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(response => {
+                let unavailableSlots = [];
+                let clinicClosed = false;
+                let closureReason = '';
+                let closureType = '';
+                
+                if (Array.isArray(response)) {
+                    unavailableSlots = response;
+                } else if (response && typeof response === 'object') {
+                    unavailableSlots = response.unavailable_slots || [];
+                    clinicClosed = response.clinic_closed || false;
+                    closureReason = response.closure_reason || '';
+                    closureType = response.closure_type || '';
+                }
+                
+                // Show closure warning if clinic is fully closed
+                if (clinicClosed && closureType === 'full_day') {
+                    if (timeSlotHelp) {
+                        timeSlotHelp.textContent = `⚠️ Clinic is closed on this date: ${closureReason || 'Full day closure'}`;
+                        timeSlotHelp.style.color = '#e74c3c';
+                    }
+                }
+                
+                const slotMapping = {
+                    'firstBatch': 'Morning (8:00AM-9:00AM)',
+                    'secondBatch': 'Morning (9:00AM-10:00AM)',
+                    'thirdBatch': 'Morning (10:00AM-11:00AM)',
+                    'fourthBatch': 'Afternoon (11:00AM-12:00PM)',
+                    'fifthBatch': 'Afternoon (1:00PM-2:00PM)',
+                    'sixthBatch': 'Afternoon (2:00PM-3:00PM)',
+                    'sevenBatch': 'Afternoon (3:00PM-4:00PM)',
+                    'eightBatch': 'Afternoon (4:00PM-5:00PM)',
+                    'nineBatch': 'Afternoon (5:00PM-6:00PM)',
+                    'tenBatch': 'Evening (6:00PM-7:00PM)',
+                    'lastBatch': 'Evening (7:00PM-8:00PM)'
+                };
+                
+                let availableCount = 0;
+                const options = timeSelect.querySelectorAll('option:not(:first-child)');
+                options.forEach(opt => {
+                    if (opt.value === '') return;
+                    
+                    const isUnavailable = unavailableSlots.includes(opt.value);
+                    opt.disabled = isUnavailable;
+                    
+                    const baseLabel = slotMapping[opt.value] || opt.getAttribute('data-slot') || opt.textContent.split(' (')[0].trim();
+                    let statusText = '';
+                    if (isUnavailable) {
+                        statusText = ' (Unavailable)';
+                    }
+                    
+                    opt.textContent = baseLabel + statusText;
+                    
+                    if (!isUnavailable) availableCount++;
+                });
+                
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                if (timeSlotHelp && !(clinicClosed && closureType === 'full_day')) {
+                    if (availableCount === 0) {
+                        timeSlotHelp.textContent = '⚠️ No available slots for this date. Please select another date.';
+                        timeSlotHelp.style.color = '#e74c3c';
+                    } else {
+                        timeSlotHelp.textContent = `✓ ${availableCount} slot(s) available`;
+                        timeSlotHelp.style.color = '#27ae60';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error loading booked slots:', error);
+                showNotification('error', 'Error', 'Failed to load available time slots. Please try again.');
+                
+                // Re-enable all options on error
+                const slotMapping = {
+                    'firstBatch': 'Morning (8:00AM-9:00AM)',
+                    'secondBatch': 'Morning (9:00AM-10:00AM)',
+                    'thirdBatch': 'Morning (10:00AM-11:00AM)',
+                    'fourthBatch': 'Afternoon (11:00AM-12:00PM)',
+                    'fifthBatch': 'Afternoon (1:00PM-2:00PM)',
+                    'sixthBatch': 'Afternoon (2:00PM-3:00PM)',
+                    'sevenBatch': 'Afternoon (3:00PM-4:00PM)',
+                    'eightBatch': 'Afternoon (4:00PM-5:00PM)',
+                    'nineBatch': 'Afternoon (5:00PM-6:00PM)',
+                    'tenBatch': 'Evening (6:00PM-7:00PM)',
+                    'lastBatch': 'Evening (7:00PM-8:00PM)'
+                };
+                const options = timeSelect.querySelectorAll('option:not(:first-child)');
+                options.forEach(opt => {
+                    opt.disabled = false;
+                    opt.textContent = slotMapping[opt.value] || opt.getAttribute('data-slot') || opt.textContent.split(' (')[0];
+                });
+                
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                if (timeSlotHelp) {
+                    timeSlotHelp.textContent = 'Error loading slots. Please try again.';
+                    timeSlotHelp.style.color = '#e74c3c';
+                }
+            });
     }
     
     // Handle Follow-Up Form Submit
@@ -1829,9 +2651,16 @@ $result = mysqli_query($con, $sql);
         const appointmentId = document.getElementById('followup_appointment_id').value;
         const followUpDate = document.getElementById('followup_date').value;
         const timeSlot = document.getElementById('followup_time').value;
+        const serviceId = document.getElementById('followup_service_id').value;
         const reason = document.getElementById('followup_reason').value.trim();
         
         // Validation
+        if (!serviceId) {
+            showNotification('error', 'Validation Error', 'Please select a service.');
+            document.getElementById('followup_service_id').focus();
+            return;
+        }
+        
         if (!followUpDate) {
             showNotification('error', 'Validation Error', 'Please select a follow-up date.');
             return;
@@ -1840,6 +2669,15 @@ $result = mysqli_query($con, $sql);
         if (!timeSlot) {
             showNotification('error', 'Validation Error', 'Please select a time slot.');
             document.getElementById('followup_time').focus();
+            return;
+        }
+        
+        // Check if selected slot is disabled (booked)
+        const timeSelect = document.getElementById('followup_time');
+        const selectedOption = timeSelect.options[timeSelect.selectedIndex];
+        if (selectedOption.disabled) {
+            showNotification('error', 'Slot Unavailable', 'The selected time slot is already booked. Please choose another slot.');
+            timeSelect.focus();
             return;
         }
         
@@ -1885,7 +2723,15 @@ $result = mysqli_query($con, $sql);
                 showNotification('success', 'Follow-Up Scheduled', `Follow-up appointment has been scheduled for ${formattedDate}. Email notification sent to patient.`);
                 closeFollowUpModal();
                 setTimeout(() => {
-                    location.reload();
+                    refreshAppointmentList()
+                        .catch(error => {
+                            console.error('Refresh error:', error);
+                            showNotification('warning', 'Refresh Needed', 'Appointment was updated, but the list could not refresh automatically.');
+                        })
+                        .finally(() => {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = originalText;
+                        });
                 }, 2000);
             } else {
                 const errorMsg = data.message || 'Failed to schedule follow-up appointment. Please try again.';
@@ -1906,9 +2752,302 @@ $result = mysqli_query($con, $sql);
         window.print();
     }
     
-    // Add Appointment Modal Functions (placeholder - implement if needed)
+    // Add Appointment Modal Functions
     function openAddAppointmentModal() {
-        showNotification('info', 'Coming Soon', 'Add appointment functionality will be available soon.');
+        const modal = document.getElementById('addAppointmentModal');
+        if (!modal) return;
+        resetAddAppointmentForm();
+        modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => {
+            const patientSelect = document.getElementById('add_patient_id');
+            if (patientSelect) patientSelect.focus();
+        }, 100);
+    }
+
+    function closeAddAppointmentModal() {
+        const modal = document.getElementById('addAppointmentModal');
+        if (!modal) return;
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        resetAddAppointmentForm();
+    }
+
+    function resetAddAppointmentForm() {
+        const form = document.getElementById('addAppointmentForm');
+        if (form) form.reset();
+
+        const patientDetails = document.getElementById('add_patient_details');
+        if (patientDetails) patientDetails.value = '';
+
+        const fieldsToDisable = [
+            document.getElementById('add_service_id'),
+            document.getElementById('add_team_id'),
+            document.getElementById('add_branch'),
+            document.getElementById('add_appointment_date'),
+            document.getElementById('add_time_slot')
+        ];
+
+        fieldsToDisable.forEach(field => {
+            if (field) field.disabled = true;
+        });
+
+        const timeSelect = document.getElementById('add_time_slot');
+        if (timeSelect) {
+            resetAddTimeSlotOptions(timeSelect);
+        }
+
+        const loadingIndicator = document.getElementById('loadingAddSlots');
+        if (loadingIndicator) loadingIndicator.style.display = 'none';
+
+        const help = document.getElementById('addTimeSlotHelp');
+        if (help) {
+            help.textContent = 'Select patient and date first';
+            help.style.color = '';
+        }
+    }
+
+    function handleAddPatientSelection() {
+        const patientSelect = document.getElementById('add_patient_id');
+        const patientDetails = document.getElementById('add_patient_details');
+        const selectedOption = patientSelect ? patientSelect.options[patientSelect.selectedIndex] : null;
+        const hasPatient = patientSelect && patientSelect.value !== '';
+
+        if (patientDetails) {
+            if (hasPatient && selectedOption) {
+                const patientId = patientSelect.value;
+                const patientName = selectedOption.getAttribute('data-patient-name') || '';
+                patientDetails.value = `${patientName} (${patientId})`;
+            } else {
+                patientDetails.value = '';
+            }
+        }
+
+        const fields = [
+            document.getElementById('add_service_id'),
+            document.getElementById('add_team_id'),
+            document.getElementById('add_branch'),
+            document.getElementById('add_appointment_date'),
+            document.getElementById('add_time_slot')
+        ];
+
+        fields.forEach(field => {
+            if (field) field.disabled = !hasPatient;
+        });
+
+        if (!hasPatient) {
+            const dateInput = document.getElementById('add_appointment_date');
+            const timeSelect = document.getElementById('add_time_slot');
+            if (dateInput) dateInput.value = '';
+            if (timeSelect) timeSelect.value = '';
+        }
+    }
+
+    function loadAddAppointmentBookedSlots() {
+        const patientId = document.getElementById('add_patient_id')?.value || '';
+        const dateInput = document.getElementById('add_appointment_date');
+        const timeSelect = document.getElementById('add_time_slot');
+        const loadingIndicator = document.getElementById('loadingAddSlots');
+        const timeSlotHelp = document.getElementById('addTimeSlotHelp');
+
+        if (!patientId) {
+            showNotification('error', 'Validation Error', 'Please select a patient first.');
+            if (dateInput) dateInput.value = '';
+            return;
+        }
+        if (!dateInput || !timeSelect) return;
+
+        timeSelect.value = '';
+
+        if (!dateInput.value) {
+            resetAddTimeSlotOptions(timeSelect);
+            if (loadingIndicator) loadingIndicator.style.display = 'none';
+            if (timeSlotHelp) {
+                timeSlotHelp.textContent = 'Select patient and date first';
+                timeSlotHelp.style.color = '';
+            }
+            return;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(dateInput.value);
+        selectedDate.setHours(0, 0, 0, 0);
+        if (selectedDate < today) {
+            showNotification('error', 'Invalid Date', 'Please select a date from today onwards.');
+            dateInput.value = '';
+            return;
+        }
+
+        if (loadingIndicator) loadingIndicator.style.display = 'block';
+        if (timeSlotHelp) {
+            timeSlotHelp.textContent = 'Checking available slots...';
+            timeSlotHelp.style.color = '';
+        }
+
+        const options = timeSelect.querySelectorAll('option:not(:first-child)');
+        options.forEach(opt => {
+            opt.disabled = true;
+        });
+
+        fetch(`../controllers/getAppointmentsAdminResched.php?new_date_resched=${encodeURIComponent(dateInput.value)}`)
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return response.json();
+            })
+            .then(response => {
+                let unavailableSlots = [];
+                let clinicClosed = false;
+                let closureReason = '';
+                let closureType = '';
+
+                if (Array.isArray(response)) {
+                    unavailableSlots = response;
+                } else if (response && typeof response === 'object') {
+                    unavailableSlots = response.unavailable_slots || [];
+                    clinicClosed = response.clinic_closed || false;
+                    closureReason = response.closure_reason || '';
+                    closureType = response.closure_type || '';
+                }
+
+                let availableCount = 0;
+                const selectOptions = timeSelect.querySelectorAll('option:not(:first-child)');
+                selectOptions.forEach(opt => {
+                    const isUnavailable = unavailableSlots.includes(opt.value);
+                    opt.disabled = isUnavailable;
+                    const baseLabel = opt.getAttribute('data-label') || opt.textContent.split(' (')[0];
+                    opt.textContent = `${baseLabel}${isUnavailable ? ' (Unavailable)' : ''}`;
+                    if (!isUnavailable) availableCount++;
+                });
+
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                if (timeSlotHelp) {
+                    if (clinicClosed && closureType === 'full_day') {
+                        timeSlotHelp.textContent = `Clinic is closed on this date: ${closureReason || 'Full day closure'}`;
+                        timeSlotHelp.style.color = '#e74c3c';
+                    } else if (availableCount === 0) {
+                        timeSlotHelp.textContent = 'No available slots for this date. Please select another date.';
+                        timeSlotHelp.style.color = '#e74c3c';
+                    } else {
+                        timeSlotHelp.textContent = `${availableCount} slot(s) available`;
+                        timeSlotHelp.style.color = '#27ae60';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error loading add appointment slots:', error);
+                showNotification('error', 'Error', 'Failed to load available time slots. Please try again.');
+                const selectOptions = timeSelect.querySelectorAll('option:not(:first-child)');
+                selectOptions.forEach(opt => {
+                    opt.disabled = false;
+                });
+                resetAddTimeSlotOptions(timeSelect);
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                if (timeSlotHelp) {
+                    timeSlotHelp.textContent = 'Error loading slots. Please try again.';
+                    timeSlotHelp.style.color = '#e74c3c';
+                }
+            });
+    }
+
+    function resetAddTimeSlotOptions(timeSelect) {
+        const options = timeSelect.querySelectorAll('option:not(:first-child)');
+        options.forEach(opt => {
+            opt.disabled = false;
+            opt.textContent = opt.getAttribute('data-label') || opt.textContent.split(' (')[0];
+        });
+    }
+
+    function handleAddAppointmentSubmit(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+
+        const patientId = document.getElementById('add_patient_id')?.value || '';
+        const appointmentDate = document.getElementById('add_appointment_date')?.value || '';
+        const timeSelect = document.getElementById('add_time_slot');
+        const selectedTime = timeSelect ? timeSelect.value : '';
+        const serviceId = document.getElementById('add_service_id')?.value || '';
+        const teamId = document.getElementById('add_team_id')?.value || '';
+        const branch = document.getElementById('add_branch')?.value || '';
+
+        if (!patientId) {
+            showNotification('error', 'Validation Error', 'Please select a patient ID first.');
+            document.getElementById('add_patient_id')?.focus();
+            return;
+        }
+        if (!serviceId || !teamId || !branch || !appointmentDate || !selectedTime) {
+            showNotification('error', 'Validation Error', 'Please complete all required fields.');
+            return;
+        }
+
+        const selectedOption = timeSelect.options[timeSelect.selectedIndex];
+        if (selectedOption && selectedOption.disabled) {
+            showNotification('error', 'Slot Unavailable', 'The selected time slot is unavailable. Please choose another.');
+            return;
+        }
+
+        const submitBtn = document.getElementById('addAppointmentSubmitBtn');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        fetch('../controllers/addAppointment.php', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                // Always read as text first to handle PHP notices or stray output
+                return response.text().then(text => {
+                    const raw = (text || '').toString().trim();
+                    // Try to extract a JSON object from the response
+                    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        try {
+                            return JSON.parse(jsonMatch[0]);
+                        } catch (e) {
+                            // fall through to heuristics below
+                        }
+                    }
+                    // Heuristic: if response mentions success even with extra output, treat as success
+                    const lower = raw.toLowerCase();
+                    const inferredSuccess = /"success"\s*:\s*true/.test(lower) || /success/i.test(lower) && !/error|warning|notice/i.test(lower);
+                    if (inferredSuccess) {
+                        return { success: true, message: 'Appointment added successfully.' };
+                    }
+                    // Otherwise, surface a helpful snippet
+                    const snippet = raw.slice(0, 220);
+                    return { success: false, message: snippet || 'Invalid response from server' };
+                });
+            })
+            .then(data => {
+                if (data.success === true || data.status === 'success') {
+                    showNotification('success', 'Appointment Added', data.message || 'Appointment has been added successfully.');
+                    closeAddAppointmentModal();
+                    setTimeout(() => {
+                        refreshAppointmentList()
+                            .catch(error => {
+                                console.error('Refresh error:', error);
+                                showNotification('warning', 'Refresh Needed', 'Appointment was added, but the list could not refresh automatically.');
+                            })
+                            .finally(() => {
+                                submitBtn.disabled = false;
+                                submitBtn.innerHTML = originalText;
+                            });
+                    }, 1200);
+                } else {
+                    showAptCenterAlert('Add Appointment Failed', data.message || 'Failed to add appointment. Please try again.');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }
+            })
+            .catch(error => {
+                console.error('Add appointment error:', error);
+                showAptCenterAlert('Error', (error && error.message) ? error.message : 'An error occurred while adding the appointment. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            });
     }
     
     // Event listeners
@@ -1979,14 +3118,29 @@ $result = mysqli_query($con, $sql);
         
         // Close modals when clicking outside
         window.addEventListener('click', function(event) {
+            const addModal = document.getElementById('addAppointmentModal');
             const reschedModal = document.getElementById('reschedModal');
             const followUpModal = document.getElementById('followUpModal');
+            const aptAlertModal = document.getElementById('aptCenterAlertModal');
             
+            if (event.target === addModal) {
+                closeAddAppointmentModal();
+            }
             if (event.target === reschedModal) {
                 closeReschedModal();
             }
             if (event.target === followUpModal) {
                 closeFollowUpModal();
+            }
+            if (event.target === aptAlertModal) {
+                closeAptCenterAlert();
+            }
+        });
+        
+        // Escape key closes centered alert
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' || event.key === 'Esc') {
+                closeAptCenterAlert();
             }
         });
     });

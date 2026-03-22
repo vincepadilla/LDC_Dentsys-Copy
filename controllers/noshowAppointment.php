@@ -6,7 +6,7 @@ require_once __DIR__ . '/../libraries/PhpMailer/src/Exception.php';
 require_once __DIR__ . '/../libraries/PhpMailer/src/PHPMailer.php';
 require_once __DIR__ . '/../libraries/PhpMailer/src/SMTP.php';
 
-include_once __DIR__ . '/../database/config.php';
+require_once(__DIR__ . "/../database/config.php");
 
 header('Content-Type: application/json');
 

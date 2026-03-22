@@ -245,73 +245,109 @@ input[type="date"]:focus, select:focus {
     text-decoration: none;
 }
 
-/* Table Styles */
+/* Table Styles - aligned with walk-in / appointment tables */
 .table-responsive {
-    width: 100%;
     overflow-x: auto;
-    margin-top: 20px;
-    -webkit-overflow-scrolling: touch;
+    background: var(--white);
+    border-radius: 14px;
+    border: 1px solid #e5e7eb;
+    box-shadow: var(--shadow);
+    margin-top: 16px;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
-    background: var(--white);
-    box-shadow: var(--shadow);
-    border-radius: 8px;
-    overflow: hidden;
+    border: none;
 }
 
-th, td {
-    padding: 12px;
+thead th {
+    padding: 12px 16px;
     text-align: left;
-    border-bottom: 1px solid #eee;
-    font-size: 0.90em;
-    font-weight: 600;
-    border: 1px solid black;
-}
-
-th {
-    background-color: var(--primary-color);
-    color: var(--white);
-    font-weight: 600;
+    font-weight: 500;
+    font-size: 12px;
     text-transform: uppercase;
-    font-size: 0.85em;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.08em;
+    color: #ffffff;
+    background: linear-gradient(135deg, #48A6A7 0%, #2a9d8f 100%);
+    border-bottom: none;
+    border: none;
+    white-space: nowrap;
 }
 
-tr:nth-child(even) {
-    background-color: #f9f9f9;
+tbody tr {
+    border-bottom: none;
+    transition: background-color 0.2s;
 }
 
-tr:hover {
-    background-color: rgba(233, 196, 106, 0.1);
+/* Zebra striping: odd = light gray, even = white */
+tbody tr:nth-child(odd) {
+    background-color: #f3f4f6;
 }
 
-/* Action Buttons */
+tbody tr:nth-child(even) {
+    background-color: #ffffff;
+}
+
+tbody tr:hover {
+    background-color: #e5e7eb;
+}
+
+tbody td {
+    padding: 12px 16px;
+    color: #1F2937;
+    font-size: 14px;
+    border: none;
+}
+
+/* Action Buttons - compact buttons consistent with walk-in */
 .action-btns {
     display: flex;
     gap: 8px;
+    align-items: center;
 }
 
 .action-btn {
-    height: 30px;
-    padding: 6px 10px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-size: 0.85em;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 30px;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid #e5e7eb;
+    background: #F9FAFB;
+    color: #111827;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    min-height: 32px;
+}
+
+.action-btn i {
+    font-size: 13px;
+}
+
+.action-btn:hover {
+    background: #111827;
+    color: #F9FAFB;
+    border-color: transparent;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25);
 }
 
 .action-btn.disabled-action {
     opacity: 0.5;
     cursor: not-allowed;
     pointer-events: none;
+}
+
+/* Specific styling for the "X" (cancel/failed) icon in actions */
+.action-btn.btn-danger i {
+    color: #EF4444; /* red by default */
+}
+
+.action-btn.btn-danger:hover i {
+    color: #F97373; /* slightly lighter red on hover */
 }
 
 /* No Data */
@@ -414,7 +450,7 @@ tr:hover {
     background: transparent;
 }
 
-/* Modal Styles */
+/* Modal Styles - base modal for image preview */
 .modal {
     display: none;
     position: fixed;
@@ -444,52 +480,157 @@ tr:hover {
     border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.modal-content h3 {
-    margin: 0 0 25px 0;
-    font-size: 1.4rem;
+/* Enhanced overlay + panel for "Edit Payment" modal – reused from Services */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    z-index: 1100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.modal-panel {
+    background: #fff;
+    width: min(900px, 95%);
+    max-height: 95vh;
+    border-radius: 18px;
+    padding: 35px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+    position: relative;
+    overflow-y: auto;
+    overflow-x: hidden;
+    animation: modalFadeIn 0.3s ease-out;
+}
+
+.modal-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: #f3f4f6;
+    color: #374151;
+    font-size: 16px;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.modal-close:hover {
+    background: #e5e7eb;
+    transform: translateY(-2px);
+}
+
+.modal-heading {
+    margin-bottom: 28px;
+}
+
+.modal-heading h3 {
+    margin: 8px 0;
+    font-size: 22px;
+    color: #111827;
+}
+
+.modal-heading p {
+    margin: 0;
+    color: #4b5563;
+    font-size: 14px;
+}
+
+.modal-badge {
+    display: inline-flex;
+    padding: 6px 12px;
+    background: #ecfeff;
+    color: #036466;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.modal-badge.accent {
+    background: #e0f2fe;
+    color: #0f172a;
+}
+
+.modal-form .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 24px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.form-label {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6b7280;
+    margin-bottom: 0;
     font-weight: 600;
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: white;
-    padding: 12px;
-    background-color: var(--success);
+    gap: 4px;
+}
+
+.form-label .required {
+    color: #ef4444;
+}
+
+.form-control {
+    width: 100%;
+    padding: 10px 12px;
     border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    font-size: 14px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    background: #f9fafb;
 }
 
-.modal-content h3 i {
-    color: white;
+.form-control:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+    background: #ffffff;
 }
 
-.modal-content form {
+.modal-actions {
     display: flex;
-    flex-direction: column;
-    gap: 15px;
-    width: 100%;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
 }
 
-.modal-content label {
-    display: block;
-    font-weight: 500;
-    color: #34495e;
-    font-size: 0.95rem;
+.btn-wide {
+    min-width: 180px;
+    justify-content: center;
 }
 
-.modal-content input[type="text"],
-.modal-content input[type="email"],
-.modal-content input[type="number"],
-.modal-content input[type="date"],
-.modal-content select,
-.modal-content textarea {
-    width: 100%;
-    padding: 12px 15px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 1rem;
-    transition: all 0.3s ease;
-    background-color: #f9f9f9;
-    box-sizing: border-box;
+.btn-link {
+    background: transparent;
+    color: #6b7280;
+    border: none;
+    padding: 10px 16px;
+    font-size: 14px;
+}
+
+.btn-link:hover {
+    color: #111827;
+    text-decoration: underline;
 }
 
 .modal-content form > div[style*="display: flex"] {

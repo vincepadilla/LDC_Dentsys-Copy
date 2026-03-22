@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     header("Location: login.php");
@@ -28,6 +28,7 @@ if (empty($_SESSION['admin_verified'])) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="../assets/css/adminstyle.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         /* Notification System Styles */
         .notification-container {
@@ -617,114 +618,164 @@ if (empty($_SESSION['admin_verified'])) {
             }
         }
 
-        /* Recent Notifications Section */
-        .recent-notifications-section {
-            background: white;
-            border-radius: 16px;
-            padding: 25px;
+        /* Two-card Dashboard Stats (KPI + Chart) */
+        .dashboard-two-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
             margin-top: 30px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-two-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .modern-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
             border: 1px solid rgba(0, 0, 0, 0.05);
         }
 
-        .recent-notifications-section h2 {
-            margin-top: 0;
-            margin-bottom: 20px;
+        .modern-card h2 {
+            margin: 0 0 12px 0;
+            font-size: 18px;
             color: #1F2937;
-            font-size: 24px;
             font-weight: 700;
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        .notifications-list {
+        .modern-card h2 i {
+            color: #3B82F6;
+            font-size: 20px;
+        }
+
+        /* Premium Health Analytics Card (Booked vs Slots) */
+        .premium-analytics-card {
+            padding: 26px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
         }
 
-        .notification-item {
-            background: white;
-            border: 1px solid #E5E7EB;
-            border-radius: 12px;
-            padding: 16px;
-            display: flex;
-            align-items: flex-start;
-            gap: 15px;
-            transition: all 0.3s ease;
+        .premium-analytics-card .premium-analytics-title {
+            padding-bottom: 16px;
+            margin-bottom: 18px;
+            position: relative;
         }
 
-        .notification-item:hover {
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-            transform: translateY(-1px);
+        .premium-analytics-card .premium-analytics-title::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 3px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #F59E0B 0%, #FBBF24 100%);
         }
 
-        .notification-item-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
+        /* Donut chart centered area */
+        .today-donut-only {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-
-        .notification-item-icon.success {
-            background: #D1FAE5;
-            color: #10B981;
-        }
-
-        .notification-item-icon.info {
-            background: #DBEAFE;
-            color: #3B82F6;
-        }
-
-        .notification-item-icon.warning {
-            background: #FEF3C7;
-            color: #F59E0B;
-        }
-
-        .notification-item-icon.error {
-            background: #FEE2E2;
-            color: #EF4444;
-        }
-
-        .notification-item-content {
             flex: 1;
+            min-height: 220px; /* leaves room for the header above */
         }
 
-        .notification-item-text {
-            font-size: 15px;
-            color: #1F2937;
-            font-weight: 500;
-            margin: 0 0 6px 0;
-            line-height: 1.5;
+        .today-donut-wrap {
+            position: relative;
+            width: 210px;
+            height: 210px;
         }
 
-        .notification-item-time {
-            font-size: 13px;
-            color: #6B7280;
-            margin: 0;
+        .today-donut-wrap canvas {
+            width: 210px !important;
+            height: 210px !important;
         }
 
-        .no-notifications {
+        .today-donut-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             text-align: center;
-            padding: 40px 20px;
+            width: 85%;
+            pointer-events: none;
+        }
+
+        .today-donut-center-booked {
+            font-size: 34px;
+            font-weight: 900;
+            color: #111827;
+            line-height: 1;
+            margin-bottom: 2px;
+        }
+
+        .today-donut-center-label {
+            font-size: 13px;
+            font-weight: 800;
             color: #6B7280;
+            margin-bottom: 6px;
         }
 
-        .no-notifications i {
-            font-size: 48px;
-            margin-bottom: 15px;
-            opacity: 0.4;
-            color: #9CA3AF;
+        .today-donut-center-range {
+            font-size: 13px;
+            font-weight: 900;
+            color: #1E40AF;
+            background: rgba(59, 130, 246, 0.08);
+            padding: 6px 10px;
+            border-radius: 999px;
+            display: inline-block;
         }
 
-        .no-notifications p {
-            font-size: 16px;
-            margin: 0;
+        @media (max-width: 520px) {
+            .today-donut-only {
+                min-height: 200px;
+            }
+
+            .today-donut-wrap {
+                width: 190px;
+                height: 190px;
+            }
+
+            .today-donut-wrap canvas {
+                width: 190px !important;
+                height: 190px !important;
+            }
+        }
+
+        .kpi-number {
+            font-size: 46px;
+            font-weight: 800;
+            color: #1E40AF;
+            line-height: 1.05;
+            margin: 8px 0 8px 0;
+        }
+
+        .kpi-subtitle {
+            color: #6B7280;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            width: 100%;
+            height: 260px;
+            margin-top: 6px;
+        }
+
+        @media (max-width: 480px) {
+            .chart-wrapper {
+                height: 220px;
+            }
         }
     </style>
 </head>
@@ -780,6 +831,18 @@ if (empty($_SESSION['admin_verified'])) {
                     </div>
                 </div>
             </button>
+
+            <button class="control-option-btn" onclick="navigateToArchives()">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div class="control-icon" style="background: #3b82f620; color: #3b82f6;">
+                        <i class="fas fa-archive"></i>
+                    </div>
+                    <div style="text-align: left;">
+                        <div style="font-weight: 600; font-size: 16px;">Archive</div>
+                        <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">View archived appointments</div>
+                    </div>
+                </div>
+            </button>
             
             <button class="control-option-btn" onclick="navigateToWalkinRecords()">
                 <div style="display: flex; align-items: center; gap: 15px;">
@@ -825,6 +888,15 @@ if (empty($_SESSION['admin_verified'])) {
                                 ORDER BY a.appointment_time ASC";
     $todaysAppointmentsResult = mysqli_query($con, $todaysAppointmentsQuery);
     $todaysAppointmentsCount = mysqli_num_rows($todaysAppointmentsResult);
+
+    // Premium analytics: Donut-only card (total time slots per day is fixed at 11)
+    $todayBookedAppointmentsCount = (int)$todaysAppointmentsCount; // X (booked appointments today)
+    $todayTotalSlotsCount = 11; // Y (fixed)
+    $todayFillPercent = 0; // (X / 11) * 100
+    if ($todayTotalSlotsCount > 0) {
+        $todayFillPercent = (int)round(($todayBookedAppointmentsCount / $todayTotalSlotsCount) * 100);
+        $todayFillPercent = (int)max(0, min(100, $todayFillPercent));
+    }
     
     // Store results in array for reuse
     $todaysAppointmentsData = [];
@@ -870,129 +942,28 @@ if (empty($_SESSION['admin_verified'])) {
     }
     $stmt->close();
 
-    // Get recent notifications for display - combining system alerts, appointments, walk-ins, and status updates
-    $recentNotifications = [];
-    
-    // 1. Get recent system alerts (excluding dentist logout alerts)
-    $systemAlertsQuery = "SELECT alert_id as id, title, message, related_appointment_id, is_read, created_at, 'alert' as type
-                          FROM system_alerts 
-                          WHERE user_id = ? AND role = 'admin' 
-                          AND title NOT LIKE '%Dentist Logged Out%'
-                          ORDER BY created_at DESC 
-                          LIMIT 3";
-    $stmt = $con->prepare($systemAlertsQuery);
-    $stmt->bind_param("s", $admin_user_id);
+    // Appointments per month for the current year (Jan-Dec)
+    $currentYear = (int)date('Y');
+    $monthlyTotals = array_fill(0, 12, 0);
+    $startDate = $currentYear . '-01-01';
+    $endDate = ($currentYear + 1) . '-01-01';
+
+    $monthlyAppointmentsQuery = "SELECT MONTH(a.appointment_date) AS month_num, COUNT(*) AS total
+                                  FROM appointments a
+                                  WHERE a.appointment_date >= ? AND a.appointment_date < ?
+                                  AND a.status != 'Cancelled'
+                                  GROUP BY MONTH(a.appointment_date)";
+    $stmt = $con->prepare($monthlyAppointmentsQuery);
+    $stmt->bind_param("ss", $startDate, $endDate);
     $stmt->execute();
-    $systemAlertsResult = $stmt->get_result();
-    while ($row = mysqli_fetch_assoc($systemAlertsResult)) {
-        $recentNotifications[] = $row;
+    $monthlyAppointmentsResult = $stmt->get_result();
+    while ($row = mysqli_fetch_assoc($monthlyAppointmentsResult)) {
+        $m = (int)$row['month_num'];
+        if ($m >= 1 && $m <= 12) {
+            $monthlyTotals[$m - 1] = (int)$row['total'];
+        }
     }
     $stmt->close();
-    
-    // 2. Get recently booked appointments (last 24 hours)
-    $recentAppointmentsQuery = "SELECT a.appointment_id as id, 
-                                        CONCAT('New Appointment: ', p.first_name, ' ', p.last_name) as title,
-                                        CONCAT('Patient ', p.first_name, ' ', p.last_name, ' booked an appointment for ', 
-                                               DATE_FORMAT(a.appointment_date, '%M %d, %Y'), ' at ', a.appointment_time, 
-                                               ' - ', COALESCE(s.sub_service, s.service_category, 'General Service')) as message,
-                                        a.appointment_id as related_appointment_id,
-                                        0 as is_read,
-                                        COALESCE(a.created_at, NOW()) as created_at,
-                                        'appointment' as type
-                                 FROM appointments a
-                                 LEFT JOIN patient_information p ON a.patient_id = p.patient_id
-                                 LEFT JOIN services s ON a.service_id = s.service_id
-                                 WHERE COALESCE(a.created_at, NOW()) >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-                                 ORDER BY COALESCE(a.created_at, NOW()) DESC 
-                                 LIMIT 5";
-    $recentAppointmentsResult = mysqli_query($con, $recentAppointmentsQuery);
-    if ($recentAppointmentsResult) {
-        while ($row = mysqli_fetch_assoc($recentAppointmentsResult)) {
-            $recentNotifications[] = $row;
-        }
-    }
-    
-    // 3. Get recent walk-ins (last 24 hours)
-    // Check if walkin_appointments table exists and has created_at column
-    $recentWalkinsQuery = "SELECT w.walkin_id as id,
-                                  CONCAT('Walk-in: ', p.first_name, ' ', p.last_name) as title,
-                                  CONCAT('Walk-in patient ', p.first_name, ' ', p.last_name, ' registered for ', 
-                                         COALESCE(w.sub_service, w.service, 'General Service'), 
-                                         ' on ', DATE_FORMAT(NOW(), '%M %d, %Y at %h:%i %p')) as message,
-                                  NULL as related_appointment_id,
-                                  0 as is_read,
-                                  NOW() as created_at,
-                                  'walkin' as type
-                           FROM walkin_appointments w
-                           LEFT JOIN patient_information p ON w.patient_id = p.patient_id
-                           ORDER BY w.walkin_id DESC 
-                           LIMIT 5";
-    $recentWalkinsResult = mysqli_query($con, $recentWalkinsQuery);
-    if ($recentWalkinsResult) {
-        while ($row = mysqli_fetch_assoc($recentWalkinsResult)) {
-            $recentNotifications[] = $row;
-        }
-    }
-    
-    // 4. Get recent status updates (appointments with non-pending status created in last 24 hours)
-    // Note: Without updated_at column, we show appointments with confirmed/completed status created recently
-    $statusUpdatesQuery = "SELECT a.appointment_id as id,
-                                  CONCAT('Status: ', p.first_name, ' ', p.last_name) as title,
-                                  CONCAT('Appointment for ', p.first_name, ' ', p.last_name, 
-                                         ' is ', a.status, 
-                                         ' - ', DATE_FORMAT(a.appointment_date, '%M %d, %Y'), ' at ', a.appointment_time) as message,
-                                  a.appointment_id as related_appointment_id,
-                                  0 as is_read,
-                                  COALESCE(a.created_at, NOW()) as created_at,
-                                  'status_update' as type
-                           FROM appointments a
-                           LEFT JOIN patient_information p ON a.patient_id = p.patient_id
-                           WHERE COALESCE(a.created_at, NOW()) >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-                           AND a.status NOT IN ('Pending', 'Cancelled')
-                           AND a.status IN ('Confirmed', 'Completed', 'Reschedule', 'No-show', 'Paid')
-                           ORDER BY COALESCE(a.created_at, NOW()) DESC 
-                           LIMIT 3";
-    $statusUpdatesResult = mysqli_query($con, $statusUpdatesQuery);
-    if ($statusUpdatesResult) {
-        while ($row = mysqli_fetch_assoc($statusUpdatesResult)) {
-            $recentNotifications[] = $row;
-        }
-    }
-    
-    // Sort all notifications by created_at (most recent first) and limit to 5
-    usort($recentNotifications, function($a, $b) {
-        return strtotime($b['created_at']) - strtotime($a['created_at']);
-    });
-    $recentNotifications = array_slice($recentNotifications, 0, 5);
-
-    // Function to calculate relative time
-    function timeAgo($datetime) {
-        $timestamp = strtotime($datetime);
-        $diff = time() - $timestamp;
-        
-        if ($diff < 60) {
-            return 'just now';
-        } elseif ($diff < 3600) {
-            $mins = floor($diff / 60);
-            return $mins . ' minute' . ($mins != 1 ? 's' : '') . ' ago';
-        } elseif ($diff < 86400) {
-            $hours = floor($diff / 3600);
-            return $hours . ' hour' . ($hours != 1 ? 's' : '') . ' ago';
-        } elseif ($diff < 604800) {
-            $days = floor($diff / 86400);
-            return $days . ' day' . ($days != 1 ? 's' : '') . ' ago';
-        } else {
-            return date('M j, Y', $timestamp);
-        }
-    }
-
-    // Function to truncate notification message
-    function truncateMessage($message, $maxLength = 60) {
-        if (strlen($message) <= $maxLength) {
-            return $message;
-        }
-        return substr($message, 0, $maxLength) . '...';
-    }
 ?>
 
 <div class="main-content" id="dashboard">
@@ -1121,87 +1092,33 @@ if (empty($_SESSION['admin_verified'])) {
         </div>
     </div>
 
-    <!-- Recent Notifications Section -->
-    <div class="recent-notifications-section">
-        <h2>Recent Notifications</h2>
-        <?php if (!empty($recentNotifications)) { ?>
-            <div class="notifications-list">
-                <?php foreach ($recentNotifications as $notification) { 
-                    // Determine notification type and icon based on notification type field
-                    $notifType = $notification['type'] ?? 'alert';
-                    $type = 'info';
-                    $icon = '<i class="fas fa-info-circle"></i>';
-                    
-                    // Set icon and type based on notification type
-                    switch($notifType) {
-                        case 'appointment':
-                            $type = 'info';
-                            $icon = '<i class="fas fa-calendar-plus"></i>';
-                            break;
-                        case 'walkin':
-                            $type = 'info';
-                            $icon = '<i class="fas fa-walking"></i>';
-                            break;
-                        case 'status_update':
-                            $status = $notification['message'] ?? '';
-                            if (stripos($status, 'Completed') !== false) {
-                                $type = 'success';
-                                $icon = '<i class="fas fa-check-circle"></i>';
-                            } elseif (stripos($status, 'Cancelled') !== false || stripos($status, 'No-show') !== false) {
-                                $type = 'error';
-                                $icon = '<i class="fas fa-times-circle"></i>';
-                            } elseif (stripos($status, 'Confirmed') !== false) {
-                                $type = 'success';
-                                $icon = '<i class="fas fa-check"></i>';
-                            } else {
-                                $type = 'info';
-                                $icon = '<i class="fas fa-sync-alt"></i>';
-                            }
-                            break;
-                        case 'alert':
-                        default:
-                            // Determine based on message content
-                            if (stripos($notification['title'] ?? '', 'completed') !== false || 
-                                stripos($notification['message'] ?? '', 'completed') !== false ||
-                                stripos($notification['message'] ?? '', 'received') !== false ||
-                                stripos($notification['message'] ?? '', 'payment') !== false) {
-                                $type = 'success';
-                                $icon = '<i class="fas fa-check"></i>';
-                            } elseif (stripos($notification['title'] ?? '', 'warning') !== false || 
-                                      stripos($notification['message'] ?? '', 'low') !== false ||
-                                      stripos($notification['message'] ?? '', 'required') !== false ||
-                                      stripos($notification['message'] ?? '', 'inactive') !== false) {
-                                $type = 'warning';
-                                $icon = '<i class="fas fa-exclamation-triangle"></i>';
-                            } elseif (stripos($notification['title'] ?? '', 'error') !== false || 
-                                      stripos($notification['message'] ?? '', 'error') !== false ||
-                                      stripos($notification['message'] ?? '', 'failed') !== false) {
-                                $type = 'error';
-                                $icon = '<i class="fas fa-times-circle"></i>';
-                            } else {
-                                $type = 'info';
-                                $icon = '<i class="fas fa-info-circle"></i>';
-                            }
-                            break;
-                    }
-                ?>
-                    <div class="notification-item">
-                        <div class="notification-item-icon <?php echo $type; ?>">
-                            <?php echo $icon; ?>
-                        </div>
-                        <div class="notification-item-content">
-                            <p class="notification-item-text"><?php echo htmlspecialchars(truncateMessage($notification['message'])); ?></p>
-                            <p class="notification-item-time"><?php echo timeAgo($notification['created_at']); ?></p>
+    <!-- Dashboard Two-Card Stats -->
+    <div class="dashboard-two-cards">
+        <div class="modern-card premium-analytics-card">
+            <h2 class="premium-analytics-title">
+                <i class="fas fa-calendar-day" aria-hidden="true"></i>
+                Today’s Appointments
+            </h2>
+            <div class="today-donut-only">
+                <div class="today-donut-wrap">
+                    <canvas id="todaySlotsDonutChart"></canvas>
+                    <div class="today-donut-center">
+                        <div class="today-donut-center-booked"><?php echo (int)$todayBookedAppointmentsCount; ?></div>
+                        <div class="today-donut-center-label">Booked</div>
+                        <div class="today-donut-center-range">
+                            <?php echo (int)$todayBookedAppointmentsCount; ?> / <?php echo (int)$todayTotalSlotsCount; ?>
                         </div>
                     </div>
-                <?php } ?>
+                </div>
             </div>
-        <?php } else { ?>
-            <div class="no-notifications">
-                <i class="fas fa-bell-slash"></i>
-                <p>No recent notifications</p>
+        </div>
+
+        <div class="modern-card">
+            <h2><i class="fas fa-chart-line"></i> Appointments Per Month</h2>
+            <div class="chart-wrapper">
+                <canvas id="appointmentsPerMonthChart"></canvas>
             </div>
-        <?php } ?>
+        </div>
     </div>
 </div>
 
@@ -1332,6 +1249,24 @@ if (empty($_SESSION['admin_verified'])) {
         
         setTimeout(() => {
             window.location.href = '../admin/walkinRecords.php';
+        }, 300);
+    }
+
+    function navigateToArchives() {
+        closeControlsPopup();
+        const mainContent = document.querySelector('.main-content');
+        const clinicControlBtn = document.querySelector('.sidebar-btn-clinic-control');
+        
+        if (mainContent) {
+            mainContent.classList.add('page-fade-out');
+        }
+        
+        if (clinicControlBtn) {
+            clinicControlBtn.style.transform = 'scale(0.95)';
+        }
+        
+        setTimeout(() => {
+            window.location.href = '../views/archives.php';
         }, 300);
     }
 
@@ -1576,6 +1511,121 @@ if (empty($_SESSION['admin_verified'])) {
             });
         });
     <?php } ?>
+
+    // ==================== DASHBOARD CHARTS ====================
+    document.addEventListener('DOMContentLoaded', function () {
+        if (typeof Chart === 'undefined') return;
+
+        // Appointments Per Month (Jan-Dec)
+        const monthCanvas = document.getElementById('appointmentsPerMonthChart');
+        if (monthCanvas) {
+            const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const monthlyAppointments = <?php echo json_encode(array_values($monthlyTotals)); ?>;
+
+            const ctx = monthCanvas.getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: monthLabels,
+                    datasets: [{
+                        label: 'Appointments',
+                        data: monthlyAppointments,
+                        borderColor: '#3B82F6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: '#3B82F6',
+                        pointBorderColor: '#ffffff',
+                        borderWidth: 3,
+                        tension: 0.35,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return ` ${context.parsed.y} appointments`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#6B7280',
+                                maxRotation: 0,
+                                autoSkip: true
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#6B7280',
+                                precision: 0
+                            },
+                            grid: {
+                                color: 'rgba(107, 114, 128, 0.15)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Today's Slots Donut (Booked vs Total Available slots for the day)
+        const donutCanvas = document.getElementById('todaySlotsDonutChart');
+        if (donutCanvas) {
+            const booked = <?php echo (int)$todayBookedAppointmentsCount; ?>;
+            const totalSlots = <?php echo (int)$todayTotalSlotsCount; ?>;
+
+            const denom = totalSlots > 0 ? totalSlots : 1; // keep chart stable when there are no slots
+            const bookedCapped = Math.max(0, Math.min(booked, denom));
+            const remaining = Math.max(0, denom - bookedCapped);
+            const fillPercent = denom > 0 ? Math.round((bookedCapped / denom) * 100) : 0;
+
+            const donutCtx = donutCanvas.getContext('2d');
+            new Chart(donutCtx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [bookedCapped, remaining],
+                        backgroundColor: [
+                            '#3B82F6',
+                            '#E5E7EB'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '72%',
+                    rotation: -90,
+                    circumference: 360,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    const value = context.parsed;
+                                    if (context.dataIndex === 0) {
+                                        return ` Booked: ${value} / ${denom} (${fillPercent}%)`;
+                                    }
+                                    return ` Available: ${value} slots`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
 
     // ==================== AUTOMATIC INACTIVE DENTIST CHECK ====================
     // Automatically check for inactive dentists with today's appointments when admin dashboard loads

@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -109,9 +109,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     if ($insert->execute()) {
         // Get patient and service details for email
         $patientQuery = $con->prepare("
-            SELECT p.first_name, p.last_name, p.email, u.user_id
+            SELECT p.first_name, p.last_name, p.email
             FROM patient_information p
-            LEFT JOIN users u ON p.user_id = u.user_id
             WHERE p.patient_id = ?
         ");
         $patientQuery->bind_param("s", $patient_id);

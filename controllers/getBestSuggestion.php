@@ -1,5 +1,5 @@
 <?php
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 $dentist = $_POST['dentist'] ?? 'Dr. Allen';
 $duration = 60; // minutes per appointment

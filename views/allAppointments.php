@@ -11,6 +11,21 @@ if (!isset($_SESSION['userID'])) {
 }
 
 $user_id = $_SESSION['userID'];
+$rescheduleTimeMap = [
+    'firstBatch'   => '8:00AM-9:00AM',
+    'secondBatch'  => '9:00AM-10:00AM',
+    'thirdBatch'   => '10:00AM-11:00AM',
+    'fourthBatch'  => '11:00AM-12:00PM',
+    'fifthBatch'   => '1:00PM-2:00PM',
+    'sixthBatch'   => '2:00PM-3:00PM',
+    'sevenBatch'   => '3:00PM-4:00PM',
+    'eightBatch'   => '4:00PM-5:00PM',
+    'nineBatch'    => '5:00PM-6:00PM',
+    'tenBatch'     => '6:00PM-7:00PM',
+    'lastBatch'    => '7:00PM-8:00PM'
+];
+$rescheduleToday = date('Y-m-d');
+$rescheduleMaxDate = date('Y-m-d', strtotime('+1 month'));
 
 // ✅ Fetch user and patient information
 $user_query = $con->prepare("
@@ -37,6 +52,8 @@ if (!empty($user['patient_id'])) {
     $appt_query = $con->prepare("
         SELECT a.appointment_id, a.appointment_date, a.appointment_time, 
                 s.sub_service ,s.service_category, a.status, a.created_at,
+               a.request_note,
+               a.reschedule_reason,
                p.payment_id, p.method as payment_method, p.status as payment_status" . $ticketField . ",
                'appointment' as appointment_type
         FROM appointments a
@@ -424,6 +441,76 @@ if (!empty($user['patient_id'])) {
             color: #6B21A8;
             border: 1px solid #8B5CF6;
         }
+
+        /* Reschedule modal */
+        .reschedule-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.52);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10002;
+            padding: 20px;
+        }
+        .reschedule-modal-overlay.show { display: flex; }
+        .reschedule-modal-panel {
+            position: relative;
+            width: min(760px, 100%);
+            max-height: 90vh;
+            overflow-y: auto;
+            background: #ffffff;
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 24px 60px rgba(2, 6, 23, 0.28);
+            animation: modalPopIn 0.28s ease-out;
+        }
+        .reschedule-modal-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 34px;
+            height: 34px;
+            border: none;
+            border-radius: 10px;
+            background: #f3f4f6;
+            color: #374151;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        .reschedule-form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .reschedule-form-group { display: flex; flex-direction: column; gap: 8px; }
+        .reschedule-form-control {
+            width: 100%;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 11px 12px;
+            font-size: 14px;
+            font-family: 'Poppins', sans-serif;
+        }
+        .reschedule-modal-actions {
+            margin-top: 18px;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .reschedule-submit-btn,
+        .reschedule-cancel-btn {
+            border: none;
+            border-radius: 10px;
+            padding: 11px 18px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .reschedule-submit-btn { background: #48A6A7; color: #fff; }
+        .reschedule-cancel-btn { background: #f3f4f6; color: #374151; }
+        .time-slot-disabled { color: #9ca3af; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -441,6 +528,40 @@ if (!empty($user['patient_id'])) {
             <button class="confirmation-btn confirmation-btn-cancel" onclick="closeConfirmationModal()">Cancel</button>
             <button class="confirmation-btn confirmation-btn-confirm" id="confirmActionBtn">Confirm</button>
         </div>
+    </div>
+</div>
+
+<div id="rescheduleModal" class="reschedule-modal-overlay">
+    <div class="reschedule-modal-panel">
+        <button type="button" class="reschedule-modal-close" onclick="closeRescheduleModal()" aria-label="Close reschedule dialog">&times;</button>
+        <h3 style="margin: 0 0 6px 0;">Update your appointment schedule</h3>
+        <p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">Select a new date and available time slot.</p>
+        <form id="rescheduleFormModal">
+            <input type="hidden" name="appointment_id" id="rescheduleAppointmentId">
+            <input type="hidden" name="has_request_note" id="rescheduleHasRequestNote" value="0">
+            <div class="reschedule-form-grid">
+                <div class="reschedule-form-group">
+                    <label for="new_date_resched_modal">New Date *</label>
+                    <input type="date" id="new_date_resched_modal" name="new_date_resched" class="reschedule-form-control" min="<?= htmlspecialchars($rescheduleToday); ?>" max="<?= htmlspecialchars($rescheduleMaxDate); ?>" required>
+                </div>
+                <div class="reschedule-form-group">
+                    <label for="new_time_slot_modal">New Time Slot *</label>
+                    <select id="new_time_slot_modal" name="new_time_slot" class="reschedule-form-control" required>
+                        <option value="">Select a time slot</option>
+                        <?php foreach ($rescheduleTimeMap as $slot => $time): ?>
+                            <option value="<?= htmlspecialchars($slot); ?>"><?= htmlspecialchars($time); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <p id="rescheduleSlotHint" style="margin: 10px 0 0 0; font-size: 13px; color: #6b7280; display: none;">
+                This appointment includes a request note and requires 2 consecutive time slots.
+            </p>
+            <div class="reschedule-modal-actions">
+                <button type="button" class="reschedule-cancel-btn" onclick="closeRescheduleModal()">Cancel</button>
+                <button type="submit" class="reschedule-submit-btn" id="rescheduleSubmitBtn">Reschedule Appointment</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -682,20 +803,15 @@ if (!empty($user['patient_id'])) {
                             } elseif ($status == "Complete" || $status == "Completed") {
                                 echo "<p>Your appointment has been completed.</p>";
                             } elseif ($status == "Cancelled") {
-                                echo "<p>Your appointment has been cancelled.</p>";
-                                
-                                if ($alreadyRequested) {
-                                    echo "<p class=\"text-success\"><strong>Refund request has already been submitted" .
-                                         ($requestStatus ? " (" . htmlspecialchars(ucfirst($requestStatus)) . ")" : "") .
-                                         ".</strong></p>";
-                                    if ($requestDate) {
-                                        echo "<p>Requested on " . date('F j, Y g:i A', strtotime($requestDate)) . "</p>";
-                                    }
-                                } elseif ($eligibleForRefundRequest) {
-                                    echo "<p><strong>Note:</strong> This appointment was cancelled at least 2 days before the scheduled date. You may request a refund for your payment below.</p>";
-                                }
+                                // Keep cancelled state clean in this view; action area shows only Reschedule.
                             } elseif ($status == "Reschedule") {
                                 echo "<p>Your appointment has been rescheduled. Please wait for confirmation.</p>";
+                            }
+
+                            // Show clinic reschedule note for non-cancelled appointments, matching account.php behavior.
+                            if (!empty($appointment['reschedule_reason']) && strtolower((string)$status) !== 'cancelled') {
+                                echo "<p><strong>Note from clinic:</strong> " . htmlspecialchars($appointment['reschedule_reason']) . "</p>";
+                                echo "<p>If you are not available for this new schedule, you can reschedule again from this page.</p>";
                             }
                             ?>
                         </div>
@@ -710,25 +826,18 @@ if (!empty($user['patient_id'])) {
                                 ?>
                                 
                             <?php elseif ($status == 'Cancelled'): ?>
-                                <!-- For Cancelled appointments, allow reschedule and optional refund request -->
-                                <a href="reschedule.php?id=<?= $appointment['appointment_id']; ?>" 
-                                   class="btn btn-primary">
+                                <!-- For Cancelled appointments, show only Reschedule -->
+                                <button type="button"
+                                   class="btn btn-primary"
+                                   data-appointment-id="<?= htmlspecialchars($appointment['appointment_id']); ?>"
+                                   data-service="<?= htmlspecialchars($appointment['sub_service'] ?? $appointment['service_category'] ?? 'N/A'); ?>"
+                                   data-current-date="<?= htmlspecialchars($appointment['appointment_date'] ?? ''); ?>"
+                                   data-current-time="<?= htmlspecialchars($appointment['appointment_time'] ?? ''); ?>"
+                                   data-has-request-note="<?= !empty($appointment['request_note']) ? '1' : '0'; ?>"
+                                   data-status="<?= htmlspecialchars($status); ?>"
+                                   onclick="openRescheduleModal(this)">
                                     Reschedule
-                                </a>
-
-                                <?php if ($eligibleForRefundRequest): ?>
-                                    <button type="button"
-                                        class="btn btn-secondary refund-btn"
-                                        data-appointment-id="<?= htmlspecialchars($appointment['appointment_id']); ?>"
-                                        data-payment-id="<?= htmlspecialchars($payment_id); ?>"
-                                        onclick="requestRefund(this)">
-                                        Request Refund
-                                    </button>
-                                <?php elseif ($alreadyRequested): ?>
-                                    <button type="button" class="btn btn-secondary" disabled>
-                                        Refund Requested
-                                    </button>
-                                <?php endif; ?>
+                                </button>
                             <?php else: ?>
                                 <!-- Show all buttons for non-cancelled appointments -->
 
@@ -739,11 +848,17 @@ if (!empty($user['patient_id'])) {
                                     Cancel
                                 </button>
 
-                                <a href="reschedule.php?id=<?= $appointment['appointment_id']; ?>" 
+                                <button type="button"
                                    class="btn btn-primary <?= $buttonsDisabled ? 'disabled' : ''; ?>"
-                                   <?= $buttonsDisabled ? 'style="opacity: 0.5; cursor: not-allowed;"' : ''; ?>>
+                                   data-appointment-id="<?= htmlspecialchars($appointment['appointment_id']); ?>"
+                                   data-service="<?= htmlspecialchars($appointment['sub_service'] ?? $appointment['service_category'] ?? 'N/A'); ?>"
+                                   data-current-date="<?= htmlspecialchars($appointment['appointment_date'] ?? ''); ?>"
+                                   data-current-time="<?= htmlspecialchars($appointment['appointment_time'] ?? ''); ?>"
+                                   data-has-request-note="<?= !empty($appointment['request_note']) ? '1' : '0'; ?>"
+                                   data-status="<?= htmlspecialchars($status); ?>"
+                                   <?= $buttonsDisabled ? 'disabled style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"' : 'onclick="openRescheduleModal(this)"'; ?>>
                                     Reschedule
-                                </a>
+                                </button>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -873,11 +988,178 @@ function closeConfirmationModal() {
 // Close modal when clicking outside
 window.addEventListener('click', function(event) {
     const modal = document.getElementById('confirmationModal');
+    const rescheduleModal = document.getElementById('rescheduleModal');
     if (event.target === modal) {
         closeConfirmationModal();
     }
+    if (event.target === rescheduleModal) {
+        closeRescheduleModal();
+    }
 });
 // ==================== END CONFIRMATION MODAL ====================
+
+function openRescheduleModal(button) {
+    const modal = document.getElementById('rescheduleModal');
+    const appointmentId = button.getAttribute('data-appointment-id') || '';
+    const hasRequestNote = button.getAttribute('data-has-request-note') === '1';
+    document.getElementById('rescheduleAppointmentId').value = appointmentId;
+    document.getElementById('rescheduleHasRequestNote').value = hasRequestNote ? '1' : '0';
+    document.getElementById('new_date_resched_modal').value = '';
+    const slotHint = document.getElementById('rescheduleSlotHint');
+    if (slotHint) slotHint.style.display = hasRequestNote ? 'block' : 'none';
+    resetTimeSlotOptions();
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('show'), 10);
+}
+
+function closeRescheduleModal() {
+    const modal = document.getElementById('rescheduleModal');
+    if (!modal) return;
+    modal.classList.remove('show');
+    setTimeout(() => { modal.style.display = 'none'; }, 200);
+}
+
+function resetTimeSlotOptions() {
+    const timeSelect = document.getElementById('new_time_slot_modal');
+    if (!timeSelect) return;
+    Array.from(timeSelect.options).forEach(option => {
+        if (!option.value) return;
+        if (!option.getAttribute('data-original-text')) {
+            option.setAttribute('data-original-text', option.textContent);
+        }
+        option.disabled = false;
+        option.classList.remove('time-slot-disabled');
+        option.textContent = option.getAttribute('data-original-text');
+    });
+    timeSelect.value = '';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const dateInput = document.getElementById('new_date_resched_modal');
+    const timeSelect = document.getElementById('new_time_slot_modal');
+    const form = document.getElementById('rescheduleFormModal');
+    const submitBtn = document.getElementById('rescheduleSubmitBtn');
+    const hasRequestNoteInput = document.getElementById('rescheduleHasRequestNote');
+    const slotOrder = ['firstBatch','secondBatch','thirdBatch','fourthBatch','fifthBatch','sixthBatch','sevenBatch','eightBatch','nineBatch','tenBatch','lastBatch'];
+    let latestUnavailableSlots = new Set();
+
+    function getNextSlot(slotKey) {
+        const idx = slotOrder.indexOf(slotKey);
+        if (idx === -1 || idx + 1 >= slotOrder.length) return null;
+        return slotOrder[idx + 1];
+    }
+
+    if (!dateInput || !timeSelect || !form || !submitBtn) return;
+
+    dateInput.addEventListener('change', function() {
+        const selectedDate = this.value;
+        resetTimeSlotOptions();
+        if (!selectedDate) return;
+
+        fetch(`../controllers/getAppointments.php?date=${encodeURIComponent(selectedDate)}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Unable to fetch appointment slots.');
+                return response.json();
+            })
+            .then(data => {
+                const unavailableSlots = data.unavailable_slots || [];
+                latestUnavailableSlots = new Set(unavailableSlots);
+
+                if (data.clinic_closed && data.closure_type === 'full_day') {
+                    showNotification('warning', 'Clinic Closed', data.closure_reason || 'No appointments available on this date.');
+                    dateInput.value = '';
+                    return;
+                }
+
+                Array.from(timeSelect.options).forEach(option => {
+                    if (!option.value) return;
+                    if (unavailableSlots.includes(option.value)) {
+                        option.disabled = true;
+                        option.classList.add('time-slot-disabled');
+                        option.textContent = `${option.getAttribute('data-original-text')} (Booked)`;
+                    }
+                });
+
+                const requiresTwoSlots = hasRequestNoteInput && hasRequestNoteInput.value === '1';
+                if (requiresTwoSlots) {
+                    Array.from(timeSelect.options).forEach(option => {
+                        if (!option.value || option.disabled) return;
+                        const nextSlot = getNextSlot(option.value);
+                        if (!nextSlot) {
+                            option.disabled = true;
+                            option.classList.add('time-slot-disabled');
+                            option.textContent = `${option.getAttribute('data-original-text')} (Needs next slot)`;
+                            return;
+                        }
+                        if (latestUnavailableSlots.has(nextSlot)) {
+                            option.disabled = true;
+                            option.classList.add('time-slot-disabled');
+                            option.textContent = `${option.getAttribute('data-original-text')} (Next slot unavailable)`;
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error(error);
+                showNotification('error', 'Error', 'Error loading available time slots. Please try again.');
+            });
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const appointmentId = document.getElementById('rescheduleAppointmentId').value.trim();
+        const selectedDate = dateInput.value;
+        const selectedTime = timeSelect.value;
+        const requiresTwoSlots = hasRequestNoteInput && hasRequestNoteInput.value === '1';
+
+        if (!appointmentId || !selectedDate || !selectedTime) {
+            showNotification('warning', 'Validation Error', 'Please select both date and time.');
+            return;
+        }
+        if (timeSelect.options[timeSelect.selectedIndex] && timeSelect.options[timeSelect.selectedIndex].disabled) {
+            showNotification('error', 'Time Slot Unavailable', 'The selected time slot is not available. Please choose another time.');
+            return;
+        }
+        if (requiresTwoSlots) {
+            const nextSlot = getNextSlot(selectedTime);
+            if (!nextSlot) {
+                showNotification('error', 'Invalid Time Slot', 'This appointment requires 2 consecutive slots. Please select an earlier time.');
+                return;
+            }
+            if (latestUnavailableSlots.has(nextSlot)) {
+                showNotification('error', 'Second Slot Unavailable', 'The next consecutive slot is unavailable. Please choose another start time.');
+                return;
+            }
+        }
+
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Processing...';
+
+        fetch('../controllers/rescheduleAppointment.php', {
+            method: 'POST',
+            body: new FormData(form)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success || data.status === 'success') {
+                showNotification('success', 'Appointment Rescheduled', data.message || 'Appointment rescheduled successfully!');
+                closeRescheduleModal();
+                setTimeout(() => location.reload(), 1200);
+            } else {
+                showNotification('error', 'Reschedule Failed', data.message || 'Failed to reschedule appointment. Please try again.');
+            }
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+        })
+        .catch(error => {
+            console.error(error);
+            showNotification('error', 'Error', 'An error occurred while rescheduling. Please try again.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+        });
+    });
+});
 
 // ==================== CANCEL APPOINTMENT AJAX ====================
 function cancelAppointment(appointmentId) {

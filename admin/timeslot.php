@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     header("Location: ../views/login.php");
@@ -207,6 +207,342 @@ if (empty($_SESSION['admin_verified'])) {
             }
         }
     </style>
+    <style>
+        /* Premium styling for Blocked Time Slots section (UI only) */
+        .blocked-slots-section {
+            margin-top: 12px;
+            padding: 18px;
+            background: #ffffff;
+            border: 1px solid #e7eef6;
+            border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(16, 24, 40, 0.05);
+        }
+
+        .blocked-slots-section > h3 {
+            margin: 0 0 14px 0;
+            font-size: 18px;
+            font-weight: 900;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #blockedSlotsTable {
+            width: 100%;
+            border-collapse: collapse;
+            border-spacing: 0;
+            border: none;
+        }
+
+        #blockedSlotsTable,
+        #blockedSlotsTable th,
+        #blockedSlotsTable td {
+            border: none !important; /* remove all visible table borders/lines */
+        }
+
+        #blockedSlotsTable thead th {
+            background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+            color: #ffffff;
+            text-align: left;
+            font-weight: 900;
+            padding: 10px 14px;
+            font-size: 12.5px;
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+        }
+
+        #blockedSlotsTable tbody td {
+            padding: 10px 14px;
+            font-size: 14px;
+            color: #111827;
+            vertical-align: middle;
+        }
+
+        #blockedSlotsTable tbody tr {
+            transition: background 0.15s ease, transform 0.15s ease;
+            line-height: 1.2;
+        }
+
+        /* Zebra rows for a cleaner, softer look */
+        #blockedSlotsTable tbody tr:nth-child(odd) {
+            background: #ffffff;
+        }
+
+        #blockedSlotsTable tbody tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        #blockedSlotsTable tbody tr:hover {
+            background: rgba(13, 148, 136, 0.08) !important;
+        }
+
+        /* Compact no-data row */
+        #blockedSlotsTable td.no-data {
+            padding: 14px 14px;
+            color: #6b7280;
+        }
+
+        /* Premium Actions button style (table only) */
+        #blockedSlotsTable .action-btn.btn-danger {
+            width: 38px;
+            height: 36px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+            color: #ffffff;
+            border: none;
+            box-shadow: 0 10px 24px rgba(239, 68, 68, 0.25);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+        }
+
+        #blockedSlotsTable .action-btn.btn-danger i {
+            font-size: 13px;
+        }
+
+        #blockedSlotsTable .action-btn.btn-danger:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 32px rgba(239, 68, 68, 0.32);
+            filter: brightness(1.05);
+        }
+
+        #blockedSlotsTable .action-btn.btn-danger:active {
+            transform: translateY(0);
+            box-shadow: 0 10px 24px rgba(239, 68, 68, 0.25);
+        }
+
+        #blockedSlotsTable .action-btn.btn-danger:focus-visible {
+            outline: 3px solid rgba(13, 148, 136, 0.35);
+            outline-offset: 2px;
+        }
+
+        /* Pagination UI for blocked slots table */
+        .blocked-slots-pagination {
+            width: 100%;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .blocked-slots-pagination .page-btn {
+            border: 1px solid #e7eef6;
+            background: #ffffff;
+            color: #0f172a;
+            border-radius: 12px;
+            padding: 8px 12px;
+            font-weight: 900;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+
+        .blocked-slots-pagination .page-btn:hover:not(:disabled) {
+            background: #f8fafc;
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(16, 24, 40, 0.06);
+        }
+
+        .blocked-slots-pagination .page-btn:disabled {
+            cursor: not-allowed;
+            background: #f3f4f6;
+            color: #9ca3af;
+            border-color: #e5e7eb;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .blocked-slots-pagination .page-btn.active {
+            background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+            color: #ffffff;
+            border-color: transparent;
+        }
+
+        @media (max-width: 768px) {
+            .blocked-slots-pagination {
+                display: none !important; /* desktop table is hidden on mobile */
+            }
+        }
+
+        /* Premium Actions button style (card view) */
+        .blocked-slot-card-actions .control-card-button.btn-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%) !important;
+            border: none !important;
+            box-shadow: 0 14px 32px rgba(239, 68, 68, 0.25) !important;
+            border-radius: 14px !important;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+        }
+
+        .blocked-slot-card-actions .control-card-button.btn-danger:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 18px 40px rgba(239, 68, 68, 0.32) !important;
+            filter: brightness(1.05) !important;
+        }
+
+        /* Custom animated modal for blocking a time slot (replaces prompt()) */
+        .ts-block-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.60);
+            display: none;
+            opacity: 0;
+            pointer-events: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 10050;
+            transition: opacity 180ms ease;
+        }
+
+        .ts-block-modal-overlay.show {
+            display: flex;
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .ts-block-modal-overlay.hide {
+            display: flex;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .ts-block-modal {
+            width: min(560px, 100%);
+            background: #ffffff;
+            border-radius: 18px;
+            border: 1px solid #e7eef6;
+            box-shadow: 0 24px 80px rgba(2, 6, 23, 0.35);
+            transform: scale(0.96);
+            opacity: 0;
+            transition: transform 180ms ease, opacity 180ms ease;
+        }
+
+        .ts-block-modal-overlay.show .ts-block-modal {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        .ts-block-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 16px 10px;
+        }
+
+        .ts-block-modal-title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 900;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ts-block-modal-close {
+            background: transparent;
+            border: none;
+            color: #6b7280;
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            line-height: 1;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .ts-block-modal-close:hover {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .ts-block-modal-body {
+            padding: 0 16px 8px;
+        }
+
+        .ts-block-modal-body label {
+            display: block;
+            font-weight: 900;
+            color: #111827;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .ts-block-modal-textarea {
+            width: 100%;
+            min-height: 110px;
+            resize: vertical;
+            padding: 12px;
+            border-radius: 14px;
+            border: 1px solid #d1d5db;
+            font-size: 14px;
+            outline: none;
+            transition: box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+
+        .ts-block-modal-textarea:focus {
+            border-color: #0d9488;
+            box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.15);
+        }
+
+        .ts-block-modal-error {
+            display: none;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #dc2626;
+            font-weight: 900;
+        }
+
+        .ts-block-modal-error.show {
+            display: block;
+        }
+
+        .ts-block-modal-footer {
+            padding: 12px 16px 16px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .ts-block-modal-cancel {
+            border-radius: 14px;
+            padding: 10px 16px;
+            font-weight: 900;
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            color: #111827;
+            transition: transform 0.15s ease, background 0.15s ease;
+        }
+
+        .ts-block-modal-cancel:hover {
+            background: #e5e7eb;
+            transform: translateY(-1px);
+        }
+
+        .ts-block-modal-confirm {
+            border-radius: 14px;
+            padding: 10px 16px;
+            font-weight: 900;
+            border: none;
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+            color: #ffffff;
+            box-shadow: 0 14px 32px rgba(239, 68, 68, 0.25);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+        }
+
+        .ts-block-modal-confirm:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 18px 40px rgba(239, 68, 68, 0.32);
+            filter: brightness(1.05);
+        }
+    </style>
 </head>
 <body>
 
@@ -220,8 +556,8 @@ if (empty($_SESSION['admin_verified'])) {
         </a>
         <h2><i class="fa-solid fa-calendar-days"></i> TIME SLOT SCHEDULING CONTROL</h2>
         
-        <!-- Desktop Controls -->
-        <div class="schedule-controls">
+        <!-- Desktop Controls (hidden: dentist + view type are auto-selected) -->
+        <div class="schedule-controls" style="display:none;">
             <div class="control-group">
                 <label for="dentistSelectSchedule">Select Dentist:</label>
                 <select id="dentistSelectSchedule">
@@ -249,7 +585,7 @@ if (empty($_SESSION['admin_verified'])) {
         <!-- Mobile/Tablet Card View Controls -->
         <div class="schedule-controls-card">
             <!-- Dentist Selection Card -->
-            <div class="control-card">
+            <div class="control-card" style="display:none;">
                 <div class="control-card-header">
                     <i class="fas fa-user-doctor"></i>
                     <h4>Select Dentist</h4>
@@ -269,7 +605,7 @@ if (empty($_SESSION['admin_verified'])) {
             </div>
 
             <!-- View Type Card -->
-            <div class="control-card">
+            <div class="control-card" style="display:none;">
                 <div class="control-card-header">
                     <i class="fas fa-calendar-alt"></i>
                     <h4>View Type</h4>
@@ -307,35 +643,45 @@ if (empty($_SESSION['admin_verified'])) {
 
         <!-- Weekly Schedule View -->
         <div id="weeklyView" class="schedule-view">
-            <div class="week-navigation">
-                <button id="prevWeekBtn" class="btn btn-accent" onclick="changeWeek(-1)">
+            <div class="week-navigation" style="justify-content:space-between; gap:12px; flex-wrap:nowrap; width:100%;">
+                <button id="prevWeekBtn" class="btn btn-accent" style="display:flex; justify-content:center; flex:0 0 auto;" onclick="changeWeek(-1)">
                     <i class="fas fa-chevron-left"></i> Previous Week
                 </button>
-                <h3 id="currentWeekRange">Week of ...</h3>
-                <button id="nextWeekBtn" class="btn btn-accent" onclick="changeWeek(1)">
+                <h3 id="currentWeekRange" style="flex:1; text-align:center; margin:0;">Week of ...</h3>
+                <button id="nextWeekBtn" class="btn btn-accent" style="display:flex; justify-content:center; flex:0 0 auto;" onclick="changeWeek(1)">
                     Next Week <i class="fas fa-chevron-right"></i>
                 </button>
             </div>
 
-            <div class="weekly-schedule">
-                <div class="time-slots-header">
-                    <div class="time-label">Time</div>
+            <div class="weekly-schedule" data-active-day="mon">
+                <?php
+                $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                $dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                $currentDate = new DateTime();
+                $currentDate->modify('monday this week');
+                ?>
+
+                <!-- Day Tabs (Filters) -->
+                <div class="day-tabs" role="tablist" aria-label="Filter schedule by day">
                     <?php
-                    $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                    $currentDate = new DateTime();
-                    $currentDate->modify('monday this week');
-                    
                     for ($i = 0; $i < 6; $i++) {
                         $dayDate = clone $currentDate;
                         $dayDate->modify("+$i days");
-                        echo "<div class='day-header'>";
-                        echo "<div class='day-name'>{$days[$i]}</div>";
-                        echo "<div class='day-date'>{$dayDate->format('M j')}</div>";
-                        echo "</div>";
+                        $isActive = $i === 0;
+                        $dayKey = $dayKeys[$i];
+                        $dayName = $days[$i];
+                        $dayDateDisplay = $dayDate->format('M j');
+
+                        echo "<button type='button' class='day-tab" . ($isActive ? ' active' : '') . "' data-day='{$dayKey}' data-day-name='{$dayName}' data-day-date='{$dayDateDisplay}'>{$dayName}</button>";
                     }
                     ?>
                 </div>
 
+                <h3 class="selected-day-title">
+                    <?= $days[0] ?> – <?= $currentDate->format('M j') ?>
+                </h3>
+
+                <!-- Selected-Day Slot Grid -->
                 <div class="time-slots-container">
                     <?php
                     $timeSlots = [
@@ -353,24 +699,48 @@ if (empty($_SESSION['admin_verified'])) {
                     ];
 
                     foreach ($timeSlots as $slotKey => $slotTime) {
+                        $slotStartLabel = $slotTime;
+                        if (preg_match('/^(\d{1,2}:\d{2})-\d{1,2}:\d{2}\s*([AP]M)$/', $slotTime, $m)) {
+                            $slotStartLabel = trim($m[1]) . ' ' . trim($m[2]);
+                        }
+                        $slotStartLabelEscaped = htmlspecialchars($slotStartLabel, ENT_QUOTES, 'UTF-8');
+
                         echo "<div class='time-slot-row'>";
-                        echo "<div class='time-label'>{$slotTime}</div>";
-                        
                         for ($i = 0; $i < 6; $i++) {
                             $dayDate = clone $currentDate;
                             $dayDate->modify("+$i days");
                             $dateString = $dayDate->format('Y-m-d');
-                            
-                            echo "<div class='time-slot-cell' data-date='{$dateString}' data-slot='{$slotKey}'>";
+                            $dayKey = $dayKeys[$i];
+
+                            echo "<div class='time-slot-cell' data-date='{$dateString}' data-slot='{$slotKey}' data-day='{$dayKey}'>";
+                            echo "<div class='slot-card'>";
+                            echo "<span class='slot-time'>{$slotStartLabelEscaped}</span>";
                             echo "<div class='slot-status available' onclick=\"toggleTimeSlot(this, '{$dateString}', '{$slotKey}')\">";
                             echo "<i class='fas fa-check-circle'></i>";
                             echo "<span>Available</span>";
+                            echo "</div>";
                             echo "</div>";
                             echo "</div>";
                         }
                         echo "</div>";
                     }
                     ?>
+                </div>
+
+                <!-- Legend -->
+                <div class="schedule-legend" aria-label="Schedule legend">
+                    <div class="legend-item">
+                        <span class="legend-badge available" aria-hidden="true"></span>
+                        Patients can book
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-badge booked" aria-hidden="true"></span>
+                        Already booked
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-badge blocked" aria-hidden="true"></span>
+                        Closed / Not working
+                    </div>
                 </div>
             </div>
 
@@ -447,6 +817,9 @@ if (empty($_SESSION['admin_verified'])) {
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination (desktop/table UI only) -->
+            <div class="blocked-slots-pagination" id="blockedSlotsPagination" aria-label="Blocked slots pagination"></div>
 
             <!-- Mobile/Tablet Card View -->
             <div class="blocked-slots-card-view" id="blockedSlotsCardView" style="display: none;">
@@ -635,6 +1008,35 @@ if (empty($_SESSION['admin_verified'])) {
     </div>
 </div>
 
+<!-- Custom Block Time Slot Modal (replaces prompt()) -->
+<div id="blockTimeSlotModalOverlay" class="ts-block-modal-overlay" aria-hidden="true">
+    <div id="blockTimeSlotModal" class="ts-block-modal" role="dialog" aria-modal="true" aria-labelledby="blockTimeSlotModalTitle">
+        <div class="ts-block-modal-header">
+            <h3 id="blockTimeSlotModalTitle" class="ts-block-modal-title">
+                <i class="fas fa-ban" style="color:#dc2626;"></i>
+                Block Time Slot
+            </h3>
+            <button type="button" id="blockTimeSlotModalCloseBtn" class="ts-block-modal-close" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="ts-block-modal-body">
+            <label for="blockTimeSlotReasonTextarea">Please provide a reason for blocking this time slot</label>
+            <textarea
+                id="blockTimeSlotReasonTextarea"
+                class="ts-block-modal-textarea"
+                rows="4"
+                placeholder="e.g., Blocked by admin"
+            ></textarea>
+            <div id="blockTimeSlotReasonError" class="ts-block-modal-error">Reason is required to block a time slot.</div>
+        </div>
+
+        <div class="ts-block-modal-footer">
+            <button type="button" id="blockTimeSlotCancelBtn" class="btn ts-block-modal-cancel">Cancel</button>
+            <button type="button" id="blockTimeSlotConfirmBtn" class="btn ts-block-modal-confirm">Confirm Block</button>
+        </div>
+    </div>
+</div>
+
 <script>
     // Notification Functions
     function showNotification(type, title, message, icon = null, duration = 5000) {
@@ -740,6 +1142,22 @@ if (empty($_SESSION['admin_verified'])) {
         // Sync mobile and desktop dentist selects
         const dentistSelect = document.getElementById('dentistSelectSchedule');
         const dentistSelectMobile = document.getElementById('dentistSelectScheduleMobile');
+
+        // Auto-select defaults so the schedule loads immediately (UI dropdowns are hidden).
+        const setDefaultDentist = (selectEl) => {
+            if (!selectEl) return;
+            if (selectEl.value && selectEl.value !== '') return;
+            const firstRealOption = selectEl.querySelector('option[value]:not([value=""])');
+            if (firstRealOption) selectEl.value = firstRealOption.value;
+        };
+
+        const setDefaultViewType = (selectEl) => {
+            if (!selectEl) return;
+            selectEl.value = 'weekly';
+        };
+
+        setDefaultDentist(dentistSelect);
+        setDefaultDentist(dentistSelectMobile);
         
         if (dentistSelect && dentistSelectMobile) {
             dentistSelect.addEventListener('change', function() {
@@ -784,6 +1202,10 @@ if (empty($_SESSION['admin_verified'])) {
         // Sync view type selects
         const viewTypeSelect = document.getElementById('viewType');
         const viewTypeMobile = document.getElementById('viewTypeMobile');
+
+        setDefaultViewType(viewTypeSelect);
+        setDefaultViewType(viewTypeMobile);
+
         if (viewTypeSelect && viewTypeMobile) {
             viewTypeSelect.addEventListener('change', function() {
                 viewTypeMobile.value = this.value;
@@ -798,6 +1220,9 @@ if (empty($_SESSION['admin_verified'])) {
 
         // Initialize view mode
         checkViewMode();
+
+        // Auto-load the weekly schedule immediately (blocked + booked states).
+        loadScheduleData();
     });
 
     function changeScheduleView() {
@@ -901,6 +1326,8 @@ if (empty($_SESSION['admin_verified'])) {
         document.getElementById('currentWeekRange').textContent = `Week of ${startStr} - ${endStr}`;
 
         updateDayHeadersAndCells();
+        refreshDayTabDatesFromCells();
+        updateSelectedDayTitleFromActiveTab();
         updateWeekNavigationButtons();
         updateCardViewDates();
     }
@@ -1019,6 +1446,82 @@ if (empty($_SESSION['admin_verified'])) {
                 cell.setAttribute('data-date', isoDate);
             }
         });
+    }
+
+    const dayTabKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+    function formatMonthDayFromISO(isoDate) {
+        if (!isoDate) return '';
+        // Parse as UTC to avoid timezone shifting when formatting
+        const parts = isoDate.split('-');
+        if (parts.length !== 3) return isoDate;
+        const yyyy = Number(parts[0]);
+        const mm = Number(parts[1]);
+        const dd = Number(parts[2]);
+        const dt = new Date(Date.UTC(yyyy, mm - 1, dd));
+        return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    }
+
+    function refreshDayTabDatesFromCells() {
+        dayTabKeys.forEach(dayKey => {
+            const cell = document.querySelector(`.time-slot-cell[data-day="${dayKey}"]`);
+            const tab = document.querySelector(`.day-tab[data-day="${dayKey}"]`);
+            if (!cell || !tab) return;
+
+            const isoDate = cell.getAttribute('data-date');
+            const display = formatMonthDayFromISO(isoDate);
+            if (display) {
+                tab.dataset.dayDate = display;
+            }
+        });
+    }
+
+    function updateSelectedDayTitleFromActiveTab() {
+        const weeklySchedule = document.querySelector('.weekly-schedule');
+        const activeDay = weeklySchedule?.dataset.activeDay || 'mon';
+        const activeTab = document.querySelector(`.day-tab[data-day="${activeDay}"]`);
+        const titleEl = document.querySelector('.selected-day-title');
+        if (!activeTab || !titleEl) return;
+
+        const dayName = activeTab.dataset.dayName || activeTab.textContent.trim();
+        const dayDateDisplay = activeTab.dataset.dayDate || '';
+        if (dayDateDisplay) {
+            titleEl.textContent = `${dayName} – ${dayDateDisplay}`;
+        }
+    }
+
+    function setActiveDayTab(dayKey) {
+        const weeklySchedule = document.querySelector('.weekly-schedule');
+        if (weeklySchedule) {
+            weeklySchedule.dataset.activeDay = dayKey;
+        }
+
+        document.querySelectorAll('.day-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+
+        const activeTab = document.querySelector(`.day-tab[data-day="${dayKey}"]`);
+        if (activeTab) activeTab.classList.add('active');
+
+        updateSelectedDayTitleFromActiveTab();
+    }
+
+    function initDayTabs() {
+        const tabs = document.querySelectorAll('.day-tab');
+        if (!tabs || tabs.length === 0) return;
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                const dayKey = this.getAttribute('data-day');
+                if (dayKey) setActiveDayTab(dayKey);
+            });
+        });
+
+        // Initialize selected tab + filter state
+        const activeTab = document.querySelector('.day-tab.active') || tabs[0];
+        if (activeTab) {
+            setActiveDayTab(activeTab.getAttribute('data-day'));
+        }
     }
 
     function changeMonth(direction) {
@@ -1141,6 +1644,118 @@ if (empty($_SESSION['admin_verified'])) {
         return scheduleData;
     }
 
+    // Custom modal state for blocking a single time slot (replaces browser prompt()).
+    let pendingBlockTimeSlot = null; // { type: 'desktop'|'card', element, date, slot, dayInfoHTML? }
+
+    function openBlockTimeSlotModalDesktop(targetEl, date, slot) {
+        pendingBlockTimeSlot = { type: 'desktop', element: targetEl, date: date, slot: slot };
+
+        const overlay = document.getElementById('blockTimeSlotModalOverlay');
+        const textarea = document.getElementById('blockTimeSlotReasonTextarea');
+        const errorEl = document.getElementById('blockTimeSlotReasonError');
+
+        if (!overlay || !textarea || !errorEl) return;
+
+        textarea.value = 'Blocked by admin';
+        errorEl.classList.remove('show');
+        overlay.classList.remove('hide');
+        overlay.classList.add('show');
+        setTimeout(() => textarea.focus(), 0);
+    }
+
+    function openBlockTimeSlotModalCard(targetEl, date, slot, dayInfoHTML) {
+        pendingBlockTimeSlot = { type: 'card', element: targetEl, date: date, slot: slot, dayInfoHTML: dayInfoHTML };
+
+        const overlay = document.getElementById('blockTimeSlotModalOverlay');
+        const textarea = document.getElementById('blockTimeSlotReasonTextarea');
+        const errorEl = document.getElementById('blockTimeSlotReasonError');
+
+        if (!overlay || !textarea || !errorEl) return;
+
+        textarea.value = 'Blocked by admin';
+        errorEl.classList.remove('show');
+        overlay.classList.remove('hide');
+        overlay.classList.add('show');
+        setTimeout(() => textarea.focus(), 0);
+    }
+
+    function closeBlockTimeSlotModal() {
+        pendingBlockTimeSlot = null;
+
+        const overlay = document.getElementById('blockTimeSlotModalOverlay');
+        if (!overlay) return;
+
+        overlay.classList.remove('show');
+        overlay.classList.add('hide');
+
+        setTimeout(() => {
+            overlay.classList.remove('hide');
+        }, 180);
+    }
+
+    function confirmBlockTimeSlotModal() {
+        if (!pendingBlockTimeSlot) return;
+
+        const textarea = document.getElementById('blockTimeSlotReasonTextarea');
+        const errorEl = document.getElementById('blockTimeSlotReasonError');
+        if (!textarea || !errorEl) return;
+
+        const reason = (textarea.value || '').trim();
+        if (!reason) {
+            errorEl.textContent = 'Reason is required to block a time slot.';
+            errorEl.classList.add('show');
+            textarea.focus();
+            return;
+        }
+
+        errorEl.classList.remove('show');
+
+        const { type, element, date, slot, dayInfoHTML } = pendingBlockTimeSlot;
+        const newStatus = 'blocked';
+
+        // Apply UI immediately (matches existing prompt() behavior).
+        if (type === 'desktop') {
+            element.className = `slot-status ${newStatus}`;
+            element.innerHTML = '<i class="fas fa-times-circle"></i><span>Blocked</span>';
+        } else {
+            element.className = 'time-slot-card-slot blocked';
+            element.innerHTML =
+                (dayInfoHTML || '') +
+                '<div class="slot-status-text" style="margin-top: 6px; font-size: 12px;"><i class="fas fa-times-circle"></i> Blocked</div>';
+        }
+
+        closeBlockTimeSlotModal();
+        updateTimeSlotStatus(date, slot, newStatus, reason);
+    }
+
+    (function initBlockTimeSlotModal() {
+        const overlay = document.getElementById('blockTimeSlotModalOverlay');
+        const textarea = document.getElementById('blockTimeSlotReasonTextarea');
+        const errorEl = document.getElementById('blockTimeSlotReasonError');
+        const cancelBtn = document.getElementById('blockTimeSlotCancelBtn');
+        const confirmBtn = document.getElementById('blockTimeSlotConfirmBtn');
+        const closeBtn = document.getElementById('blockTimeSlotModalCloseBtn');
+
+        // Modal might not exist in some environments; safely no-op.
+        if (!overlay || !textarea || !errorEl || !cancelBtn || !confirmBtn) return;
+
+        cancelBtn.addEventListener('click', closeBlockTimeSlotModal);
+        confirmBtn.addEventListener('click', confirmBlockTimeSlotModal);
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeBlockTimeSlotModal);
+        }
+
+        overlay.addEventListener('click', function(event) {
+            if (event.target === overlay) closeBlockTimeSlotModal();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && overlay.classList.contains('show')) {
+                closeBlockTimeSlotModal();
+            }
+        });
+    })();
+
     function toggleTimeSlot(element, date, slot) {
         if (element.classList.contains('booked') || element.style.cursor === 'not-allowed') {
             alert('This slot is already booked and cannot be modified.');
@@ -1158,19 +1773,8 @@ if (empty($_SESSION['admin_verified'])) {
         const newStatus = currentStatus === 'available' ? 'blocked' : 'available';
         
         if (newStatus === 'blocked') {
-            const reason = prompt('Please provide a reason for blocking this time slot:', 'Blocked by admin');
-            if (reason === null) {
-                return;
-            }
-            if (reason.trim() === '') {
-                alert('Reason is required to block a time slot.');
-                return;
-            }
-            
-            element.className = `slot-status ${newStatus}`;
-            element.innerHTML = '<i class="fas fa-times-circle"></i><span>Blocked</span>';
-            
-            updateTimeSlotStatus(date, slot, newStatus, reason.trim());
+            openBlockTimeSlotModalDesktop(element, date, slot);
+            return; // UI waits for modal confirmation before updating status
         } else {
             if (!confirm('Are you sure you want to unblock this time slot?')) {
                 return;
@@ -1268,39 +1872,89 @@ if (empty($_SESSION['admin_verified'])) {
         .then(data => {
             const tbody = document.getElementById('blockedSlotsBody');
             const cardView = document.getElementById('blockedSlotsCardView');
+            const paginationEl = document.getElementById('blockedSlotsPagination');
+            const rowsPerPage = 5;
+            const allSlots = Array.isArray(data) ? data : [];
+            let currentPage = 1;
             
-            if (tbody) {
+            const renderBlockedSlotsTablePage = (page) => {
+                if (!tbody) return;
+
+                const totalPages = Math.ceil(allSlots.length / rowsPerPage) || 1;
+                currentPage = Math.min(Math.max(page, 1), totalPages);
+
                 tbody.innerHTML = '';
-                
-                if (data.length === 0) {
+
+                if (allSlots.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="5" class="no-data">No blocked time slots found</td></tr>';
-                } else {
-                    data.forEach(slot => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${slot.dentist_name}</td>
-                            <td>${slot.date}</td>
-                            <td>${slot.time_slot_display}</td>
-                            <td>${slot.reason}</td>
-                            <td>
-                                <button class="action-btn btn-danger" onclick="unblockSlot('${slot.id}')" title="Unblock">
-                                    <i class="fas fa-unlock"></i>
-                                </button>
-                            </td>
-                        `;
-                        tbody.appendChild(row);
-                    });
+                    if (paginationEl) paginationEl.innerHTML = '';
+                    return;
                 }
-            }
+
+                const startIdx = (currentPage - 1) * rowsPerPage;
+                const pageSlots = allSlots.slice(startIdx, startIdx + rowsPerPage);
+
+                pageSlots.forEach(slot => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${slot.dentist_name}</td>
+                        <td>${slot.date}</td>
+                        <td>${slot.time_slot_display}</td>
+                        <td>${slot.reason}</td>
+                        <td>
+                            <button class="action-btn btn-danger" onclick="unblockSlot('${slot.id}')" title="Unblock">
+                                <i class="fas fa-unlock"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                // Pagination UI
+                if (paginationEl) {
+                    paginationEl.innerHTML = '';
+                    if (totalPages <= 1) return;
+
+                    const prevBtn = document.createElement('button');
+                    prevBtn.type = 'button';
+                    prevBtn.className = 'page-btn';
+                    prevBtn.textContent = 'Previous';
+                    prevBtn.disabled = currentPage === 1;
+                    prevBtn.addEventListener('click', () => renderBlockedSlotsTablePage(currentPage - 1));
+
+                    paginationEl.appendChild(prevBtn);
+
+                    for (let i = 1; i <= totalPages; i++) {
+                        const pageBtn = document.createElement('button');
+                        pageBtn.type = 'button';
+                        pageBtn.className = 'page-btn' + (i === currentPage ? ' active' : '');
+                        pageBtn.textContent = i;
+                        pageBtn.disabled = false;
+                        pageBtn.addEventListener('click', () => renderBlockedSlotsTablePage(i));
+                        paginationEl.appendChild(pageBtn);
+                    }
+
+                    const nextBtn = document.createElement('button');
+                    nextBtn.type = 'button';
+                    nextBtn.className = 'page-btn';
+                    nextBtn.textContent = 'Next';
+                    nextBtn.disabled = currentPage === totalPages;
+                    nextBtn.addEventListener('click', () => renderBlockedSlotsTablePage(currentPage + 1));
+
+                    paginationEl.appendChild(nextBtn);
+                }
+            };
+
+            renderBlockedSlotsTablePage(1);
             
             // Load card view for mobile/tablet
             if (cardView) {
                 cardView.innerHTML = '';
                 
-                if (data.length === 0) {
+                if (allSlots.length === 0) {
                     cardView.innerHTML = '<div class="blocked-slot-card"><p style="text-align: center; color: #666; padding: 20px;">No blocked time slots found</p></div>';
                 } else {
-                    data.forEach(slot => {
+                    allSlots.forEach(slot => {
                         const card = document.createElement('div');
                         card.className = 'blocked-slot-card';
                         card.innerHTML = `
@@ -1495,19 +2149,8 @@ if (empty($_SESSION['admin_verified'])) {
         const dayInfoHTML = dayMatch ? dayMatch[1] : '';
         
         if (newStatus === 'blocked') {
-            const reason = prompt('Please provide a reason for blocking this time slot:', 'Blocked by admin');
-            if (reason === null) {
-                return;
-            }
-            if (reason.trim() === '') {
-                alert('Reason is required to block a time slot.');
-                return;
-            }
-            
-            element.className = 'time-slot-card-slot blocked';
-            element.innerHTML = dayInfoHTML + '<div class="slot-status-text" style="margin-top: 6px; font-size: 12px;"><i class="fas fa-times-circle"></i> Blocked</div>';
-            
-            updateTimeSlotStatus(date, slot, newStatus, reason.trim());
+            openBlockTimeSlotModalCard(element, date, slot, dayInfoHTML);
+            return; // UI waits for modal confirmation before updating status
         } else {
             if (!confirm('Are you sure you want to unblock this time slot?')) {
                 return;
@@ -1910,6 +2553,13 @@ if (empty($_SESSION['admin_verified'])) {
         if (event.target === document.getElementById('emergencyClosureModal')) {
             closeEmergencyClosureModal();
         }
+    });
+
+    // Day tab initialization (time-slot grid filtering)
+    document.addEventListener('DOMContentLoaded', function() {
+        initDayTabs();
+        refreshDayTabDatesFromCells();
+        updateSelectedDayTitleFromActiveTab();
     });
 </script>
 </body>

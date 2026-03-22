@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 // Receptionist verifies ticket code and marks appointment as paid/confirmed
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

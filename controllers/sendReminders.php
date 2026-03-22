@@ -6,7 +6,7 @@ require '../PhpMailer/src/Exception.php';
 require '../PhpMailer/src/PHPMailer.php';
 require '../PhpMailer/src/SMTP.php';
 
-include_once("config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 // Time window: now up to 24 hours ahead
 $now = date('Y-m-d H:i:s');

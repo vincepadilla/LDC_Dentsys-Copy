@@ -1,7 +1,7 @@
 <?php
 session_start();
 require('../libraries/fpdf/fpdf.php');
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 // Check if user is logged in
 if (!isset($_SESSION['userID'])) {

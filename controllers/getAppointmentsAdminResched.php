@@ -47,9 +47,10 @@ if (isset($_GET['new_date_resched'])) {
     }
 
     $bookedSlots = array();
+    $slotOrder = ['firstBatch','secondBatch','thirdBatch','fourthBatch','fifthBatch','sixthBatch','sevenBatch','eightBatch','nineBatch','tenBatch','lastBatch'];
     
     // Get booked slots for the selected date, excluding cancelled, no-show, and the current appointment being rescheduled
-    $query = "SELECT time_slot FROM appointments 
+    $query = "SELECT time_slot, request_note FROM appointments 
               WHERE appointment_date = ? 
               AND status NOT IN ('Cancelled', 'No-show', 'no-show', 'cancelled', 'No-Show')
               AND time_slot IS NOT NULL 
@@ -70,8 +71,17 @@ if (isset($_GET['new_date_resched'])) {
         $stmt->execute();
         $result = $stmt->get_result();
         while ($row = $result->fetch_assoc()) {
-            if (!empty($row['time_slot'])) {
-                $bookedSlots[] = $row['time_slot'];
+            if (empty($row['time_slot'])) {
+                continue;
+            }
+            $bookedSlots[] = $row['time_slot'];
+
+            // Block next consecutive slot for 2-hour request-note appointments
+            if (!empty($row['request_note'])) {
+                $idx = array_search($row['time_slot'], $slotOrder, true);
+                if ($idx !== false && isset($slotOrder[$idx + 1])) {
+                    $bookedSlots[] = $slotOrder[$idx + 1];
+                }
             }
         }
         $stmt->close(); 

@@ -22,6 +22,22 @@ if (!isset($_SESSION['userID'])) {
 
 $user_id = $_SESSION['userID'];
 
+$rescheduleTimeMap = [
+    'firstBatch'   => '8:00AM-9:00AM',
+    'secondBatch'  => '9:00AM-10:00AM',
+    'thirdBatch'   => '10:00AM-11:00AM',
+    'fourthBatch'  => '11:00AM-12:00PM',
+    'fifthBatch'   => '1:00PM-2:00PM',
+    'sixthBatch'   => '2:00PM-3:00PM',
+    'sevenBatch'   => '3:00PM-4:00PM',
+    'eightBatch'   => '4:00PM-5:00PM',
+    'nineBatch'    => '5:00PM-6:00PM',
+    'tenBatch'     => '6:00PM-7:00PM',
+    'lastBatch'    => '7:00PM-8:00PM'
+];
+$rescheduleToday = date('Y-m-d');
+$rescheduleMaxDate = date('Y-m-d', strtotime('+1 month'));
+
 // ✅ Fetch user and patient information
 $user_query = $con->prepare("
     SELECT ua.user_id, ua.username, ua.first_name, ua.last_name, ua.email, ua.phone,
@@ -52,6 +68,7 @@ if (!empty($user['patient_id'])) {
         SELECT a.appointment_id, a.appointment_date, a.appointment_time, 
                COALESCE(s.sub_service, s.service_category) as service_display, 
                s.sub_service, s.service_category, a.status, a.created_at,
+               a.request_note,
                a.reschedule_reason,
                p.payment_id, p.method as payment_method, p.status as payment_status
         FROM appointments a
@@ -552,6 +569,452 @@ console.log('DEBUG: Found appointments => " . count($recent_appointments) . "');
         .validation-message.invalid {
             color: #EF4444;
         }
+
+        /* Reschedule modal (matching Add Services modal look and spacing) */
+        .reschedule-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.52);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10002;
+            padding: 20px;
+        }
+
+        .reschedule-modal-overlay.show {
+            display: flex;
+        }
+
+        .reschedule-modal-panel {
+            position: relative;
+            width: min(760px, 100%);
+            max-height: 90vh;
+            overflow-y: auto;
+            background: #ffffff;
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 24px 60px rgba(2, 6, 23, 0.28);
+            animation: modalPopIn 0.28s ease-out;
+        }
+
+        .reschedule-modal-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 34px;
+            height: 34px;
+            border: none;
+            border-radius: 10px;
+            background: #f3f4f6;
+            color: #374151;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s ease;
+        }
+
+        .reschedule-modal-close:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .reschedule-modal-heading {
+            margin-bottom: 18px;
+        }
+
+        .reschedule-modal-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .reschedule-modal-heading h3 {
+            margin: 0 0 6px 0;
+            font-size: 1.35rem;
+            color: #111827;
+            font-weight: 700;
+        }
+
+        .reschedule-modal-heading p {
+            margin: 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .reschedule-current-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: #f8fafc;
+            padding: 14px;
+            margin-bottom: 16px;
+        }
+
+        .reschedule-current-card-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 12px 0;
+        }
+
+        .reschedule-current-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px 16px;
+        }
+
+        .reschedule-current-item label {
+            display: block;
+            color: #64748b;
+            font-size: 12px;
+            margin-bottom: 2px;
+        }
+
+        .reschedule-current-item span {
+            color: #0f172a;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .reschedule-form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .reschedule-form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .reschedule-form-group label {
+            color: #111827;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .reschedule-form-control {
+            width: 100%;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 11px 12px;
+            font-size: 14px;
+            font-family: 'Poppins', sans-serif;
+            background: #fff;
+            color: #111827;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .reschedule-form-control:focus {
+            outline: none;
+            border-color: #48A6A7;
+            box-shadow: 0 0 0 3px rgba(72, 166, 167, 0.18);
+        }
+
+        .time-slot-disabled {
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .reschedule-modal-actions {
+            margin-top: 18px;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .reschedule-submit-btn,
+        .reschedule-cancel-btn {
+            border: none;
+            border-radius: 10px;
+            padding: 11px 18px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .reschedule-submit-btn {
+            background: #48A6A7;
+            color: #fff;
+        }
+
+        .reschedule-submit-btn:hover {
+            background: #2a9d8f;
+        }
+
+        .reschedule-cancel-btn {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        @media (max-width: 720px) {
+            .reschedule-modal-panel {
+                padding: 20px;
+            }
+
+            .reschedule-form-grid,
+            .reschedule-current-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .reschedule-modal-actions button {
+                width: 100%;
+            }
+        }
+
+        /* Edit account modal refresh (simple, clean, aligned with reschedule modal) */
+        #editModal .edit-modal-content {
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 24px 60px rgba(2, 6, 23, 0.28);
+            border: 1px solid #e5e7eb;
+        }
+
+        #editModal .close {
+            top: 14px;
+            right: 14px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #f3f4f6;
+            color: #374151;
+            font-size: 20px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #editModal .close:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .edit-account-heading {
+            margin-bottom: 18px;
+        }
+
+        .edit-account-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        #editModal .edit-account-heading h3 {
+            margin: 0 0 6px 0;
+            font-size: 1.35rem;
+            color: #111827;
+            font-weight: 700;
+            text-align: left;
+        }
+
+        .edit-account-subtitle {
+            margin: 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .edit-account-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        #editModal .form-row {
+            display: contents;
+            margin: 0;
+        }
+
+        #editModal .form-group {
+            margin: 0;
+        }
+
+        #editModal .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        #editModal label {
+            margin-bottom: 8px;
+            color: #111827;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        #editModal input,
+        #editModal select,
+        #editModal textarea {
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 11px 12px;
+            background: #fff;
+            font-size: 14px;
+        }
+
+        #editModal input:focus,
+        #editModal select:focus,
+        #editModal textarea:focus {
+            outline: none;
+            border-color: #48A6A7;
+            box-shadow: 0 0 0 3px rgba(72, 166, 167, 0.18);
+        }
+
+        #editModal textarea {
+            min-height: 90px;
+        }
+
+        #editModal .modal-actions {
+            margin-top: 18px;
+            gap: 10px;
+        }
+
+        #editModal .btn-submit,
+        #editModal .btn-cancel {
+            border-radius: 10px;
+            padding: 11px 18px;
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        #editModal .btn-submit {
+            background: #48A6A7;
+            color: #fff;
+        }
+
+        #editModal .btn-submit:hover {
+            background: #2a9d8f;
+        }
+
+        @media (max-width: 720px) {
+            #editModal .edit-modal-content {
+                padding: 20px;
+            }
+
+            .edit-account-grid {
+                grid-template-columns: 1fr;
+            }
+
+            #editModal .modal-actions {
+                flex-direction: column;
+            }
+
+            #editModal .btn-submit,
+            #editModal .btn-cancel {
+                width: 100%;
+            }
+        }
+
+        /* Feedback modal refresh (mirrors reschedule modal layout) */
+        #feedbackModal .edit-modal-content {
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 24px 60px rgba(2, 6, 23, 0.28);
+            border: 1px solid #e5e7eb;
+        }
+
+        #feedbackModal .close {
+            top: 14px;
+            right: 14px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #f3f4f6;
+            color: #374151;
+            font-size: 20px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #feedbackModal .close:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .feedback-modal-heading {
+            margin-bottom: 18px;
+        }
+
+        .feedback-modal-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        #feedbackModal .feedback-modal-heading h3 {
+            margin: 0 0 6px 0;
+            font-size: 1.35rem;
+            color: #111827;
+            font-weight: 700;
+            text-align: left;
+        }
+
+        .feedback-modal-subtitle {
+            margin: 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .feedback-modal-counter {
+            text-align: right;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #6B7280;
+        }
+
+        #feedbackModal .modal-actions {
+            margin-top: 18px;
+            gap: 10px;
+        }
+
+        #feedbackModal .btn-submit,
+        #feedbackModal .btn-cancel {
+            border-radius: 10px;
+            padding: 11px 18px;
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        #feedbackModal .btn-submit {
+            background: #48A6A7;
+            color: #fff;
+        }
+
+        #feedbackModal .btn-submit:hover {
+            background: #2a9d8f;
+        }
+
+        @media (max-width: 720px) {
+            #feedbackModal .edit-modal-content {
+                padding: 20px;
+            }
+
+            #feedbackModal .modal-actions {
+                flex-direction: column;
+            }
+
+            #feedbackModal .btn-submit,
+            #feedbackModal .btn-cancel {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -619,7 +1082,7 @@ if (isset($_SESSION['password_error'])) {
                 <p>Manage your appointments and account settings</p>
             </div>
             <div class="header-actions">
-                <a href="../controllers/logout.php" class="btn btn-secondary logout-btn">Logout</a>
+                <a href="../controllers/patientLogout.php" class="btn btn-secondary logout-btn">Logout</a>
             </div>
         </div>
     </div>
@@ -808,6 +1271,7 @@ if (isset($_SESSION['password_error'])) {
                             'Pending' => 'status-pending',
                             'Confirmed' => 'status-confirmed',
                             'Walk-in' => 'status-confirmed',
+                            'Follow-up' => 'status-follow-up',
                             'Cancelled' => 'status-cancelled',
                             'Complete' => 'status-completed',
                             'Completed' => 'status-completed',
@@ -825,24 +1289,24 @@ if (isset($_SESSION['password_error'])) {
                         // Reschedule is disabled for walk-in appointments
                         $rescheduleDisabled = ($buttonsDisabled || $isWalkInAppointment);
                         ?>
-                        <div class="appointment-card" style="margin-bottom: 20px;">
+                        <div class="appointment-card" style="margin-bottom: 20px;" data-appointment-id="<?= htmlspecialchars($recent_appointment['appointment_id']); ?>" data-is-walkin="<?= $isWalkInAppointment ? '1' : '0'; ?>">
                             <div class="appointment-header">
                                 <h3>Appointment #<?= htmlspecialchars($recent_appointment['appointment_id']); ?></h3>
-                                <span class="status-badge <?= $statusClass; ?>"><?= htmlspecialchars($status); ?></span>
+                                <span class="status-badge js-status-badge <?= $statusClass; ?>"><?= htmlspecialchars($status); ?></span>
                             </div>
                             
                             <div class="appointment-details">
                                 <div class="detail-item">
                                     <span class="detail-label">Date</span>
-                                    <span class="detail-value"><?= htmlspecialchars($recent_appointment['appointment_date']); ?></span>
+                                    <span class="detail-value js-appointment-date"><?= htmlspecialchars($recent_appointment['appointment_date']); ?></span>
                                 </div>
                                 <div class="detail-item">
                                     <span class="detail-label">Time</span>
-                                    <span class="detail-value"><?= htmlspecialchars($recent_appointment['appointment_time']); ?></span>
+                                    <span class="detail-value js-appointment-time"><?= htmlspecialchars($recent_appointment['appointment_time']); ?></span>
                                 </div>
                                 <div class="detail-item">
                                     <span class="detail-label">Service</span>
-                                    <span class="detail-value"><?= htmlspecialchars($recent_appointment['service_display'] ?? $recent_appointment['sub_service'] ?? $recent_appointment['service_category'] ?? 'N/A'); ?></span>
+                                    <span class="detail-value js-appointment-service"><?= htmlspecialchars($recent_appointment['service_display'] ?? $recent_appointment['sub_service'] ?? $recent_appointment['service_category'] ?? 'N/A'); ?></span>
                                 </div>
                                 <div class="detail-item">
                                     <span class="detail-label">Dentist</span>
@@ -850,7 +1314,7 @@ if (isset($_SESSION['password_error'])) {
                                 </div>
                             </div>
                             
-                            <div class="appointment-message">
+                            <div class="appointment-message js-appointment-message">
                                 <?php
                                 if ($isCashUnpaid) {
                                     // Show cash payment notice
@@ -880,6 +1344,8 @@ if (isset($_SESSION['password_error'])) {
                                     }
                                 } elseif ($status == "Confirmed") {
                                     echo "<p>Your appointment has been confirmed.</p>";
+                                } elseif ($status == "Follow-up") {
+                                    echo "<p>Your follow-up appointment has been scheduled. Please check the details below.</p>";
                                 } elseif ($status == "Walk-In") {
                                     echo "<p>Your walk-in appointment is confirmed. Please proceed to the clinic for final scheduling.</p>";
                                 } elseif ($status == "Complete" || $status == "Completed") {
@@ -901,22 +1367,29 @@ if (isset($_SESSION['password_error'])) {
                                     echo "<p>Your appointment has been rescheduled. Please wait for confirmation.</p>";
                                 }
 
-                                // If an admin provided a reschedule note, show it to the patient
-                                if (!empty($recent_appointment['reschedule_reason'])) {
+                                // Show clinic reschedule notes only for non-cancelled appointments.
+                                if (!empty($recent_appointment['reschedule_reason']) && strtolower((string)$status) !== 'cancelled') {
                                     echo "<p><strong>Note from clinic:</strong> " . htmlspecialchars($recent_appointment['reschedule_reason']) . "</p>";
                                     echo "<p>If you are not available for this new schedule, you can reschedule again from this page.</p>";
                                 }
                                 ?>
                             </div>
                             
-                            <div class="appointment-actions">
+                            <div class="appointment-actions js-appointment-actions">
                                 <?php if ($status == 'Cancelled'): ?>
                                     <!-- For Cancelled appointments, allow reschedule and optional refund request -->
                                     <?php if (!$isWalkInAppointment): ?>
-                                        <a href="reschedule.php?id=<?= $recent_appointment['appointment_id']; ?>" 
-                                           class="btn btn-primary">
+                                        <button type="button"
+                                           class="btn btn-primary"
+                                           data-appointment-id="<?= htmlspecialchars($recent_appointment['appointment_id']); ?>"
+                                           data-service="<?= htmlspecialchars($recent_appointment['service_display'] ?? $recent_appointment['sub_service'] ?? $recent_appointment['service_category'] ?? 'N/A'); ?>"
+                                           data-current-date="<?= htmlspecialchars($recent_appointment['appointment_date']); ?>"
+                                           data-current-time="<?= htmlspecialchars($recent_appointment['appointment_time']); ?>"
+                                           data-has-request-note="<?= !empty($recent_appointment['request_note']) ? '1' : '0'; ?>"
+                                           data-status="<?= htmlspecialchars($status); ?>"
+                                           onclick="openRescheduleModal(this)">
                                             Reschedule
-                                        </a>
+                                        </button>
                                     <?php endif; ?>
 
                                     <?php if ($eligibleForRefundRequest): ?>
@@ -943,11 +1416,17 @@ if (isset($_SESSION['password_error'])) {
                                             Cancel
                                         </button>
 
-                                        <a href="reschedule.php?id=<?= $recent_appointment['appointment_id']; ?>" 
+                                        <button type="button"
                                            class="btn btn-primary <?= $rescheduleDisabled ? 'disabled' : ''; ?>"
-                                           <?= $rescheduleDisabled ? 'onclick="return false;" style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"' : ''; ?>>
+                                           data-appointment-id="<?= htmlspecialchars($recent_appointment['appointment_id']); ?>"
+                                           data-service="<?= htmlspecialchars($recent_appointment['service_display'] ?? $recent_appointment['sub_service'] ?? $recent_appointment['service_category'] ?? 'N/A'); ?>"
+                                           data-current-date="<?= htmlspecialchars($recent_appointment['appointment_date']); ?>"
+                                           data-current-time="<?= htmlspecialchars($recent_appointment['appointment_time']); ?>"
+                                           data-has-request-note="<?= !empty($recent_appointment['request_note']) ? '1' : '0'; ?>"
+                                           data-status="<?= htmlspecialchars($status); ?>"
+                                           <?= $rescheduleDisabled ? 'disabled style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"' : 'onclick="openRescheduleModal(this)"'; ?>>
                                             Reschedule
-                                        </a>
+                                        </button>
                                     <?php endif; ?>
                                 <?php endif; ?>
                             </div>
@@ -967,12 +1446,79 @@ if (isset($_SESSION['password_error'])) {
     </div>
 </div>
 
+<!-- Reschedule Modal -->
+<div id="rescheduleModal" class="reschedule-modal-overlay">
+    <div class="reschedule-modal-panel">
+        <button type="button" class="reschedule-modal-close" onclick="closeRescheduleModal()" aria-label="Close reschedule dialog">&times;</button>
+        <div class="reschedule-modal-heading">
+            <span class="reschedule-modal-badge">Reschedule</span>
+            <h3>Update your appointment schedule</h3>
+            <p>Select a new date and available time slot.</p>
+        </div>
+
+        <div class="reschedule-current-card">
+            <p class="reschedule-current-card-title">Current Appointment Details</p>
+            <div class="reschedule-current-grid">
+                <div class="reschedule-current-item">
+                    <label>Service</label>
+                    <span id="rescheduleCurrentService">-</span>
+                </div>
+                <div class="reschedule-current-item">
+                    <label>Current Date</label>
+                    <span id="rescheduleCurrentDate">-</span>
+                </div>
+                <div class="reschedule-current-item">
+                    <label>Current Time</label>
+                    <span id="rescheduleCurrentTime">-</span>
+                </div>
+                <div class="reschedule-current-item">
+                    <label>Status</label>
+                    <span id="rescheduleCurrentStatus">-</span>
+                </div>
+            </div>
+        </div>
+
+        <form id="rescheduleFormModal">
+            <input type="hidden" name="appointment_id" id="rescheduleAppointmentId">
+            <input type="hidden" name="has_request_note" id="rescheduleHasRequestNote" value="0">
+            <div class="reschedule-form-grid">
+                <div class="reschedule-form-group">
+                    <label for="new_date_resched_modal">New Date *</label>
+                    <input type="date" id="new_date_resched_modal" name="new_date_resched" class="reschedule-form-control" min="<?= htmlspecialchars($rescheduleToday); ?>" max="<?= htmlspecialchars($rescheduleMaxDate); ?>" required>
+                </div>
+                <div class="reschedule-form-group">
+                    <label for="new_time_slot_modal">New Time Slot *</label>
+                    <select id="new_time_slot_modal" name="new_time_slot" class="reschedule-form-control" required>
+                        <option value="">Select a time slot</option>
+                        <?php foreach ($rescheduleTimeMap as $slot => $time): ?>
+                            <option value="<?= htmlspecialchars($slot); ?>"><?= htmlspecialchars($time); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <p id="rescheduleSlotHint" style="margin: 10px 0 0 0; font-size: 13px; color: #6b7280; display: none;">
+                This appointment includes a request note and requires 2 consecutive time slots.
+            </p>
+
+            <div class="reschedule-modal-actions">
+                <button type="button" class="reschedule-cancel-btn" onclick="closeRescheduleModal()">Cancel</button>
+                <button type="submit" class="reschedule-submit-btn" id="rescheduleSubmitBtn">Reschedule Appointment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Edit Account Modal -->
 <div id="editModal" class="edit-modal">
     <div class="edit-modal-content">
         <span class="close" onclick="closeEditModal()">&times;</span>
-        <h3>EDIT ACCOUNT INFORMATION</h3>
+        <div class="edit-account-heading">
+            <span class="edit-account-badge">Profile</span>
+            <h3>Edit account information</h3>
+            <p class="edit-account-subtitle">Update your personal details and keep your profile up to date.</p>
+        </div>
         <form id="editAccountForm" action="../controllers/updateAccount.php" method="POST">
+            <div class="edit-account-grid">
             <div class="form-row">
                 <div class="form-group">
                     <label>Username:</label>
@@ -1015,13 +1561,14 @@ if (isset($_SESSION['password_error'])) {
                     </select>
                 </div>
                 <div class="form-group">
-                    <!-- Empty space for alignment -->
+                    <!-- Kept for existing form structure -->
                 </div>
             </div>
             
             <div class="form-group full-width">
                 <label>Address:</label>
                 <textarea name="address" required><?= htmlspecialchars($user['address'] ?? ''); ?></textarea>
+            </div>
             </div>
             
             <div class="modal-actions">
@@ -1036,14 +1583,17 @@ if (isset($_SESSION['password_error'])) {
 <div id="feedbackModal" class="edit-modal">
     <div class="edit-modal-content">
         <span class="close" onclick="closeFeedbackModal()">&times;</span>
-        <h3>POST YOUR FEEDBACK</h3>
-        <p style="color: #6B7280; margin-bottom: 20px; font-size: 14px;">Share your experience with us. Your feedback will be displayed on our homepage.</p>
+        <div class="feedback-modal-heading">
+            <span class="feedback-modal-badge">Feedback</span>
+            <h3>Post your feedback</h3>
+            <p class="feedback-modal-subtitle">Share your experience with us. Your feedback will be displayed on our homepage.</p>
+        </div>
         <form action="../controllers/submitFeedback.php" method="POST" id="feedbackForm">
             <input type="hidden" name="appointment_id" id="feedback_appointment_id" value="">
             <div class="form-group full-width">
                 <label>Your Feedback:</label>
                 <textarea name="feedback_text" id="feedback_text" rows="6" placeholder="Tell us about your experience..." required maxlength="500"></textarea>
-                <div style="text-align: right; margin-top: 5px; font-size: 12px; color: #6B7280;">
+                <div class="feedback-modal-counter">
                     <span id="charCount">0</span>/500 characters
                 </div>
             </div>
@@ -1203,6 +1753,54 @@ function closeFeedbackModal() {
     setTimeout(() => modal.style.display = "none", 300);
 }
 
+function openRescheduleModal(button) {
+    const modal = document.getElementById('rescheduleModal');
+    const appointmentId = button.getAttribute('data-appointment-id') || '';
+    const service = button.getAttribute('data-service') || 'N/A';
+    const currentDate = button.getAttribute('data-current-date') || '';
+    const currentTime = button.getAttribute('data-current-time') || 'N/A';
+    const status = button.getAttribute('data-status') || 'N/A';
+    const hasRequestNote = button.getAttribute('data-has-request-note') === '1';
+
+    document.getElementById('rescheduleAppointmentId').value = appointmentId;
+    document.getElementById('rescheduleHasRequestNote').value = hasRequestNote ? '1' : '0';
+    document.getElementById('rescheduleCurrentService').textContent = service;
+    document.getElementById('rescheduleCurrentDate').textContent = currentDate || 'N/A';
+    document.getElementById('rescheduleCurrentTime').textContent = currentTime;
+    document.getElementById('rescheduleCurrentStatus').textContent = status;
+    document.getElementById('new_date_resched_modal').value = '';
+    const slotHint = document.getElementById('rescheduleSlotHint');
+    if (slotHint) {
+        slotHint.style.display = hasRequestNote ? 'block' : 'none';
+    }
+    resetTimeSlotOptions();
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('show'), 10);
+}
+
+function closeRescheduleModal() {
+    const modal = document.getElementById('rescheduleModal');
+    modal.classList.remove('show');
+    setTimeout(() => {
+        modal.style.display = 'none';
+    }, 200);
+}
+
+function resetTimeSlotOptions() {
+    const timeSelect = document.getElementById('new_time_slot_modal');
+    if (!timeSelect) return;
+    Array.from(timeSelect.options).forEach(option => {
+        if (!option.value) return;
+        if (!option.getAttribute('data-original-text')) {
+            option.setAttribute('data-original-text', option.textContent);
+        }
+        option.disabled = false;
+        option.classList.remove('time-slot-disabled');
+        option.textContent = option.getAttribute('data-original-text');
+    });
+    timeSelect.value = '';
+}
+
 // Character counter for feedback
 document.addEventListener('DOMContentLoaded', function() {
     const feedbackText = document.getElementById('feedback_text');
@@ -1242,15 +1840,209 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+document.addEventListener('DOMContentLoaded', function() {
+    const dateInput = document.getElementById('new_date_resched_modal');
+    const timeSelect = document.getElementById('new_time_slot_modal');
+    const form = document.getElementById('rescheduleFormModal');
+    const submitBtn = document.getElementById('rescheduleSubmitBtn');
+    const hasRequestNoteInput = document.getElementById('rescheduleHasRequestNote');
+    const slotOrder = [
+        'firstBatch',
+        'secondBatch',
+        'thirdBatch',
+        'fourthBatch',
+        'fifthBatch',
+        'sixthBatch',
+        'sevenBatch',
+        'eightBatch',
+        'nineBatch',
+        'tenBatch',
+        'lastBatch'
+    ];
+    let latestUnavailableSlots = new Set();
+
+    function getNextSlot(slotKey) {
+        const idx = slotOrder.indexOf(slotKey);
+        if (idx === -1 || idx + 1 >= slotOrder.length) return null;
+        return slotOrder[idx + 1];
+    }
+
+    function getCombinedRangeLabel(firstSlotKey, secondSlotKey) {
+        const firstOption = Array.from(timeSelect.options).find(opt => opt.value === firstSlotKey);
+        const secondOption = Array.from(timeSelect.options).find(opt => opt.value === secondSlotKey);
+        const firstText = firstOption
+            ? (firstOption.getAttribute('data-original-text') || firstOption.textContent || '').trim()
+            : '';
+        const secondText = secondOption
+            ? (secondOption.getAttribute('data-original-text') || secondOption.textContent || '').trim()
+            : '';
+        if (!firstText || !secondText || !firstText.includes('-') || !secondText.includes('-')) {
+            return firstText || secondText || '';
+        }
+        const start = firstText.split('-')[0];
+        const end = secondText.split('-')[1];
+        return `${start}-${end}`;
+    }
+
+    if (!dateInput || !timeSelect || !form || !submitBtn) return;
+
+    dateInput.addEventListener('change', function() {
+        const selectedDate = this.value;
+        resetTimeSlotOptions();
+        if (!selectedDate) return;
+
+        fetch(`../controllers/getAppointments.php?date=${encodeURIComponent(selectedDate)}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Unable to fetch appointment slots.');
+                return response.json();
+            })
+            .then(data => {
+                const unavailableSlots = data.unavailable_slots || [];
+                latestUnavailableSlots = new Set(unavailableSlots);
+
+                if (data.clinic_closed && data.closure_type === 'full_day') {
+                    showNotification('warning', 'Clinic Closed', data.closure_reason || 'No appointments available on this date.');
+                    dateInput.value = '';
+                    return;
+                }
+
+                Array.from(timeSelect.options).forEach(option => {
+                    if (!option.value) return;
+                    if (unavailableSlots.includes(option.value)) {
+                        option.disabled = true;
+                        option.classList.add('time-slot-disabled');
+                        option.textContent = `${option.getAttribute('data-original-text')} (Booked)`;
+                    }
+                });
+
+                const requiresTwoSlots = hasRequestNoteInput && hasRequestNoteInput.value === '1';
+                if (requiresTwoSlots) {
+                    Array.from(timeSelect.options).forEach(option => {
+                        if (!option.value || option.disabled) return;
+                        const nextSlot = getNextSlot(option.value);
+                        if (!nextSlot) {
+                            option.disabled = true;
+                            option.classList.add('time-slot-disabled');
+                            option.textContent = `${option.getAttribute('data-original-text')} (Needs next slot)`;
+                            return;
+                        }
+                        if (latestUnavailableSlots.has(nextSlot)) {
+                            option.disabled = true;
+                            option.classList.add('time-slot-disabled');
+                            option.textContent = `${option.getAttribute('data-original-text')} (Next slot unavailable)`;
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error(error);
+                showNotification('error', 'Error', 'Error loading available time slots. Please try again.');
+            });
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const appointmentId = document.getElementById('rescheduleAppointmentId').value.trim();
+        const selectedDate = dateInput.value;
+        const selectedTime = timeSelect.value;
+        const requiresTwoSlots = hasRequestNoteInput && hasRequestNoteInput.value === '1';
+
+        if (!appointmentId || !selectedDate || !selectedTime) {
+            showNotification('warning', 'Validation Error', 'Please select both date and time.');
+            return;
+        }
+
+        if (timeSelect.options[timeSelect.selectedIndex] && timeSelect.options[timeSelect.selectedIndex].disabled) {
+            showNotification('error', 'Time Slot Unavailable', 'The selected time slot is not available. Please choose another time.');
+            return;
+        }
+
+        if (requiresTwoSlots) {
+            const nextSlot = getNextSlot(selectedTime);
+            if (!nextSlot) {
+                showNotification('error', 'Invalid Time Slot', 'This appointment requires 2 consecutive slots. Please select an earlier time.');
+                return;
+            }
+            if (latestUnavailableSlots.has(nextSlot)) {
+                showNotification('error', 'Second Slot Unavailable', 'The next consecutive slot is unavailable. Please choose another start time.');
+                return;
+            }
+        }
+
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Processing...';
+
+        const formData = new FormData(form);
+
+        fetch('../controllers/rescheduleAppointment.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return response.json();
+            }
+            return response.text().then(text => {
+                try {
+                    return JSON.parse(text);
+                } catch (parseError) {
+                    return { success: false, message: 'Invalid response from server.' };
+                }
+            });
+        })
+        .then(data => {
+            if (data.success || data.status === 'success') {
+                showNotification('success', 'Appointment Rescheduled', data.message || 'Appointment rescheduled successfully!');
+                closeRescheduleModal();
+                let selectedTimeLabel = timeSelect.options[timeSelect.selectedIndex]
+                    ? timeSelect.options[timeSelect.selectedIndex].textContent.replace(' (Booked)', '')
+                    : '';
+                if (data.appointment_time) {
+                    selectedTimeLabel = data.appointment_time;
+                } else if (requiresTwoSlots) {
+                    const nextSlot = getNextSlot(selectedTime);
+                    if (nextSlot) {
+                        selectedTimeLabel = getCombinedRangeLabel(selectedTime, nextSlot) || selectedTimeLabel;
+                    }
+                }
+                const card = getAppointmentCard(appointmentId);
+                if (card) {
+                    setCardSchedule(card, selectedDate, selectedTimeLabel);
+                    setCardStatus(card, 'Pending');
+                    setCardMessage(card, '<p>Your appointment has been rescheduled. Please wait for confirmation.</p>');
+                    setCardActionsForPending(card, appointmentId);
+                }
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            } else {
+                showNotification('error', 'Reschedule Failed', data.message || 'Failed to reschedule appointment. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('error', 'Error', 'An error occurred while rescheduling. Please try again.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+        });
+    });
+});
+
 // Close modals when clicking outside
 window.onclick = function(event) {
     const editModal = document.getElementById("editModal");
     const credentialsModal = document.getElementById("credentialsModal");
     const feedbackModal = document.getElementById("feedbackModal");
+    const rescheduleModal = document.getElementById("rescheduleModal");
     
     if (event.target === editModal) closeEditModal();
     if (event.target === credentialsModal) closeCredentialsModal();
     if (event.target === feedbackModal) closeFeedbackModal();
+    if (event.target === rescheduleModal) closeRescheduleModal();
 };
 
 // Password visibility toggle
@@ -1594,6 +2386,106 @@ function closeConfirmationModal() {
     pendingAction = null;
 }
 
+function getStatusClass(status) {
+    switch (status) {
+        case 'Pending': return 'status-pending';
+        case 'Confirmed': return 'status-confirmed';
+        case 'Walk-in': return 'status-confirmed';
+        case 'Follow-up': return 'status-follow-up';
+        case 'Cancelled': return 'status-cancelled';
+        case 'Complete':
+        case 'Completed': return 'status-completed';
+        case 'Reschedule': return 'status-reschedule';
+        default: return 'status-default';
+    }
+}
+
+function getAppointmentCard(appointmentId) {
+    const escapedId = (window.CSS && CSS.escape) ? CSS.escape(appointmentId) : appointmentId.replace(/"/g, '\\"');
+    return document.querySelector(`.appointment-card[data-appointment-id="${escapedId}"]`);
+}
+
+function setCardStatus(card, statusText) {
+    const badge = card ? card.querySelector('.js-status-badge') : null;
+    if (!badge) return;
+    badge.textContent = statusText;
+    badge.className = `status-badge js-status-badge ${getStatusClass(statusText)}`;
+}
+
+function setCardSchedule(card, dateValue, timeValue) {
+    const dateEl = card ? card.querySelector('.js-appointment-date') : null;
+    const timeEl = card ? card.querySelector('.js-appointment-time') : null;
+    if (dateEl) dateEl.textContent = dateValue;
+    if (timeEl) timeEl.textContent = timeValue;
+}
+
+function setCardMessage(card, html) {
+    const msg = card ? card.querySelector('.js-appointment-message') : null;
+    if (msg) msg.innerHTML = html;
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function setCardActionsForCancelled(card, appointmentId) {
+    const actions = card ? card.querySelector('.js-appointment-actions') : null;
+    if (!actions) return;
+
+    const service = (card.querySelector('.js-appointment-service')?.textContent || 'N/A').trim();
+    const date = (card.querySelector('.js-appointment-date')?.textContent || '').trim();
+    const time = (card.querySelector('.js-appointment-time')?.textContent || '').trim();
+
+    actions.innerHTML = `
+        <button type="button"
+            class="btn btn-primary"
+            data-appointment-id="${escapeHtml(appointmentId)}"
+            data-service="${escapeHtml(service)}"
+            data-current-date="${escapeHtml(date)}"
+            data-current-time="${escapeHtml(time)}"
+            data-status="Cancelled"
+            onclick="openRescheduleModal(this)">
+            Reschedule
+        </button>
+    `;
+}
+
+function setCardActionsForPending(card, appointmentId) {
+    const actions = card ? card.querySelector('.js-appointment-actions') : null;
+    if (!actions) return;
+
+    const isWalkIn = card.getAttribute('data-is-walkin') === '1';
+    if (isWalkIn) return;
+
+    const service = (card.querySelector('.js-appointment-service')?.textContent || 'N/A').trim();
+    const date = (card.querySelector('.js-appointment-date')?.textContent || '').trim();
+    const time = (card.querySelector('.js-appointment-time')?.textContent || '').trim();
+
+    actions.innerHTML = `
+        <button type="button"
+            class="btn btn-danger"
+            data-appointment-id="${escapeHtml(appointmentId)}"
+            onclick="showCancelConfirmation(this)">
+            Cancel
+        </button>
+        <button type="button"
+            class="btn btn-primary"
+            data-appointment-id="${escapeHtml(appointmentId)}"
+            data-service="${escapeHtml(service)}"
+            data-current-date="${escapeHtml(date)}"
+            data-current-time="${escapeHtml(time)}"
+            data-status="Pending"
+            onclick="openRescheduleModal(this)">
+            Reschedule
+        </button>
+    `;
+}
+
 // Close modal when clicking outside
 window.addEventListener('click', function(event) {
     const modal = document.getElementById('confirmationModal');
@@ -1628,10 +2520,12 @@ function cancelAppointment(appointmentId) {
     .then(data => {
         if (data.success || !data.error) {
             showCancelledNotification(appointmentId);
-            // Reload page after 2 seconds to show updated appointment
-            setTimeout(() => {
-                location.reload();
-            }, 2000);
+            const card = getAppointmentCard(appointmentId);
+            if (card) {
+                setCardStatus(card, 'Cancelled');
+                setCardMessage(card, '<p>Your appointment has been cancelled.</p>');
+                setCardActionsForCancelled(card, appointmentId);
+            }
         } else {
             showNotification('error', 'Error', data.message || data.error || 'Failed to cancel appointment. Please try again.');
         }

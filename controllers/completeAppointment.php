@@ -1,5 +1,5 @@
 <?php
-include_once("config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
     $appointment_id = intval($_POST['appointment_id']);

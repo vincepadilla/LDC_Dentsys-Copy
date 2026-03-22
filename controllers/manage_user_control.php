@@ -8,7 +8,7 @@ require '../libraries/PhpMailer/src/SMTP.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 // Check if admin or super-admin is logged in
 if (!isset($_SESSION['userID']) || (strtolower($_SESSION['role']) !== 'admin' && strtolower($_SESSION['role']) !== 'super-admin')) {

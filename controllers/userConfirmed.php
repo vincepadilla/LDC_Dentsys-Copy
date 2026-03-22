@@ -1,5 +1,5 @@
 <?php
-include_once("config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if (isset($_GET['id'])) {
     $appointment_id = intval($_GET['id']);

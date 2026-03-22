@@ -1,5 +1,5 @@
 <?php
-include 'config.php'; 
+require_once(__DIR__ . "/../database/config.php");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['team_id'])) {
     $team_id = $_POST['team_id'];

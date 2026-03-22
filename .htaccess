@@ -1,45 +1,51 @@
-# Apache .htaccess configuration for LDCDentClinicSys
-
 RewriteEngine On
 
-# Security: prevent directory listing
+# Security
 Options -Indexes
 AddDefaultCharset UTF-8
 
-# Hide PHP/system paths from browser output when mod_php is available
-<IfModule mod_php.c>
-    php_flag display_errors Off
-    php_flag display_startup_errors Off
-    php_value expose_php 0
-</IfModule>
+# ------------------------------------------
+# 1) Redirect folder/php URLs to clean URLs (GET only)
+# ------------------------------------------
+# /views/page.php  -> /page
+# /admin/page.php  -> /page
+RewriteCond %{REQUEST_METHOD} GET
+RewriteRule ^(?:views|admin)/([a-zA-Z0-9_-]+)\.php$ /$1 [R=301,L,NC]
 
-# Serve existing files/directories directly (important for assets and uploads)
+# /controllers/name.php -> /api/name
+RewriteCond %{REQUEST_METHOD} GET
+RewriteRule ^controllers/([a-zA-Z0-9_-]+)\.php$ /api/$1 [R=301,L,NC]
+
+# /api/name.php -> /api/name
+RewriteCond %{REQUEST_METHOD} GET
+RewriteRule ^api/([a-zA-Z0-9_-]+)\.php$ /api/$1 [R=301,L,NC]
+
+# ------------------------------------------
+# 2) API clean route
+# ------------------------------------------
+RewriteRule ^api/([a-zA-Z0-9_-]+)/?$ controllers/$1.php [L,QSA,NC]
+
+# ------------------------------------------
+# 3) Root and clean page routes
+# ------------------------------------------
+RewriteRule ^$ views/index.php [L,QSA]
+
+# Prefer views first
+RewriteCond %{DOCUMENT_ROOT}/views/$1.php -f
+RewriteRule ^([a-zA-Z0-9_-]+)/?$ views/$1.php [L,QSA]
+
+# Then admin pages (e.g., /appointment -> admin/appointment.php)
+RewriteCond %{DOCUMENT_ROOT}/admin/$1.php -f
+RewriteRule ^([a-zA-Z0-9_-]+)/?$ admin/$1.php [L,QSA]
+
+# ------------------------------------------
+# 4) Allow existing files/folders (assets, uploads, etc.)
+# ------------------------------------------
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Deny direct access to internal app folders from URL (only on production/hostinger)
-RewriteCond %{HTTP_HOST} !^(?:localhost|127\.0\.0\.1)(?::\d+)?$ [NC]
-RewriteRule ^(?:views|controllers)/ - [R=404,L,NC]
-
-# Public API routes -> controllers (without exposing /controllers in URL)
-RewriteRule ^api/(.+)$ controllers/$1 [L,QSA]
-
-# Public routes -> internal views
-RewriteRule ^$ views/index.php [L]
-RewriteCond %{DOCUMENT_ROOT}/views/$1.php -f
-RewriteRule ^([a-zA-Z0-9_-]+)/?$ views/$1.php [L,QSA]
-
-# Fallback to front controller
-RewriteRule ^ index.php [L]
-
-# Prevent direct access to sensitive files
-<FilesMatch "^(config\.php|\.htaccess)$">
-    <IfModule mod_authz_core.c>
-        Require all denied
-    </IfModule>
-    <IfModule !mod_authz_core.c>
-        Order allow,deny
-        Deny from all
-    </IfModule>
-</FilesMatch>
+# ------------------------------------------
+# 5) Block direct folder access in URL
+# ------------------------------------------
+RewriteRule ^(?:views|controllers|admin)/ - [R=404,L,NC]

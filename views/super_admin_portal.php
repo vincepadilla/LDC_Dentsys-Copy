@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 // Only allow logged in super admins
 if (!isset($_SESSION['userID']) || !isset($_SESSION['role']) || strtolower($_SESSION['role']) !== 'super-admin') {
@@ -656,10 +656,8 @@ while ($row = mysqli_fetch_assoc($topUsersResult)) {
                                     <div class="top-user-card-role"><?php echo ucfirst($user['role']); ?></div>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 12px;">
-                                    <div class="top-user-card-count"><?php echo number_format($user['appointment_count']); ?> appts</div>
-                                    <button class="tool-link-btn" style="padding: 4px 10px; font-size: 11px;" onclick="window.location.href='userControl.php'">
-                                        Change Role
-                                    </button>
+                                    <div class="top-user-card-count"><?php echo number_format($user['appointment_count']); ?> Appointments</div>
+                                    
                                 </div>
                             </div>
                         <?php endforeach; ?>

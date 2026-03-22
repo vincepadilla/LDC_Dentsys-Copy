@@ -1,5 +1,5 @@
 <?php
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $service_category = $_POST['service_category'] ?? null;

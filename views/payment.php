@@ -665,10 +665,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                             </div>
                             
                             <div class="payment-form">
-                                <div class="form-group">
-                                    <label for="gcashaccName">Account Name</label>
-                                    <input type="text" name="gcashaccName" id="gcashaccName" placeholder="Your Account Name">
-                                </div>
+                            <div class="form-group">
+                                <label for="gcashaccName">Account Name</label>
+                                <input 
+                                    type="text" 
+                                    name="gcashaccName" 
+                                    id="gcashaccName" 
+                                    placeholder="Your Account Name"
+                                    pattern="[A-Za-z\s]+"
+                                    oninput="this.value = this.value.replace(/[^A-Za-z\s]/g, '')"
+                                    maxlength="50"
+                                    title="Only letters and spaces are allowed">
+                            </div>
                                 
                                 <div class="form-group">
                                     <label for="gcashNum">GCash Number</label>
@@ -745,10 +753,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
                             </div>
                             
                             <div class="payment-form">
-                                <div class="form-group">
-                                    <label for="mayaaccName">Account Name</label>
-                                    <input type="text" name="mayaaccName" id="mayaaccName" placeholder="Your Account Name">
-                                </div>
+                            <div class="form-group">
+                                <label for="mayaaccName">Account Name</label>
+                                <input 
+                                    type="text"
+                                    name="mayaaccName"
+                                    id="mayaaccName"
+                                    placeholder="Your Account Name"
+                                    pattern="[A-Za-z\s]+"
+                                    maxlength="50"
+                                    oninput="this.value = this.value.replace(/[^A-Za-z\s]/g, '')"
+                                    title="Only letters and spaces are allowed">
+                            </div>
                                 
                                 <div class="form-group">
                                     <label for="mayaNum">PayMaya Number</label>

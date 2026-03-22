@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 // Handle logout request
 if (isset($_GET['logout']) && $_GET['logout'] === 'true') {

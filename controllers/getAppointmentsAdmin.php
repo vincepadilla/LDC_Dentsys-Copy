@@ -1,5 +1,5 @@
 <?php
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 if (isset($_GET['appointment_date'])) {
     $selectedDate = $_GET['appointment_date'];
     $dentistId = $_GET['dentist_id'] ?? '';

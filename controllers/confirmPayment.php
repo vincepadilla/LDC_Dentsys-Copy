@@ -6,7 +6,7 @@ require '../libraries/PhpMailer/src/Exception.php';
 require '../libraries/PhpMailer/src/PHPMailer.php';
 require '../libraries/PhpMailer/src/SMTP.php';
 
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 // Function to generate new prefixed ID
 if (!function_exists('generateID')) {

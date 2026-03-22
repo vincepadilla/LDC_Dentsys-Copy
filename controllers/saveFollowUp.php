@@ -1,4 +1,11 @@
 <?php
+// Start output buffering to catch any errors/warnings
+ob_start();
+
+// Disable error display to prevent HTML in JSON response
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -18,36 +25,65 @@ if (file_exists('../libraries/PhpMailer/src/Exception.php')) {
 }
 
 session_start();
-include_once("config.php");
+
+// Include config file with error handling
+try {
+    require_once(__DIR__ . "/../database/config.php");
+    
+    // Check if connection exists
+    if (!isset($con) || !$con) {
+        throw new Exception('Database connection not established');
+    }
+} catch (Exception $e) {
+    ob_clean();
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Database connection failed: ' . $e->getMessage()
+    ]);
+    exit();
+}
+
+// Clear any output that might have been generated
+ob_clean();
 
 // Set content type to JSON
 header('Content-Type: application/json');
 
+try {
 // Check if user is admin
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
+    ob_clean();
     echo json_encode(['success' => false, 'message' => 'Unauthorized access.']);
     exit();
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    ob_clean();
     echo json_encode(['success' => false, 'message' => 'Invalid request method.']);
     exit();
 }
 
 // Get form data
-$appointment_id = trim($_POST['original_appointment_id'] ?? '');
+$original_appointment_id = trim($_POST['original_appointment_id'] ?? '');
+$patient_id = trim($_POST['patient_id'] ?? '');
+$service_id = trim($_POST['service_id'] ?? '');
+$team_id = trim($_POST['team_id'] ?? '');
+$branch = trim($_POST['branch'] ?? '');
 $appointment_date = trim($_POST['appointment_date'] ?? '');
 $time_slot = trim($_POST['time_slot'] ?? '');
 $followup_reason = trim($_POST['followup_reason'] ?? '');
 
 // Validate required fields
-if (empty($appointment_id) || empty($appointment_date) || empty($time_slot)) {
+if (empty($original_appointment_id) || empty($patient_id) || empty($service_id) || empty($team_id) || empty($branch) || empty($appointment_date) || empty($time_slot)) {
+    ob_clean();
     echo json_encode(['success' => false, 'message' => 'All fields are required.']);
     exit();
 }
 
 // Validate reason
 if (empty($followup_reason)) {
+    ob_clean();
     echo json_encode(['success' => false, 'message' => 'Please provide a reason for the follow-up.']);
     exit();
 }
@@ -70,57 +106,183 @@ $timeMap = [
 $appointment_time = $timeMap[$time_slot] ?? '';
 
 if (empty($appointment_time)) {
+    ob_clean();
     echo json_encode(['success' => false, 'message' => 'Invalid time slot selected.']);
     exit();
 }
 
-// Get appointment details for email
-$stmtCheck = $con->prepare("
-    SELECT a.*, 
-           p.first_name, p.last_name, p.email,
-           s.service_category, s.sub_service,
-           d.first_name AS dentist_first, d.last_name AS dentist_last
-    FROM appointments a
-    LEFT JOIN patient_information p ON a.patient_id = p.patient_id
-    LEFT JOIN services s ON a.service_id = s.service_id
-    LEFT JOIN multidisciplinary_dental_team d ON a.team_id = d.team_id
-    WHERE a.appointment_id = ?
-");
-$stmtCheck->bind_param("s", $appointment_id);
-$stmtCheck->execute();
-$result = $stmtCheck->get_result();
-$appointment = $result->fetch_assoc();
-$stmtCheck->close();
+// Function to generate new appointment ID
+function generateAppointmentID($con) {
+    $query = "SELECT appointment_id FROM appointments ORDER BY appointment_id DESC LIMIT 1";
+    $result = mysqli_query($con, $query);
+    
+    if ($result && mysqli_num_rows($result) > 0) {
+        $row = mysqli_fetch_assoc($result);
+        $lastID = $row['appointment_id'];
+        $number = intval(substr($lastID, 1));
+        $newNumber = $number + 1;
+        return 'A' . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
+    }
+    return 'A001';
+}
 
-if (!$appointment) {
-    echo json_encode(['success' => false, 'message' => 'Appointment not found.']);
+// Check for double booking
+$checkBooking = $con->prepare("
+    SELECT appointment_id FROM appointments 
+    WHERE appointment_date = ? 
+    AND time_slot = ? 
+    AND team_id = ? 
+    AND status NOT IN ('Cancelled', 'No-show')
+    LIMIT 1
+");
+$checkBooking->bind_param("sss", $appointment_date, $time_slot, $team_id);
+$checkBooking->execute();
+$bookingResult = $checkBooking->get_result();
+
+if ($bookingResult->num_rows > 0) {
+    $checkBooking->close();
+    ob_clean();
+    echo json_encode(['success' => false, 'message' => 'This time slot is already booked. Please select another time.']);
+    exit();
+}
+$checkBooking->close();
+
+// Generate new appointment ID
+$new_appointment_id = generateAppointmentID($con);
+
+// Get patient, service, and dentist details for email
+// Get patient info
+$stmtPatient = $con->prepare("
+    SELECT first_name, last_name, email
+    FROM patient_information
+    WHERE patient_id = ?
+");
+$stmtPatient->bind_param("s", $patient_id);
+$stmtPatient->execute();
+$patientResult = $stmtPatient->get_result();
+$patientData = $patientResult->fetch_assoc();
+$stmtPatient->close();
+
+if (!$patientData) {
+    ob_clean();
+    echo json_encode(['success' => false, 'message' => 'Patient information not found.']);
     exit();
 }
 
-// Update the existing appointment status to 'Follow-Up' and update date/time
-$stmtUpdate = $con->prepare("
-    UPDATE appointments 
-    SET appointment_date = ?, 
-        appointment_time = ?, 
-        time_slot = ?, 
-        status = 'Follow-Up' 
-    WHERE appointment_id = ?
+// Get service info
+$stmtService = $con->prepare("
+    SELECT service_category, sub_service
+    FROM services
+    WHERE service_id = ?
 ");
-$stmtUpdate->bind_param("ssss", $appointment_date, $appointment_time, $time_slot, $appointment_id);
+$stmtService->bind_param("s", $service_id);
+$stmtService->execute();
+$serviceResult = $stmtService->get_result();
+$serviceData = $serviceResult->fetch_assoc();
+$stmtService->close();
 
-if (!$stmtUpdate->execute()) {
-    echo json_encode(['success' => false, 'message' => 'Error updating appointment: ' . $stmtUpdate->error]);
-    $stmtUpdate->close();
+if (!$serviceData) {
+    ob_clean();
+    echo json_encode(['success' => false, 'message' => 'Service information not found.']);
     exit();
 }
 
-$stmtUpdate->close();
+// Get dentist info
+$stmtDentist = $con->prepare("
+    SELECT first_name, last_name
+    FROM multidisciplinary_dental_team
+    WHERE team_id = ?
+");
+$stmtDentist->bind_param("s", $team_id);
+$stmtDentist->execute();
+$dentistResult = $stmtDentist->get_result();
+$dentistData = $dentistResult->fetch_assoc();
+$stmtDentist->close();
+
+if (!$dentistData) {
+    ob_clean();
+    echo json_encode(['success' => false, 'message' => 'Dentist information not found.']);
+    exit();
+}
+
+// Combine all data
+$appointmentData = array_merge($patientData, $serviceData, [
+    'dentist_first' => $dentistData['first_name'],
+    'dentist_last' => $dentistData['last_name']
+]);
+
+if (!$appointmentData) {
+    ob_clean();
+    echo json_encode(['success' => false, 'message' => 'Patient, service, or dentist information not found.']);
+    exit();
+}
+
+// Check if 'Follow-up' status exists in enum, if not use 'Pending' and update later
+// First, try to insert with 'Follow-up' status
+$followUpStatus = 'Follow-up';
+
+// Create new follow-up appointment
+$stmtInsert = $con->prepare("
+    INSERT INTO appointments 
+    (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, created_at) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+");
+$stmtInsert->bind_param("sssssssss", $new_appointment_id, $patient_id, $team_id, $service_id, $branch, $appointment_date, $appointment_time, $time_slot, $followUpStatus);
+
+if (!$stmtInsert->execute()) {
+    // If 'Follow-up' status doesn't exist in enum, try with 'Pending' and update enum
+    $error = $stmtInsert->error;
+    $stmtInsert->close();
+    
+    // Check if error is related to enum value
+    if (strpos($error, 'enum') !== false || strpos($error, 'status') !== false) {
+        // Try to alter the enum to include 'Follow-up'
+        $alterQuery = "ALTER TABLE appointments MODIFY status ENUM('Pending','Confirmed','Reschedule','Complete','Cancelled','No-show','Follow-up') DEFAULT NULL";
+        @mysqli_query($con, $alterQuery);
+        
+        // Try again with 'Follow-up'
+        $stmtInsert2 = $con->prepare("
+            INSERT INTO appointments 
+            (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+        $stmtInsert2->bind_param("sssssssss", $new_appointment_id, $patient_id, $team_id, $service_id, $branch, $appointment_date, $appointment_time, $time_slot, $followUpStatus);
+        
+        if (!$stmtInsert2->execute()) {
+            // If still fails, use 'Pending' as fallback
+            $followUpStatus = 'Pending';
+            $stmtInsert2->close();
+            $stmtInsert3 = $con->prepare("
+                INSERT INTO appointments 
+                (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+            $stmtInsert3->bind_param("sssssssss", $new_appointment_id, $patient_id, $team_id, $service_id, $branch, $appointment_date, $appointment_time, $time_slot, $followUpStatus);
+            
+            if (!$stmtInsert3->execute()) {
+                ob_clean();
+                echo json_encode(['success' => false, 'message' => 'Error creating follow-up appointment: ' . $stmtInsert3->error]);
+                $stmtInsert3->close();
+                exit();
+            }
+            $stmtInsert3->close();
+        } else {
+            $stmtInsert2->close();
+        }
+    } else {
+        ob_clean();
+        echo json_encode(['success' => false, 'message' => 'Error creating follow-up appointment: ' . $error]);
+        exit();
+    }
+} else {
+    $stmtInsert->close();
+}
 
 // Prepare email variables
-$patient_name = trim($appointment['first_name'] . ' ' . $appointment['last_name']);
-$service = !empty($appointment['sub_service']) ? $appointment['sub_service'] : $appointment['service_category'];
-$dentist = trim($appointment['dentist_first'] . ' ' . $appointment['dentist_last']);
-$email = $appointment['email'];
+$patient_name = trim($appointmentData['first_name'] . ' ' . $appointmentData['last_name']);
+$service = !empty($appointmentData['sub_service']) ? $appointmentData['sub_service'] : $appointmentData['service_category'];
+$dentist = trim($appointmentData['dentist_first'] . ' ' . $appointmentData['dentist_last']);
+$email = $appointmentData['email'];
 
 // Send email notification
 $emailSent = false;
@@ -150,11 +312,12 @@ if (!empty($email)) {
             <p>A <strong>follow-up appointment</strong> has been scheduled for you.</p>
 
             <p>
+            <strong>Appointment ID:</strong> {$new_appointment_id}<br>
             <strong>Service:</strong> {$service}<br>
             <strong>Dentist:</strong> {$dentist}<br>
             <strong>Follow-Up Date:</strong> " . date('F j, Y', strtotime($appointment_date)) . "<br>
             <strong>Follow-Up Time:</strong> {$appointment_time}<br>
-            <strong>Branch:</strong> {$appointment['branch']}
+            <strong>Branch:</strong> {$branch}
             </p>
             
             <p><strong>Reason for Follow-Up:</strong><br>{$reasonText}</p>
@@ -171,25 +334,38 @@ if (!empty($email)) {
     }
 }
 
-// Return JSON response
+// Return JSON response - ensure clean output
+ob_clean();
+
 if ($emailSent) {
     echo json_encode([
         'success' => true,
         'status' => 'success',
-        'message' => 'Follow-up appointment scheduled and email sent successfully.'
+        'message' => 'Follow-up appointment #' . $new_appointment_id . ' created and email sent successfully.',
+        'appointment_id' => $new_appointment_id
     ]);
 } else if (!empty($email)) {
     echo json_encode([
         'success' => true,
         'status' => 'success',
-        'message' => 'Follow-up appointment scheduled, but email failed to send. Error: ' . $emailError
+        'message' => 'Follow-up appointment #' . $new_appointment_id . ' created, but email failed to send. Error: ' . $emailError,
+        'appointment_id' => $new_appointment_id
     ]);
 } else {
     echo json_encode([
         'success' => true,
         'status' => 'success',
-        'message' => 'Follow-up appointment scheduled successfully. (No email address found for patient)'
+        'message' => 'Follow-up appointment #' . $new_appointment_id . ' created successfully. (No email address found for patient)',
+        'appointment_id' => $new_appointment_id
     ]);
+}
+} catch (Exception $e) {
+    ob_clean();
+    echo json_encode([
+        'success' => false,
+        'message' => 'An error occurred: ' . $e->getMessage()
+    ]);
+    exit();
 }
 exit();
 

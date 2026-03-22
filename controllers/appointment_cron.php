@@ -1,6 +1,6 @@
 <?php
 // Intended to be run by scheduler (cron / Windows Task Scheduler) every X minutes
-include_once('../database/config.php');
+require_once(__DIR__ . "/../database/config.php");
 
 $now = date('Y-m-d H:i:s');
 $today = date('Y-m-d');

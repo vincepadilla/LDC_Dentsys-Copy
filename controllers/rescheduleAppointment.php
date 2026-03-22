@@ -67,10 +67,24 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
         exit();
     }
 
+    $slotOrder = [
+        'firstBatch',
+        'secondBatch',
+        'thirdBatch',
+        'fourthBatch',
+        'fifthBatch',
+        'sixthBatch',
+        'sevenBatch',
+        'eightBatch',
+        'nineBatch',
+        'tenBatch',
+        'lastBatch'
+    ];
+
     $new_time = $timeMap[$new_time_slot];
 
-    // First, verify the appointment exists before updating
-    $stmtCheck = $con->prepare("SELECT appointment_id FROM appointments WHERE appointment_id = ?");
+    // First, verify the appointment exists and read request_note for 2-slot enforcement.
+    $stmtCheck = $con->prepare("SELECT appointment_id, request_note FROM appointments WHERE appointment_id = ?");
     $stmtCheck->bind_param("s", $appointment_id);
     $stmtCheck->execute();
     $checkResult = $stmtCheck->get_result();
@@ -80,7 +94,70 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
         echo json_encode(['success' => false, 'message' => 'Appointment not found.']);
         exit();
     }
+    $currentAppointment = $checkResult->fetch_assoc();
+    $hasRequestNote = !empty($currentAppointment['request_note']);
     $stmtCheck->close();
+
+    if ($hasRequestNote) {
+        $slotIndex = array_search($new_time_slot, $slotOrder, true);
+        if ($slotIndex === false || !isset($slotOrder[$slotIndex + 1])) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'This appointment requires 2 consecutive time slots. Please select an earlier start time.'
+            ]);
+            exit();
+        }
+
+        $nextSlot = $slotOrder[$slotIndex + 1];
+
+        // Validate second slot is available (not blocked and not already booked).
+        $stmtBlocked = $con->prepare("SELECT 1 FROM blocked_time_slots WHERE date = ? AND time_slot = ? LIMIT 1");
+        $stmtBlocked->bind_param("ss", $new_date, $nextSlot);
+        $stmtBlocked->execute();
+        $blockedResult = $stmtBlocked->get_result();
+        $isBlocked = $blockedResult && $blockedResult->num_rows > 0;
+        $stmtBlocked->close();
+
+        $stmtBooked = $con->prepare("
+            SELECT appointment_id, time_slot, request_note
+            FROM appointments
+            WHERE appointment_date = ?
+              AND status != 'Cancelled'
+              AND appointment_id != ?
+        ");
+        $stmtBooked->bind_param("ss", $new_date, $appointment_id);
+        $stmtBooked->execute();
+        $bookedResult = $stmtBooked->get_result();
+
+        $unavailableSlots = [];
+        while ($bookedRow = $bookedResult->fetch_assoc()) {
+            if (empty($bookedRow['time_slot'])) {
+                continue;
+            }
+            $unavailableSlots[] = $bookedRow['time_slot'];
+            if (!empty($bookedRow['request_note'])) {
+                $bookedIndex = array_search($bookedRow['time_slot'], $slotOrder, true);
+                if ($bookedIndex !== false && isset($slotOrder[$bookedIndex + 1])) {
+                    $unavailableSlots[] = $slotOrder[$bookedIndex + 1];
+                }
+            }
+        }
+        $stmtBooked->close();
+
+        if ($isBlocked || in_array($nextSlot, $unavailableSlots, true)) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Unable to reschedule: the next consecutive slot is already booked or unavailable.'
+            ]);
+            exit();
+        }
+
+        $firstStart = explode('-', $timeMap[$new_time_slot])[0] ?? '';
+        $secondEnd = explode('-', $timeMap[$nextSlot])[1] ?? '';
+        if ($firstStart && $secondEnd) {
+            $new_time = $firstStart . '-' . $secondEnd;
+        }
+    }
 
     // UPDATE appointment record - using "s" for appointment_id (VARCHAR, not integer)
     // Also store the latest reschedule reason so it can be shown in the patient's account.
@@ -189,6 +266,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
         echo json_encode([
             'success' => true, 
             'message' => 'Appointment rescheduled successfully and email sent.',
+            'appointment_time' => $new_time,
             'status' => 'success'
         ]);
         exit();
@@ -198,6 +276,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['appointment_id'])) {
         echo json_encode([
             'success' => true, 
             'message' => 'Appointment rescheduled, but email failed to send.',
+            'appointment_time' => $new_time,
             'status' => 'success'
         ]);
         exit();
