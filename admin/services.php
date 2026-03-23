@@ -1,6 +1,6 @@
 ﻿<?php
 session_start();
-include_once("../database/config.php");
+require_once(__DIR__ . "/../database/config.php");
 
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     header("Location: ../views/login.php");
@@ -39,6 +39,296 @@ $servicesResult = mysqli_query($con, $servicesSql);
     <link rel="stylesheet" href="../assets/css/adminstyle.css">
     <link rel="stylesheet" href="serviceDesign.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <style>
+        /* Notification System Styles (toast) */
+        .notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 400px;
+        }
+
+        .notification {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            min-width: 320px;
+            animation: slideInRight 0.4s ease-out;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .notification.success {
+            border-left: 4px solid #10B981;
+        }
+
+        .notification.warning {
+            border-left: 4px solid #F59E0B;
+        }
+
+        .notification.error {
+            border-left: 4px solid #EF4444;
+        }
+
+        .notification.info {
+            border-left: 4px solid #3B82F6;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+
+        .notification.hide {
+            animation: slideOutRight 0.3s ease-out forwards;
+        }
+
+        .notification-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+            background: #E5E7EB;
+            color: #6B7280;
+        }
+
+        .notification.success .notification-icon {
+            background: #D1FAE5;
+            color: #10B981;
+        }
+
+        .notification.warning .notification-icon {
+            background: #FEF3C7;
+            color: #F59E0B;
+        }
+
+        .notification.error .notification-icon {
+            background: #FEE2E2;
+            color: #EF4444;
+        }
+
+        .notification.info .notification-icon {
+            background: #DBEAFE;
+            color: #3B82F6;
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-title {
+            font-weight: 600;
+            font-size: 16px;
+            margin: 0 0 4px 0;
+            color: #111827;
+        }
+
+        .notification-message {
+            font-size: 14px;
+            color: #6B7280;
+            margin: 0;
+        }
+
+        .notification-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            font-size: 20px;
+            color: #9CA3AF;
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .notification-close:hover {
+            background: #F3F4F6;
+            color: #374151;
+        }
+
+        .notification-progress {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .notification-progress-bar {
+            height: 100%;
+            width: 100%;
+            background: currentColor;
+            transform-origin: left;
+            transform: scaleX(1);
+            animation-name: notificationProgress;
+            animation-timing-function: linear;
+            animation-fill-mode: forwards;
+        }
+
+        @keyframes notificationProgress {
+            from {
+                transform: scaleX(1);
+            }
+            to {
+                transform: scaleX(0);
+            }
+        }
+
+        /* Clean, organized table layout (patients-style), scoped to this page */
+        #services-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            table-layout: auto;
+        }
+
+        #services-table thead th {
+            background: linear-gradient(135deg, #48A6A7, #2a9d8f);
+            color: #fff;
+            border: none !important;
+            border-bottom: none !important;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 800;
+            font-size: 0.85em;
+            padding: 14px 12px;
+        }
+
+        #services-table th,
+        #services-table td {
+            border: none !important;
+            border-bottom: none !important;
+        }
+
+        #services-table tbody td {
+            padding: 10px 12px;
+            font-size: 0.90em;
+            font-weight: 600;
+            vertical-align: top;
+        }
+
+        #services-table tbody tr:nth-child(odd) {
+            background-color: #fff;
+        }
+
+        #services-table tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        #services-table tbody tr:hover {
+            background-color: rgba(233, 196, 106, 0.14);
+        }
+
+        /* Alignment: Service ID + Actions columns */
+        #services-table th:first-child,
+        #services-table td:first-child {
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        #services-table th:last-child,
+        #services-table td:last-child {
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        /* Description cell: readable wrapping for long text */
+        #services-table th:nth-child(4),
+        #services-table td:nth-child(4) {
+            max-width: 420px;
+            width: 420px;
+        }
+
+        #services-table td:nth-child(4) {
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            line-height: 1.55;
+            padding-top: 14px;
+            padding-bottom: 14px;
+            vertical-align: top;
+        }
+
+        /* Action buttons: compact icon buttons */
+        #services-table .action-btns {
+            justify-content: center;
+        }
+
+        #services-table .action-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: none;
+        }
+
+        #services-table .action-btn i {
+            font-size: 14px;
+        }
+
+        #services-table .action-btn:hover {
+            filter: brightness(1.08);
+        }
+
+        @media (max-width: 900px) {
+            #services-table thead th,
+            #services-table tbody td {
+                padding: 10px 10px;
+            }
+
+            #services-table th:nth-child(4),
+            #services-table td:nth-child(4) {
+                max-width: none;
+                width: auto;
+            }
+
+            #services-table td:nth-child(4) {
+                padding-top: 10px;
+                padding-bottom: 10px;
+                line-height: 1.45;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -335,7 +625,7 @@ $servicesResult = mysqli_query($con, $servicesSql);
             </div>
             <button class="notification-close" onclick="closeNotification(this)">&times;</button>
             <div class="notification-progress">
-                <div class="notification-progress-bar" style="color: ${getNotificationColor(type)}"></div>
+                <div class="notification-progress-bar" style="color: ${getNotificationColor(type)}; animation-duration: ${duration}ms;"></div>
             </div>
         `;
         
@@ -722,14 +1012,152 @@ $servicesResult = mysqli_query($con, $servicesSql);
 
         const editForm = document.getElementById('editServiceForm');
         if (editForm) {
-            editForm.addEventListener('submit', function(e) {
-                // Basic validation
-                const price = document.getElementById('editPrice');
-                if (price && parseFloat(price.value) < 0) {
-                    e.preventDefault();
+            // Helpers for real-time UI updates (no full page reload).
+            const formatPrice = (value) => {
+                const num = Number(value);
+                if (Number.isNaN(num)) return '0.00';
+                return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            };
+
+            const findDesktopRowById = (serviceId) => {
+                const rows = document.querySelectorAll('tr.service-row');
+                for (const row of rows) {
+                    const idCell = row.querySelector('td');
+                    if (idCell && idCell.textContent.trim() === serviceId) return row;
+                }
+                return null;
+            };
+
+            const findMobileCardById = (serviceId) => {
+                const cards = document.querySelectorAll('.service-card.service-row');
+                for (const card of cards) {
+                    const idEl = card.querySelector('.service-card-id');
+                    if (idEl && idEl.textContent.includes(`#${serviceId}`)) return card;
+                }
+                return null;
+            };
+
+            const updateServiceUIFromData = (service) => {
+                if (!service || !service.service_id) return;
+
+                const serviceId = String(service.service_id);
+                const category = service.service_category || '';
+                const subService = service.sub_service || '';
+                const description = service.description || '';
+                const price = service.price ?? 0;
+
+                // Desktop row
+                const desktopRow = findDesktopRowById(serviceId);
+                if (desktopRow) {
+                    desktopRow.dataset.category = (category || '').toLowerCase();
+                    const tds = desktopRow.querySelectorAll('td');
+                    if (tds[0]) tds[0].textContent = serviceId;
+                    if (tds[1]) tds[1].textContent = category;
+                    if (tds[2]) tds[2].textContent = subService;
+                    if (tds[3]) tds[3].textContent = description;
+                    if (tds[4]) tds[4].textContent = `₱${formatPrice(price)}`;
+                }
+
+                // Mobile card
+                const mobileCard = findMobileCardById(serviceId);
+                if (mobileCard) {
+                    mobileCard.dataset.category = (category || '').toLowerCase();
+                    const idEl = mobileCard.querySelector('.service-card-id');
+                    if (idEl) idEl.textContent = `Service #${serviceId}`;
+
+                    const catEl = mobileCard.querySelector('.service-card-category');
+                    if (catEl) catEl.textContent = category;
+
+                    const fields = mobileCard.querySelectorAll('.service-card-field');
+                    fields.forEach((field) => {
+                        const label = field.querySelector('.service-card-label')?.textContent?.trim();
+                        const valueEl = field.querySelector('.service-card-value');
+                        if (!label || !valueEl) return;
+                        if (label === 'Sub Service') valueEl.textContent = subService;
+                        if (label === 'Description') valueEl.textContent = description;
+                        if (label === 'Price') valueEl.textContent = `₱${formatPrice(price)}`;
+                    });
+                }
+            };
+
+            const fetchServiceDetails = async (serviceId) => {
+                const res = await fetch(`../controllers/getServices.php?id=${encodeURIComponent(serviceId)}`, { method: 'GET' });
+                if (!res.ok) throw new Error('Failed to fetch updated service.');
+                return res.json();
+            };
+
+            const refreshServicesTablePreservePage = () => {
+                const visibleRows = getVisibleServicesRows();
+                const isMobileView = window.innerWidth <= 768;
+                const filteredRows = visibleRows
+                    ? visibleRows.filter(row => (isMobileView ? row.classList.contains('service-card') : row.tagName === 'TR'))
+                    : [];
+
+                const totalPages = Math.max(1, Math.ceil(filteredRows.length / servicesRowsPerPage));
+                if (servicesCurrentPage > totalPages) servicesCurrentPage = totalPages;
+
+                updateServicesPagination(visibleRows);
+                showServicesPage(visibleRows, servicesCurrentPage);
+            };
+
+            // Intercept Update Service submit to avoid server redirect and update UI instantly.
+            editForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const priceEl = document.getElementById('editPrice');
+                if (priceEl && parseFloat(priceEl.value) < 0) {
                     showNotification('error', 'Invalid Price', 'Price cannot be negative.');
-                    price.focus();
+                    priceEl.focus();
                     return false;
+                }
+
+                const submitBtn = editForm.querySelector('button[type="submit"]');
+                const originalText = submitBtn ? submitBtn.innerHTML : null;
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+                }
+
+                const formData = new FormData(editForm);
+                const serviceId = document.getElementById('editServiceId')?.value;
+
+                try {
+                    const res = await fetch(editForm.action, {
+                        method: 'POST',
+                        body: formData,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+
+                    const text = await res.text().catch(() => '');
+                    const ok = text.toLowerCase().includes('service updated successfully');
+
+                    if (!ok) {
+                        showNotification('error', 'Update Failed', 'Error updating service. Please try again.');
+                        return false;
+                    }
+
+                    showNotification('success', 'Service Updated', 'Service updated successfully.');
+                    closeEditModal();
+
+                    // Pull the canonical updated values and update the current UI row/card.
+                    if (serviceId) {
+                        const updated = await fetchServiceDetails(serviceId).catch(() => null);
+                        if (updated && !updated.error) {
+                            updateServiceUIFromData(updated);
+                        }
+                    }
+
+                    refreshServicesTablePreservePage();
+                    return true;
+                } catch (err) {
+                    console.error(err);
+                    showNotification('error', 'Update Error', 'Error updating service. Please try again.');
+                    return false;
+                } finally {
+                    if (submitBtn && originalText !== null) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                    }
                 }
             });
 
@@ -746,6 +1174,94 @@ $servicesResult = mysqli_query($con, $servicesSql);
                 });
             });
         }
+
+        // Intercept Delete service forms to update UI instantly (no reload).
+        const findDesktopRowById = (serviceId) => {
+            const rows = document.querySelectorAll('tr.service-row');
+            for (const row of rows) {
+                const idCell = row.querySelector('td');
+                if (idCell && idCell.textContent.trim() === serviceId) return row;
+            }
+            return null;
+        };
+
+        const findMobileCardById = (serviceId) => {
+            const cards = document.querySelectorAll('.service-card.service-row');
+            for (const card of cards) {
+                const idEl = card.querySelector('.service-card-id');
+                if (idEl && idEl.textContent.includes(`#${serviceId}`)) return card;
+            }
+            return null;
+        };
+
+        const refreshServicesTablePreservePage = () => {
+            const visibleRows = getVisibleServicesRows();
+            const isMobileView = window.innerWidth <= 768;
+            const filteredRows = visibleRows
+                ? visibleRows.filter(row => (isMobileView ? row.classList.contains('service-card') : row.tagName === 'TR'))
+                : [];
+
+            const totalPages = Math.max(1, Math.ceil(filteredRows.length / servicesRowsPerPage));
+            if (servicesCurrentPage > totalPages) servicesCurrentPage = totalPages;
+
+            updateServicesPagination(visibleRows);
+            showServicesPage(visibleRows, servicesCurrentPage);
+        };
+
+        const deleteForms = document.querySelectorAll('form[action="../controllers/deleteService.php"]');
+        deleteForms.forEach((form) => {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const serviceId = form.querySelector('input[name="service_id"]')?.value;
+                if (!serviceId) {
+                    showNotification('error', 'Delete Failed', 'No service ID provided.');
+                    return;
+                }
+
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalText = submitBtn ? submitBtn.innerHTML : null;
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+                }
+
+                try {
+                    const res = await fetch(form.action, {
+                        method: 'POST',
+                        body: new FormData(form),
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+
+                    const text = await res.text().catch(() => '');
+                    const ok = text.toLowerCase().includes('service deleted successfully');
+
+                    if (!ok) {
+                        showNotification('error', 'Delete Failed', 'Error deleting service. Please try again.');
+                        return;
+                    }
+
+                    showNotification('success', 'Service Deleted', 'Service deleted successfully.');
+
+                    // Remove from DOM: both desktop row and mobile card.
+                    const desktopRow = findDesktopRowById(String(serviceId));
+                    if (desktopRow) desktopRow.remove();
+
+                    const mobileCard = findMobileCardById(String(serviceId));
+                    if (mobileCard) mobileCard.remove();
+
+                    refreshServicesTablePreservePage();
+                } catch (err) {
+                    console.error(err);
+                    showNotification('error', 'Delete Error', 'Error deleting service. Please try again.');
+                } finally {
+                    if (submitBtn && originalText !== null) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                    }
+                }
+            });
+        });
 
         // Initialize pagination
         setTimeout(() => {

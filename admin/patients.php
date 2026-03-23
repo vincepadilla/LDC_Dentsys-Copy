@@ -1457,8 +1457,68 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
     }
     
     // Print Patients
-    function printPatients() {
-        window.print();
+    async function printPatients() {
+        try {
+            const response = await fetch(
+                "../controllers/exportPatientsListPdf.php?ts=" + Date.now(),
+                {
+                method: "GET",
+                credentials: "include"
+                }
+            );
+
+            const contentType = (response.headers.get("content-type") || "").toLowerCase();
+            const isPdf = contentType.includes("application/pdf");
+            const isJson = contentType.includes("application/json");
+
+            if (response.ok && isPdf) {
+                // Trigger download directly from the fetched PDF bytes.
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "patient_list_report.pdf";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+
+                window.URL.revokeObjectURL(url);
+                return;
+            }
+
+            // For JSON responses, show the actual server message (so we don't incorrectly show
+            // "No patient data" when the backend failed for another reason).
+            if (isJson) {
+                const text = await response.text().catch(() => "");
+                let data = null;
+                try {
+                    data = text ? JSON.parse(text) : null;
+                } catch (e) {
+                    data = null;
+                }
+
+                const msg = data && typeof data.message === "string" ? data.message : "";
+                if (msg) {
+                    // Keep the original friendly message only when it truly indicates no DB rows.
+                    if (msg.toLowerCase().includes("no patient data")) {
+                        alert("No patient data available.");
+                    } else {
+                        alert(msg);
+                    }
+                } else {
+                    alert("Unable to export patient list. Please try again.");
+                }
+                return;
+            }
+
+            // If we got something unexpected (HTML error page, etc.), surface it for reliability.
+            const fallbackText = await response.text().catch(() => "");
+            alert(fallbackText ? fallbackText : "Failed to generate patient list PDF.");
+        } catch (err) {
+            console.error(err);
+            alert("Error generating patient list PDF. Please try again.");
+        }
     }
     
     // Update Patients Pagination
