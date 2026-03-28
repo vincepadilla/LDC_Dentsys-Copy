@@ -189,6 +189,7 @@ if ($lastIdRes && mysqli_num_rows($lastIdRes) > 0) {
             max-width: 320px;
             display: -webkit-box;
             -webkit-line-clamp: 3;
+            line-clamp: 3;
             -webkit-box-orient: vertical;
             overflow: hidden;
             line-height: 1.3;
@@ -222,6 +223,7 @@ if ($lastIdRes && mysqli_num_rows($lastIdRes) > 0) {
         @media (max-width: 900px) {
             #patients-table .patients-desc {
                 -webkit-line-clamp: 2;
+                line-clamp: 2;
             }
 
             #patients-table thead th,
