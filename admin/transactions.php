@@ -941,19 +941,24 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                                 <td><?php echo date('M j, Y g:i A', strtotime($transactionDate)); ?></td>
                                 <td>
                                     <div class="action-btns">
+                                        <style>
+                                            .action-btn.btn-invoice { background:rgb(211, 211, 211); color: #ffffff; }
+                                            .action-btn.btn-invoice i { color:rgb(0, 0, 0); }
+                                            .action-btn.btn-invoice:hover { background:rgb(152, 152, 152); }
+                                        </style>
                                         <button type="button" class="action-btn btn-primary" 
                                                 title="View Bill Summary"
                                                 onclick="viewBillSummary('<?php echo htmlspecialchars($row['patient_id']); ?>', '<?php echo htmlspecialchars($row['treatment_id']); ?>', '<?php echo htmlspecialchars($row['appointment_id']); ?>', '<?php echo htmlspecialchars($billStatusId); ?>', '<?php echo htmlspecialchars($billStatus); ?>', <?php echo $total; ?>)">
                                             <i class="fas fa-file-invoice"></i>
                                         </button>
                                         <?php if ($billStatus === 'paid'): ?>
-                                        <button type="button" class="action-btn btn-success" 
-                                                title="View Receipt"
+                                        <button type="button" class="action-btn btn-invoice" 
+                                                title="View Invoice"
                                                 onclick="openReceiptModal('<?php echo htmlspecialchars($row['patient_id']); ?>', '<?php echo htmlspecialchars($row['patient_name'] ?? 'N/A'); ?>', '<?php echo htmlspecialchars($row['patient_email'] ?? ''); ?>', '<?php echo htmlspecialchars($row['treatment'] ?? $row['service_name'] ?? 'N/A'); ?>', '<?php echo htmlspecialchars($row['payment_method'] ?? 'N/A'); ?>', '<?php echo htmlspecialchars($transactionDate); ?>', <?php echo $appointmentFee; ?>, <?php echo $treatmentCost; ?>, <?php echo $total; ?>, '<?php echo htmlspecialchars($row['appointment_id'] ?? ''); ?>', '<?php echo htmlspecialchars($row['treatment_id'] ?? ''); ?>')">
                                             <i class="fas fa-receipt"></i>
                                         </button>
                                         <?php endif; ?>
-                                        <button type="button" class="action-btn btn-danger" 
+                                        <button type="button" class="action-btn" 
                                                 title="Archive Transaction"
                                                 data-treatment-id="<?php echo htmlspecialchars($row['treatment_id'] ?? ''); ?>"
                                                 data-appointment-id="<?php echo htmlspecialchars($row['appointment_id'] ?? ''); ?>"
@@ -1107,8 +1112,8 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
             <i class="fas fa-times"></i>
         </button>
         <div class="modal-heading">
-            <span class="modal-badge accent">Receipt</span>
-            <h3>Official Billing Summary</h3>
+            <span class="modal-badge accent">Invoice</span>
+            <h3>Official Invoice Summary</h3>
             <p>Review the billing details before printing or sending via email.</p>
         </div>
 
@@ -1150,7 +1155,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
 
             <div class="modal-actions">
                 <button type="submit" class="btn btn-success btn-wide" id="sendReceiptBtn">
-                    <i class="fas fa-paper-plane"></i> Send Receipt
+                    <i class="fas fa-paper-plane"></i> Send Invoice
                 </button>
                 <button type="button" class="btn btn-link" onclick="closeEmailReceiptModal()">
                     Cancel
@@ -2227,6 +2232,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         formData.append('treatment_cost', window.currentReceiptData.treatmentCost || 0);
         formData.append('total_amount', window.currentReceiptData.totalAmount || 0);
         formData.append('appointment_id', window.currentReceiptData.appointmentId || '');
+		formData.append('treatment_id', window.currentReceiptData.treatmentId || '');
 
         fetch('../controllers/sendReceiptEmail.php', {
             method: 'POST',

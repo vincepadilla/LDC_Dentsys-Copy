@@ -21,19 +21,6 @@ if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     exit;
 }
 
-// Check if admin is verified
-if (empty($_SESSION['admin_verified'])) {
-    ob_clean();
-    header('Content-Type: application/json');
-    echo json_encode([
-        'success' => false,
-        'status' => 'error',
-        'message' => 'Admin verification required.'
-    ]);
-    ob_end_flush();
-    exit;
-}
-
 // Include config file - capture any output from die() statements
 $config_output = '';
 try {

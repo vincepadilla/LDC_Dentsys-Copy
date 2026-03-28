@@ -635,14 +635,6 @@ if (isset($_SESSION['settings_error'])) {
                         <i class="fas fa-money-bill-wave"></i>
                         <span>Payment</span>
                     </button>
-                    <button type="button" class="tab-button" onclick="showSection('email', this)">
-                        <i class="fas fa-envelope"></i>
-                        <span>Email & Notifications</span>
-                    </button>
-                    <button type="button" class="tab-button" onclick="showSection('security', this)">
-                        <i class="fas fa-shield-alt"></i>
-                        <span>Security</span>
-                    </button>
                     <button type="button" class="tab-button" onclick="showSection('maintenance', this)">
                         <i class="fas fa-tools"></i>
                         <span>Maintenance</span>
@@ -728,100 +720,9 @@ if (isset($_SESSION['settings_error'])) {
                 </div>
 
                 <!-- Email & Notification Settings -->
-                <div id="email" class="tab-content">
-                    <div class="section-header">
-                        <div class="section-title">
-                            <i class="fas fa-envelope"></i>
-                            Email & Notification Settings
-                        </div>
-                        <div class="section-description">
-                            Configure email notifications and communication preferences
-                        </div>
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label">Appointment Confirmation Email</label>
-                            <div class="toggle-group">
-                                <label class="toggle-switch">
-                                    <input type="checkbox" name="appointment_confirmation_email" value="1" 
-                                           <?php echo ($settingsData['appointment_confirmation_email'] == '1') ? 'checked' : ''; ?>>
-                                    <span class="toggle-slider"></span>
-                                </label>
-                                <span class="toggle-label">Send confirmation emails when appointments are booked</span>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Appointment Reminder Notifications</label>
-                            <div class="toggle-group">
-                                <label class="toggle-switch">
-                                    <input type="checkbox" name="appointment_reminder_notifications" value="1" 
-                                           <?php echo ($settingsData['appointment_reminder_notifications'] == '1') ? 'checked' : ''; ?>>
-                                    <span class="toggle-slider"></span>
-                                </label>
-                                <span class="toggle-label">Send reminder notifications before appointments</span>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Promotional Campaign Emails</label>
-                            <div class="toggle-group">
-                                <label class="toggle-switch">
-                                    <input type="checkbox" name="promotional_campaign_emails" value="1" 
-                                           <?php echo ($settingsData['promotional_campaign_emails'] == '1') ? 'checked' : ''; ?>>
-                                    <span class="toggle-slider"></span>
-                                </label>
-                                <span class="toggle-label">Allow sending promotional emails to users</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
+                
                 <!-- User & Security Settings -->
-                <div id="security" class="tab-content">
-                    <div class="section-header">
-                        <div class="section-title">
-                            <i class="fas fa-shield-alt"></i>
-                            User & Security Settings
-                        </div>
-                        <div class="section-description">
-                            Configure user account defaults and security preferences
-                        </div>
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label form-label-required">Default User Role</label>
-                            <select name="default_user_role" class="form-select" required>
-                                <option value="patient" <?php echo ($settingsData['default_user_role'] == 'patient') ? 'selected' : ''; ?>>Patient</option>
-                                <option value="dentist" <?php echo ($settingsData['default_user_role'] == 'dentist') ? 'selected' : ''; ?>>Dentist</option>
-                                <option value="admin" <?php echo ($settingsData['default_user_role'] == 'admin') ? 'selected' : ''; ?>>Admin</option>
-                            </select>
-                            <div class="form-help">Default role assigned to new users</div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label form-label-required">Account Verification</label>
-                            <select name="account_verification" class="form-select" required>
-                                <option value="email" <?php echo ($settingsData['account_verification'] == 'email') ? 'selected' : ''; ?>>Email</option>
-                                <option value="otp" <?php echo ($settingsData['account_verification'] == 'otp') ? 'selected' : ''; ?>>OTP (SMS)</option>
-                                <option value="both" <?php echo ($settingsData['account_verification'] == 'both') ? 'selected' : ''; ?>>Both (Email & OTP)</option>
-                            </select>
-                            <div class="form-help">Method used for account verification</div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label form-label-required">Maximum Login Attempts</label>
-                            <input type="number" name="max_login_attempts" class="form-input" 
-                                   value="<?php echo htmlspecialchars($settingsData['max_login_attempts']); ?>" 
-                                   min="3" max="10" required>
-                            <div class="form-help">Number of failed login attempts before account lockout</div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label form-label-required">Session Timeout (seconds)</label>
-                            <input type="number" name="session_timeout" class="form-input" 
-                                   value="<?php echo htmlspecialchars($settingsData['session_timeout']); ?>" 
-                                   min="300" max="86400" step="300" required>
-                            <div class="form-help">Time before user session expires (300-86400 seconds)</div>
-                        </div>
-                    </div>
-                </div>
-
+            
                 <!-- System Maintenance -->
                 <div id="maintenance" class="tab-content">
                     <div class="section-header">

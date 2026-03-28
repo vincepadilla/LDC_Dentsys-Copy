@@ -21,6 +21,36 @@ $walkinSql = "SELECT w.walkin_id, w.patient_id, w.service, w.sub_service, w.dent
 $walkinResult = mysqli_query($con, $walkinSql);
 $totalRecords = $walkinResult ? mysqli_num_rows($walkinResult) : 0;
 $lastUpdated = date('M d, Y h:i A');
+
+// Load services for dependent dropdowns (service_category and sub_service)
+$categoriesQuery = "SELECT DISTINCT service_category 
+					FROM services 
+					WHERE service_category IS NOT NULL AND service_category <> '' 
+					ORDER BY service_category";
+$categoriesResult = mysqli_query($con, $categoriesQuery);
+$serviceCategories = [];
+while ($row = $categoriesResult && mysqli_num_rows($categoriesResult) ? mysqli_fetch_assoc($categoriesResult) : null) {
+	$serviceCategories[] = $row['service_category'];
+}
+
+// Build mapping: category => [sub_service values], include category name if sub_service is empty
+$servicesMap = [];
+$servicesSql = "SELECT service_category, COALESCE(NULLIF(TRIM(sub_service),''), service_category) AS sub_service
+				FROM services
+				WHERE service_category IS NOT NULL AND service_category <> ''
+				ORDER BY service_category, sub_service";
+$servicesRes = mysqli_query($con, $servicesSql);
+if ($servicesRes && mysqli_num_rows($servicesRes) > 0) {
+	while ($s = mysqli_fetch_assoc($servicesRes)) {
+		$cat = $s['service_category'];
+		$sub = $s['sub_service'];
+		if (!isset($servicesMap[$cat])) $servicesMap[$cat] = [];
+		// avoid duplicates
+		if (!in_array($sub, $servicesMap[$cat], true)) {
+			$servicesMap[$cat][] = $sub;
+		}
+	}
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1251,6 +1281,30 @@ $lastUpdated = date('M d, Y h:i A');
                         <option value="Taytay Rizal Branch">Taytay Rizal Branch</option>
                     </select>
                 </div>
+                
+                <div class="filter-group" style="flex: 0 0 auto;">
+                    <label class="filter-label" style="visibility: hidden;">Add Walk-in</label>
+                    <button id="add-walkin-btn" type="button"
+                            style="
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 8px;
+                                padding: 9px 14px;
+                                border-radius: 10px;
+                                border: 1px solid #bfdbfe;
+                                background: #eff6ff;
+                                color: #1d4ed8;
+                                font-weight: 600;
+                                font-size: 14px;
+                                line-height: 1;
+                                cursor: pointer;
+                                transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+                                height: 38px;
+                            ">
+                        <i class="fas fa-user-plus"></i>
+                        <span>Add Walk-in</span>
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -1510,6 +1564,98 @@ $lastUpdated = date('M d, Y h:i A');
             </div>
         </div>
     </div>
+</div>
+
+<!-- Add Walk-in Modal -->
+<div id="add-walkin-modal" class="modal-overlay" style="display:none;">
+	<div class="modal-panel">
+		<button class="modal-close" onclick="closeAddWalkinModal()" aria-label="Close add walk-in dialog">
+			<i class="fas fa-times"></i>
+		</button>
+		<div class="modal-heading">
+			<span class="modal-badge accent">Add walk-in</span>
+			<h3>Create walk-in record</h3>
+			<p>Enter patient details and select the requested service. Fields marked with * are required.</p>
+		</div>
+		<form id="addWalkinForm" class="modal-form" onsubmit="handleAddWalkinSubmit(event)">
+			<!-- Section 1: Create User / Patient Information -->
+			<div class="form-grid" style="margin-bottom:18px;">
+				<div class="form-group">
+					<label class="form-label" for="wi_first_name">First Name <span class="required">*</span></label>
+					<input type="text" id="wi_first_name" name="first_name" class="form-control" placeholder="Enter first name" required>
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="wi_last_name">Last Name <span class="required">*</span></label>
+					<input type="text" id="wi_last_name" name="last_name" class="form-control" placeholder="Enter last name" required>
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="wi_email">Email <span class="required">*</span></label>
+					<input type="email" id="wi_email" name="email" class="form-control" placeholder="Enter email address" required>
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="wi_phone">Phone <span class="required">*</span></label>
+					<input type="text" id="wi_phone" name="phone" class="form-control" placeholder="11-digit phone number" maxlength="11" pattern="\d{11}" required>
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="wi_birthdate">Birthdate <span class="required">*</span></label>
+					<input type="date" id="wi_birthdate" name="birthdate" class="form-control" value="2000-01-01" required>
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="wi_gender">Gender <span class="required">*</span></label>
+					<select id="wi_gender" name="gender" class="form-control" required>
+						<option value="Male">Male</option>
+						<option value="Female">Female</option>
+					</select>
+				</div>
+				<div class="form-group full-width">
+					<label class="form-label" for="wi_address">Address <span class="required">*</span></label>
+					<input type="text" id="wi_address" name="address" class="form-control" placeholder="Enter full address" required>
+				</div>
+			</div>
+
+			<!-- Section 2: Walk-in Service Information -->
+			<div class="form-grid">
+				<div class="form-group">
+					<label class="form-label" for="wi_service">Service <span class="required">*</span></label>
+					<select id="wi_service" name="service" class="form-control" required>
+						<option value="" disabled selected>Select service</option>
+						<?php foreach ($serviceCategories as $cat): ?>
+							<option value="<?php echo htmlspecialchars($cat); ?>"><?php echo htmlspecialchars($cat); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="wi_sub_service">Sub-Service <span class="required">*</span></label>
+					<select id="wi_sub_service" name="sub_service" class="form-control" required disabled>
+						<option value="" disabled selected>Select sub-service</option>
+					</select>
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="wi_branch">Branch <span class="required">*</span></label>
+					<select id="wi_branch" name="branch" class="form-control" required>
+						<option value="" disabled selected>Select branch</option>
+						<option value="Comembo Branch">Comembo Branch</option>
+						<option value="Taytay Rizal Branch">Taytay Rizal Branch</option>
+					</select>
+				</div>
+				<div class="form-group">
+					<label class="form-label" for="wi_status">Status <span class="required">*</span></label>
+					<select id="wi_status" class="form-control" disabled>
+						<option value="Walk-in" selected>Walk-in</option>
+					</select>
+					<input type="hidden" name="status" value="Walk-in">
+				</div>
+				<!-- Notes/date fields not required by current logic; can be added later if needed -->
+			</div>
+
+			<div class="modal-actions">
+				<button type="button" class="btn btn-link" onclick="closeAddWalkinModal()">Cancel</button>
+				<button type="submit" class="btn btn-success btn-wide">
+					<i class="fas fa-user-plus"></i> Add Walk-in
+				</button>
+			</div>
+		</form>
+	</div>
 </div>
 
 <script>
@@ -1846,6 +1992,145 @@ $lastUpdated = date('M d, Y h:i A');
             initialVisibleCountEl.textContent = totalCountEl.textContent;
         }
     });
+</script>
+<script>
+	// ======== Add Walk-in Modal & Service Dropdown Logic ========
+	const SERVICES_MAP = <?php echo json_encode($servicesMap); ?>;
+
+	// Open modal
+	document.getElementById('add-walkin-btn')?.addEventListener('click', function() {
+		openAddWalkinModal();
+	});
+
+	function openAddWalkinModal() {
+		const modal = document.getElementById('add-walkin-modal');
+		if (!modal) return;
+		const form = document.getElementById('addWalkinForm');
+		if (form) {
+			form.reset();
+			// Ensure sub-service is disabled until service selected
+			const sub = document.getElementById('wi_sub_service');
+			if (sub) {
+				sub.innerHTML = '<option value="" disabled selected>Select sub-service</option>';
+				sub.disabled = true;
+			}
+		}
+		modal.style.display = 'flex';
+		setTimeout(() => {
+			document.getElementById('wi_first_name')?.focus();
+		}, 100);
+		// Click outside to close
+		window.addEventListener('click', handleAddWalkinBackdrop);
+	}
+
+	function closeAddWalkinModal() {
+		const modal = document.getElementById('add-walkin-modal');
+		if (!modal) return;
+		modal.style.display = 'none';
+		window.removeEventListener('click', handleAddWalkinBackdrop);
+	}
+
+	function handleAddWalkinBackdrop(e) {
+		const modal = document.getElementById('add-walkin-modal');
+		if (e.target === modal) {
+			closeAddWalkinModal();
+		}
+	}
+
+	// Populate dependent sub_service when service changes
+	document.getElementById('wi_service')?.addEventListener('change', function() {
+		const category = this.value || '';
+		const subEl = document.getElementById('wi_sub_service');
+		if (!subEl) return;
+		subEl.innerHTML = '<option value="" disabled selected>Select sub-service</option>';
+		if (category && SERVICES_MAP && Array.isArray(SERVICES_MAP[category])) {
+			SERVICES_MAP[category].forEach(function(sub) {
+				const opt = document.createElement('option');
+				opt.value = sub;
+				opt.textContent = sub;
+				subEl.appendChild(opt);
+			});
+			subEl.disabled = false;
+		} else {
+			// No subs found; keep disabled
+			subEl.disabled = true;
+		}
+	});
+
+	// Enforce 11-digit numeric phone input
+	(function enforcePhoneDigits() {
+		const phoneEl = document.getElementById('wi_phone');
+		if (!phoneEl) return;
+		phoneEl.addEventListener('input', function() {
+			this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11);
+		});
+	})();
+
+	// Stub submit handler (UI only; backend integration can be added later)
+	function handleAddWalkinSubmit(event) {
+		event.preventDefault();
+		// Client-side phone validation
+		const phoneEl = document.getElementById('wi_phone');
+		if (phoneEl && !/^\d{11}$/.test(phoneEl.value)) {
+			showNotification('error', 'Validation', 'Phone number must be exactly 11 digits.');
+			phoneEl.classList.add('is-invalid');
+			phoneEl.focus();
+			return;
+		}
+		const form = event.target;
+		const submitBtn = form.querySelector('button[type="submit"]');
+		const original = submitBtn ? submitBtn.innerHTML : '';
+		if (submitBtn) {
+			submitBtn.disabled = true;
+			submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+		}
+
+		const formData = new FormData(form);
+		fetch('../controllers/createWalkinAdmin.php', {
+			method: 'POST',
+			body: formData
+		})
+		.then(async (response) => {
+			const text = await response.text().catch(() => '');
+			let data = null;
+			try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+			if (!response.ok) {
+				const msg = data && (data.message || data.error) ? (data.message || data.error) : (text || 'Request failed.');
+				throw new Error(msg);
+			}
+			if (!data) throw new Error(text || 'Unexpected server response.');
+			return data;
+		})
+		.then(data => {
+			if (data.success) {
+				showNotification('success', 'Walk-in Added', data.message || 'Walk-in record created.');
+				closeAddWalkinModal();
+				// Simple approach: reload to reflect new record in both table and cards
+				setTimeout(() => { window.location.reload(); }, 1000);
+			} else {
+				const msg = data.message || 'Failed to create walk-in record.';
+				showNotification('error', 'Validation', msg);
+				// Field-level highlights
+				if (data.field === 'email') {
+					document.getElementById('wi_email')?.classList.add('is-invalid');
+					document.getElementById('wi_email')?.focus();
+				} else if (data.field === 'phone') {
+					document.getElementById('wi_phone')?.classList.add('is-invalid');
+					document.getElementById('wi_phone')?.focus();
+				}
+			}
+		})
+		.catch(err => {
+			console.error('Create walk-in error:', err);
+			showNotification('error', 'Error', err && err.message ? err.message : 'An error occurred while creating walk-in record.');
+		})
+		.finally(() => {
+			if (submitBtn) {
+				submitBtn.disabled = false;
+				submitBtn.innerHTML = original;
+			}
+		});
+	}
 </script>
 </body>
 </html>

@@ -28,6 +28,23 @@ $treatments = [];
 while ($treatmentRow = mysqli_fetch_assoc($treatmentsResult)) {
     $treatments[] = $treatmentRow['treatment'];
 }
+
+// Prepare patients for Add Treatment modal
+$patientsForSelect = [];
+$patientsMap = [];
+$patientsQuery = "SELECT patient_id, first_name, last_name FROM patient_information ORDER BY patient_id ASC";
+$patientsRes = mysqli_query($con, $patientsQuery);
+if ($patientsRes) {
+	while ($p = mysqli_fetch_assoc($patientsRes)) {
+		$fullName = trim(($p['first_name'] ?? '') . ' ' . ($p['last_name'] ?? ''));
+		$pid = $p['patient_id'];
+		$patientsForSelect[] = [
+			'patient_id' => $pid,
+			'full_name' => $fullName
+		];
+		$patientsMap[$pid] = $fullName;
+	}
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -118,6 +135,29 @@ while ($treatmentRow = mysqli_fetch_assoc($treatmentsResult)) {
         }
         .action-btn.action-btn-icon i {
             font-size: 14px;
+        }
+        /* Explicit colors for Edit/Delete icon-only buttons */
+        .action-btn.action-btn-icon.btn-primary {
+            background: #2563eb; /* blue-600 */
+            color: #ffffff;
+            border: none;
+        }
+        .action-btn.action-btn-icon.btn-primary i {
+            color: #ffffff;
+        }
+        .action-btn.action-btn-icon.btn-primary:hover {
+            background: #93c5fd; /* light blue */
+        }
+        .action-btn.action-btn-icon.btn-danger {
+            background: #ef4444; /* red-500 */
+            color: #ffffff;
+            border: none;
+        }
+        .action-btn.action-btn-icon.btn-danger i {
+            color: #ffffff;
+        }
+        .action-btn.action-btn-icon.btn-danger:hover {
+            background: #fca5a5; /* light red */
         }
         .patient-card-actions .action-btn.action-btn-icon {
             flex: 0 0 auto !important;
@@ -482,6 +522,214 @@ while ($treatmentRow = mysqli_fetch_assoc($treatmentsResult)) {
                 min-width: auto;
             }
         }
+
+        /* Add Treatment Modal - mirror Complete Walk-in modal styles */
+        #add-treatment-modal.treatment-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1100;
+            background: rgba(15, 23, 42, 0.62);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 18px;
+        }
+        #add-treatment-modal .treatment-modal-content {
+            width: min(1120px, 96vw);
+            max-height: 94vh;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 24px 50px rgba(15, 23, 42, 0.22);
+            overflow: hidden;
+        }
+        #add-treatment-modal .modal-card {
+            display: flex;
+            flex-direction: column;
+            max-height: 94vh;
+        }
+        #add-treatment-modal .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #ffffff;
+        }
+        #add-treatment-modal .modal-header h3 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+            color: #111827;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: transparent !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: 0 !important;
+        }
+        #add-treatment-modal .complete-walkin-close {
+            position: static;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+            color: #9ca3af;
+            background: rgba(0,0,0,0.04);
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+        #add-treatment-modal .complete-walkin-close:hover {
+            background: rgba(0,0,0,0.08);
+            color: #6b7280;
+        }
+        #add-treatment-modal .treatment-body {
+            padding: 20px 24px;
+            overflow: auto;
+        }
+        #add-treatment-modal .walkin-complete-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        #add-treatment-modal .walkin-complete-panel {
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 18px;
+        }
+        #add-treatment-modal .walkin-complete-panel-title {
+            margin: 0 0 14px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        #add-treatment-modal .appointment-info-grid {
+            display: grid;
+            gap: 16px;
+        }
+        #add-treatment-modal .treatment-group.form-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #4b5563;
+            margin-bottom: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #add-treatment-modal input[type="text"],
+        #add-treatment-modal input[type="number"],
+        #add-treatment-modal select,
+        #add-treatment-modal textarea {
+            width: 100%;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 15px;
+            line-height: 1.4;
+            padding: 12px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            background: #ffffff;
+            color: #111827;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        #add-treatment-modal input[readonly] {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        #add-treatment-modal textarea {
+            min-height: 132px;
+            resize: vertical;
+        }
+        #add-treatment-modal .modal-footer {
+            padding: 18px 24px;
+            border-top: 1px solid #e5e7eb;
+            background: #ffffff;
+        }
+        #add-treatment-modal .modal-actions {
+            margin-top: 0;
+            margin-bottom: 12px;
+            padding-top: 0;
+            border-top: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: stretch;
+            gap: 12px;
+        }
+        #add-treatment-modal .modal-actions .btn {
+            height: 44px;
+            width: 100%;
+            min-width: 0;
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 24px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1;
+            margin: 0;
+            gap: 8px;
+        }
+        /* Red cancel button with hover */
+        #add-treatment-modal .btn-cancel {
+            background: #EF4444;
+            color: #ffffff;
+            border: none;
+        }
+        #add-treatment-modal .btn-cancel:hover {
+            background: #dc2626;
+            color: #ffffff;
+        }
+        @media (min-width: 640px) {
+            #add-treatment-modal .modal-actions {
+                flex-direction: row;
+                justify-content: flex-end;
+                align-items: center;
+                gap: 12px;
+            }
+            #add-treatment-modal .modal-actions .btn {
+                width: 180px;
+                min-width: 180px;
+                height: 44px;
+            }
+            /* Normalize any global widths for equal sizing inside modal actions */
+            #add-treatment-modal .modal-actions .btn.btn-success.btn-wide {
+                width: 180px;
+                min-width: 180px;
+                height: 44px;
+            }
+            #add-treatment-modal .modal-actions .btn.btn-cancel {
+                width: 180px;
+                min-width: 180px;
+                height: 44px;
+            }
+        }
+        @media (max-width: 768px) {
+            #add-treatment-modal .treatment-modal-content {
+                width: 100%;
+                max-height: 95vh;
+            }
+            #add-treatment-modal .modal-header,
+            #add-treatment-modal .treatment-body,
+            #add-treatment-modal .modal-footer {
+                padding-left: 16px;
+                padding-right: 16px;
+            }
+            #add-treatment-modal .walkin-complete-layout {
+                grid-template-columns: 1fr;
+                gap: 14px;
+            }
+            #add-treatment-modal .modal-actions {
+                gap: 10px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -522,8 +770,8 @@ while ($treatmentRow = mysqli_fetch_assoc($treatmentsResult)) {
                 </div>
             </div>
             
-            <button class="btn btn-accent" onclick="printTreatmentHistory()">
-                <i class="fas fa-print"></i> Print
+			<button class="btn btn-accent" onclick="openAddTreatmentModal()">
+				<i class="fas fa-plus"></i> Add Treatment
             </button>
         </div>
 
@@ -691,6 +939,92 @@ while ($treatmentRow = mysqli_fetch_assoc($treatmentsResult)) {
             </div>
         </div>
     </div>
+</div>
+
+<!-- Add Treatment Modal - styled like Walk-in "Complete" modal -->
+<div id="add-treatment-modal" class="modal treatment-modal" style="display: none;">
+	<div class="modal-content treatment-modal-content">
+		<div class="modal-card">
+			<div class="modal-header">
+				<h3>
+					<i class="fa-solid fa-file-medical"></i>
+					<span>Add Treatment Record</span>
+				</h3>
+			</div>
+
+			<div class="modal-body treatment-body">
+				<form id="addTreatmentForm">
+					<div class="walkin-complete-layout">
+						<div class="walkin-complete-panel">
+							<h4 class="walkin-complete-panel-title">Patient</h4>
+							<div class="appointment-info-grid">
+								<div class="treatment-group form-group">
+									<label for="addPatientId">
+										<i class="fas fa-id-card"></i> Patient ID <span class="required">*</span>
+									</label>
+									<select id="addPatientId" name="patient_id" class="form-control" required>
+										<option value="">Select a patient</option>
+										<?php foreach ($patientsForSelect as $p): ?>
+											<option value="<?php echo htmlspecialchars($p['patient_id']); ?>">
+												<?php echo htmlspecialchars($p['patient_id']); ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+								<div class="treatment-group form-group">
+									<label for="addPatientName">
+										<i class="fas fa-user"></i> Patient Name
+									</label>
+									<input type="text" id="addPatientName" class="form-control" value="" readonly>
+								</div>
+								<div class="treatment-group form-group">
+									<label for="addPrescriptionGiven">
+										<i class="fas fa-pills"></i> Prescription Given <span class="required">*</span>
+									</label>
+									<textarea id="addPrescriptionGiven" name="prescription_given" class="form-control" rows="5" placeholder="Enter prescribed medications and instructions" required></textarea>
+								</div>
+							</div>
+						</div>
+
+						<div class="walkin-complete-panel">
+							<h4 class="walkin-complete-panel-title">Treatment Details</h4>
+							<div class="appointment-info-grid">
+								<div class="treatment-group form-group">
+									<label for="addTreatment">
+										<i class="fas fa-stethoscope"></i> Treatment <span class="required">*</span>
+									</label>
+									<input type="text" name="treatment" id="addTreatment" class="form-control" placeholder="e.g., Cleaning, Extraction, Filling" required>
+								</div>
+								<div class="treatment-group form-group">
+									<label for="addTreatmentCost">
+										<i class="fas fa-peso-sign"></i> Treatment Cost (₱) <span class="required">*</span>
+									</label>
+									<input type="number" name="treatment_cost" id="addTreatmentCost" class="form-control" step="0.01" min="0" required placeholder="0.00">
+								</div>
+								<div class="treatment-group form-group">
+									<label for="addTreatmentNotes">
+										<i class="fas fa-notes-medical"></i> Notes <span class="required">*</span>
+									</label>
+									<textarea name="treatment_notes" id="addTreatmentNotes" class="form-control" rows="5" placeholder="Enter detailed notes about the treatment" required></textarea>
+								</div>
+							</div>
+						</div>
+					</div>
+				</form>
+			</div>
+
+			<div class="treatment-footer modal-footer">
+				<div class="modal-actions">
+					<button type="button" onclick="closeAddTreatmentModal()" class="btn btn-cancel">
+						<i class="fas fa-times"></i> Cancel
+					</button>
+					<button type="submit" form="addTreatmentForm" class="btn btn-success btn-wide" id="addTreatmentSubmitBtn">
+						<i class="fas fa-save"></i> Save
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
 </div>
 
 <!-- Edit Treatment Modal -->
@@ -970,6 +1304,67 @@ while ($treatmentRow = mysqli_fetch_assoc($treatmentsResult)) {
         window.print();
     }
     
+	// ==================== Add Treatment Modal & Logic ====================
+	function openAddTreatmentModal() {
+		const modal = document.getElementById('add-treatment-modal');
+		if (modal) {
+			modal.style.display = 'flex';
+			document.body.style.overflow = 'hidden';
+			setTimeout(() => {
+				const firstField = modal.querySelector('#addPatientId');
+				if (firstField) firstField.focus();
+			}, 50);
+		}
+	}
+	function closeAddTreatmentModal() {
+		const modal = document.getElementById('add-treatment-modal');
+		if (modal) {
+			modal.style.display = 'none';
+			document.body.style.overflow = 'auto';
+			const form = document.getElementById('addTreatmentForm');
+			if (form) form.reset();
+			syncAddPatientName();
+		}
+	}
+
+	const patientsNameMap = <?php echo json_encode($patientsMap ?? []); ?>;
+	function syncAddPatientName() {
+		const pid = document.getElementById('addPatientId')?.value || '';
+		const name = patientsNameMap && patientsNameMap[pid] ? patientsNameMap[pid] : '';
+		const nameInput = document.getElementById('addPatientName');
+		if (nameInput) nameInput.value = name;
+	}
+
+	async function submitAddTreatment() {
+		const form = document.getElementById('addTreatmentForm');
+		if (!form) return;
+		const submitBtn = form.querySelector('button[type="submit"]');
+		if (submitBtn) submitBtn.disabled = true;
+
+		try {
+			const payload = new URLSearchParams(new FormData(form));
+			const res = await fetch('../controllers/addTreatmentHistory.php', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: payload.toString()
+			});
+			const data = await res.json();
+			if (!data || data.success !== true) {
+				showNotification('error', 'Add failed', (data && data.message) ? data.message : 'Please try again.');
+				return;
+			}
+
+			closeAddTreatmentModal();
+			showNotification('success', 'Saved', data.message || 'Treatment record added.');
+			setTimeout(() => { window.location.reload(); }, 800);
+		} catch (err) {
+			console.error(err);
+			showNotification('error', 'Error', 'Something went wrong while saving.');
+		} finally {
+			if (submitBtn) submitBtn.disabled = false;
+		}
+	}
+
     // Print Treatment History by Patient
     function printTreatmentHistoryByPatient(patientId) {
         // Fetch patient information
@@ -1749,6 +2144,16 @@ while ($treatmentRow = mysqli_fetch_assoc($treatmentsResult)) {
             });
         }
 
+		const addForm = document.getElementById('addTreatmentForm');
+		if (addForm) {
+			const addPid = document.getElementById('addPatientId');
+			if (addPid) addPid.addEventListener('change', syncAddPatientName);
+			addForm.addEventListener('submit', function(e) {
+				e.preventDefault();
+				submitAddTreatment();
+			});
+		}
+
         const confirmBtn = document.getElementById('confirmDeleteTreatmentBtn');
         if (confirmBtn) {
             confirmBtn.addEventListener('click', function() {
@@ -1767,11 +2172,15 @@ while ($treatmentRow = mysqli_fetch_assoc($treatmentsResult)) {
         const deleteModal = document.getElementById('deleteTreatmentConfirmModal');
         const restoreModal = document.getElementById('restoreTreatmentConfirmModal');
         const alertModal = document.getElementById('centerAlertModal');
+		const addModal = document.getElementById('add-treatment-modal');
 
         window.addEventListener('click', function(event) {
             if (editModal && event.target === editModal) {
                 closeEditTreatmentModal();
             }
+			if (addModal && event.target === addModal) {
+				closeAddTreatmentModal();
+			}
             if (deleteModal && event.target === deleteModal) {
                 closeDeleteTreatmentConfirmModal();
             }
@@ -1787,6 +2196,7 @@ while ($treatmentRow = mysqli_fetch_assoc($treatmentsResult)) {
         window.addEventListener('keydown', function(event) {
             if (event.key === 'Escape' || event.key === 'Esc') {
                 closeEditTreatmentModal();
+				closeAddTreatmentModal();
                 closeDeleteTreatmentConfirmModal();
                 closeRestoreTreatmentConfirmModal();
                 closeCenterAlert();

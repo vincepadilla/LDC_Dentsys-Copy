@@ -30,6 +30,18 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
     $fullName = $row['full_name'];
     $patientsMap[$row['patient_id']] = $fullName;
 }
+
+// Precompute next patient_id preview (for display only; actual generation is server-side)
+$nextPatientIdPreview = 'P001';
+$lastIdRes = mysqli_query($con, "SELECT patient_id FROM patient_information ORDER BY patient_id DESC LIMIT 1");
+if ($lastIdRes && mysqli_num_rows($lastIdRes) > 0) {
+    $lastRow = mysqli_fetch_assoc($lastIdRes);
+    $lastId = $lastRow['patient_id'];
+    if (preg_match('/^P(\d+)$/', $lastId, $m)) {
+        $num = intval($m[1]) + 1;
+        $nextPatientIdPreview = 'P' . str_pad((string)$num, 3, '0', STR_PAD_LEFT);
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -265,8 +277,8 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
                 </div>
             </div>
             
-            <button class="btn btn-accent" onclick="printPatients()">
-                <i class="fas fa-print"></i> Print
+            <button class="btn btn-accent" onclick="openAddPatientModal()">
+                <i class="fas fa-user-plus"></i> Add Patient
             </button>
         </div>
 
@@ -520,6 +532,69 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
     </div>
 </div>
 
+<!-- Add Patient Modal -->
+<div id="addPatientModal" class="modal-overlay" style="display:none;">
+    <div class="modal-panel">
+        <button class="modal-close" onclick="closeAddPatientModal()" aria-label="Close add patient dialog">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="modal-heading">
+            <span class="modal-badge accent">Add patient</span>
+            <h3>Create new patient</h3>
+            <p>Enter the patient's information below. Fields marked with * are required.</p>
+        </div>
+        <form id="addPatientForm" onsubmit="handleAddPatientSubmit(event)" class="modal-form">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Patient ID</label>
+                    <input type="text" id="addPatientIdPreview" class="form-control" value="<?php echo htmlspecialchars($nextPatientIdPreview); ?>" readonly>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">User ID</label>
+                    <input type="text" id="addUserIdPreview" class="form-control" value="N/A" readonly>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="addFirstName">First Name <span class="required">*</span></label>
+                    <input type="text" name="first_name" id="addFirstName" required class="form-control" placeholder="Enter first name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="addLastName">Last Name <span class="required">*</span></label>
+                    <input type="text" name="last_name" id="addLastName" required class="form-control" placeholder="Enter last name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="addBirthdate">Birthdate <span class="required">*</span></label>
+                    <input type="date" name="birthdate" id="addBirthdate" required class="form-control" value="2000-01-01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="addGender">Gender <span class="required">*</span></label>
+                    <select name="gender" id="addGender" required class="form-control">
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="addEmail">Email <span class="required">*</span></label>
+                    <input type="email" name="email" id="addEmail" required class="form-control" placeholder="Enter email address">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="addPhone">Phone <span class="required">*</span></label>
+                    <input type="text" name="phone" id="addPhone" required class="form-control" placeholder="11-digit phone number" maxlength="11" pattern="\d{11}">
+                </div>
+                <div class="form-group full-width">
+                    <label class="form-label" for="addAddress">Address <span class="required">*</span></label>
+                    <input type="text" name="address" id="addAddress" required class="form-control" placeholder="Enter full address">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-success btn-wide">
+                    <i class="fas fa-user-plus"></i> Add Patient
+                </button>
+                <button type="button" onclick="closeAddPatientModal()" class="btn btn-link">Cancel</button>
+            </div>
+        </form>
+    </div>
+    </div>
+
 <!-- Treatment History Modal -->
 <div id="treatmentHistoryModal" class="treatment-modal">
     <div class="treatment-modal-content">
@@ -704,6 +779,14 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
                     </div>
                 </div>
                 
+                <!-- Walk-in History Section -->
+                <div class="section-container">
+                    <h3><i class="fa-solid fa-ticket"></i> Walk-in History</h3>
+                    <div id="walkinHistoryCards" class="cards-container">
+                        <div class="loading-message">Loading walk-in history...</div>
+                    </div>
+                </div>
+                
                 <!-- Appointment History Section -->
                 <div class="section-container">
                     <h3><i class="fa-solid fa-calendar-check"></i> Appointment History</h3>
@@ -735,6 +818,7 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
         // Load all data after a small delay to ensure DOM is ready
         setTimeout(() => {
             loadTreatmentHistory(patientId);
+            loadWalkinHistory(patientId);
             loadAppointmentHistory(patientId);
             loadLastTransaction(patientId);
         }, 100);
@@ -754,6 +838,67 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
         }, 300);
     }
 
+    function loadWalkinHistory(patientId) {
+        const cardsContainer = document.getElementById("walkinHistoryCards");
+        if (!cardsContainer) {
+            console.error("Walk-in history cards container not found");
+            return;
+        }
+        
+        fetch("../controllers/getWalkinHistory.php?patient_id=" + encodeURIComponent(patientId))
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                cardsContainer.innerHTML = "";
+                if (data.status === "success" && Array.isArray(data.data) && data.data.length > 0) {
+                    data.data.forEach(w => {
+                        const card = document.createElement('div');
+                        card.className = 'detail-card';
+                        card.innerHTML = `
+                            <div class="detail-card-header">
+                                <span class="detail-card-title">Ticket #${escapeHtml(w.walkin_id || 'N/A')}</span>
+                                <span class="status status-${escapeHtml((w.status || '').toLowerCase())}">${escapeHtml(w.status || 'N/A')}</span>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="detail-card-field">
+                                    <span class="detail-card-label">Service:</span>
+                                    <span class="detail-card-value">${escapeHtml(w.service || 'N/A')}</span>
+                                </div>
+                                <div class="detail-card-field">
+                                    <span class="detail-card-label">Sub-Service:</span>
+                                    <span class="detail-card-value">${escapeHtml(w.sub_service || 'N/A')}</span>
+                                </div>
+                                <div class="detail-card-field">
+                                    <span class="detail-card-label">Dentist:</span>
+                                    <span class="detail-card-value">${escapeHtml(w.dentist_name || 'N/A')}</span>
+                                </div>
+                                <div class="detail-card-field">
+                                    <span class="detail-card-label">Branch:</span>
+                                    <span class="detail-card-value">${escapeHtml(w.branch || 'N/A')}</span>
+                                </div>
+                                <div class="detail-card-field">
+                                    <span class="detail-card-label">Created:</span>
+                                    <span class="detail-card-value">${escapeHtml(w.created_at || 'N/A')}</span>
+                                </div>
+                            </div>
+                        `;
+                        cardsContainer.appendChild(card);
+                    });
+                } else if (data.status === "empty" || (data.status === "success" && (!data.data || data.data.length === 0))) {
+                    cardsContainer.innerHTML = '<div class="no-data-message">No walk-in history found.</div>';
+                } else {
+                    cardsContainer.innerHTML = '<div class="no-data-message error">Error: ' + escapeHtml(data.message || 'Unknown error') + '</div>';
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching walk-in history:", error);
+                cardsContainer.innerHTML = '<div class="no-data-message error">Error loading walk-in history: ' + escapeHtml(error.message) + '</div>';
+            });
+    }
     function loadTreatmentHistory(patientId) {
         const cardsContainer = document.getElementById("treatmentHistoryCards");
         if (!cardsContainer) {
@@ -1756,6 +1901,14 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
                 });
             });
         }
+
+        // Enforce numeric-only and 11 max digits for Add Patient phone
+        const addPhoneEl = document.getElementById('addPhone');
+        if (addPhoneEl) {
+            addPhoneEl.addEventListener('input', function() {
+                this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11);
+            });
+        }
     });
 
     // Close modal when clicking outside
@@ -1778,6 +1931,226 @@ while ($row = mysqli_fetch_assoc($patientsResult)) {
         } else {
             window.location.href = '../views/admin.php';
         }
+    }
+
+    // ==================== Add Patient Modal & Logic ====================
+    function openAddPatientModal() {
+        const addModal = document.getElementById('addPatientModal');
+        if (addModal) {
+            addModal.style.display = 'flex';
+            setTimeout(() => {
+                const firstInput = addModal.querySelector('#addFirstName');
+                if (firstInput) firstInput.focus();
+            }, 100);
+        }
+    }
+    function closeAddPatientModal() {
+        const addModal = document.getElementById('addPatientModal');
+        const addForm = document.getElementById('addPatientForm');
+        if (addModal) addModal.style.display = 'none';
+        if (addForm) addForm.reset();
+        const idPrev = document.getElementById('addPatientIdPreview');
+        if (idPrev) idPrev.value = '<?php echo htmlspecialchars($nextPatientIdPreview); ?>';
+        const userPrev = document.getElementById('addUserIdPreview');
+        if (userPrev) userPrev.value = 'N/A';
+    }
+    window.addEventListener("click", function(event) {
+        const addModal = document.getElementById("addPatientModal");
+        if (addModal && event.target === addModal) {
+            closeAddPatientModal();
+        }
+    });
+    function handleAddPatientSubmit(event) {
+        event.preventDefault();
+        // Client-side 11-digit phone validation
+        const phoneEl = document.getElementById('addPhone');
+        if (phoneEl && !/^\d{11}$/.test(phoneEl.value)) {
+            showNotification('error', 'Validation', 'Phone number must be exactly 11 digits.');
+            phoneEl.classList.add('is-invalid');
+            phoneEl.focus();
+            return;
+        }
+        const form = event.target;
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        const formData = new FormData(form);
+        // user_id intentionally omitted; backend will store NULL
+        fetch('../controllers/createPatient.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(async (response) => {
+            const raw = await response.text().catch(() => "");
+            // Try to parse JSON first; if it fails, treat as plain text (likely HTML error/redirect)
+            let data = null;
+            try {
+                data = raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                // Not JSON
+            }
+            if (!response.ok) {
+                const msg = (data && (data.message || data.error)) ? (data.message || data.error) : (raw || 'Request failed.');
+                throw new Error(msg);
+            }
+            if (!data) {
+                // Unexpected non-JSON success; surface readable snippet
+                throw new Error(raw || 'Unexpected server response.');
+            }
+            return data;
+        })
+        .then(data => {
+            // Clear previous validation states
+            form.querySelectorAll('.form-control').forEach(input => {
+                input.classList.remove('is-invalid', 'is-valid');
+            });
+            if (data && data.success && data.record) {
+                applyNewPatientToUI(data.record);
+                showNotification('success', 'Patient Added', (data.message || 'New patient created successfully.'));
+                closeAddPatientModal();
+            } else {
+                const msg = (data && data.message) ? data.message : 'Failed to create patient. Please try again.';
+                showNotification('error', 'Validation', msg);
+                // Mark specific field invalid if provided
+                if (data && data.field) {
+                    if (data.field === 'email') {
+                        const el = document.getElementById('addEmail');
+                        if (el) el.classList.add('is-invalid');
+                        el?.focus();
+                    } else if (data.field === 'phone') {
+                        const el = document.getElementById('addPhone');
+                        if (el) el.classList.add('is-invalid');
+                        el?.focus();
+                    }
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Create patient error:', err);
+            showNotification('error', 'Error', err && err.message ? err.message : 'An error occurred while creating patient.');
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        });
+    }
+    function applyNewPatientToUI(record) {
+        if (!record || !record.patient_id) return;
+        const fullName = `${record.first_name || ''} ${record.last_name || ''}`.trim();
+        // Compute age
+        const birthDateObj = record.birthdate ? new Date(record.birthdate) : null;
+        let age = 0;
+        if (birthDateObj && !Number.isNaN(birthDateObj.getTime())) {
+            const today = new Date();
+            age = today.getFullYear() - birthDateObj.getFullYear();
+            const monthDiff = today.getMonth() - birthDateObj.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDateObj.getDate())) {
+                age--;
+            }
+        }
+        let ageCategory = 'senior';
+        if (age <= 12) ageCategory = 'child';
+        else if (age <= 19) ageCategory = 'teen';
+        else if (age <= 59) ageCategory = 'adult';
+        const searchText = `${record.patient_id} ${fullName} ${record.email || ''}`.toLowerCase();
+
+        // Add to desktop table (prepend)
+        const tbody = document.querySelector('#patients-table tbody');
+        if (tbody) {
+            const tr = document.createElement('tr');
+            tr.className = 'patient-row';
+            tr.setAttribute('data-patient-id', record.patient_id);
+            tr.setAttribute('data-gender', (record.gender || '').toLowerCase());
+            tr.setAttribute('data-age-category', ageCategory);
+            tr.setAttribute('data-search', searchText);
+            tr.setAttribute('data-age', String(age));
+            tr.innerHTML = `
+                <td class="patients-id-cell">${escapeHtml(record.patient_id)}</td>
+                <td>${escapeHtml(fullName)}</td>
+                <td>${birthDateObj && !Number.isNaN(birthDateObj.getTime()) ? birthDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : escapeHtml(record.birthdate || '')}</td>
+                <td>${escapeHtml(record.gender || '')}</td>
+                <td>${escapeHtml(record.email || '')}</td>
+                <td>${escapeHtml(record.phone || '')}</td>
+                <td class="patients-desc-cell">
+                    <div class="patients-desc" title="${escapeHtml(record.address || '')}">
+                        ${escapeHtml(record.address || '')}
+                    </div>
+                </td>
+                <td class="patients-actions-cell">
+                    <div class="action-btns">
+                        <button class="action-btn btn-primary" title="Edit" onclick="editPatient('${escapeHtml(record.patient_id)}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="action-btn btn-danger" title="Archive" onclick="archivePatient(${JSON.stringify(record.patient_id)})">
+                            <i class="fa-solid fa-box-archive"></i>
+                        </button>
+                        <button class="action-btn btn-gray" title="See More" onclick="seeMoreDetails('${escapeHtml(record.patient_id)}', event)">
+                            <i class="fa-solid fa-circle-info"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            tbody.insertBefore(tr, tbody.firstChild);
+        }
+
+        // Add to mobile card view (prepend)
+        const mobileContainer = document.querySelector('.mobile-card-view');
+        if (mobileContainer) {
+            const div = document.createElement('div');
+            div.className = 'patient-card patient-row';
+            div.setAttribute('data-patient-id', record.patient_id);
+            div.setAttribute('data-gender', (record.gender || '').toLowerCase());
+            div.setAttribute('data-age-category', ageCategory);
+            div.setAttribute('data-search', searchText);
+            div.setAttribute('data-age', String(age));
+            div.innerHTML = `
+                <div class="patient-card-header">
+                    <div>
+                        <div class="patient-card-id">Patient #${escapeHtml(record.patient_id)}</div>
+                        <div class="patient-card-name">${escapeHtml(fullName)}</div>
+                    </div>
+                </div>
+                <div class="patient-card-body">
+                    <div class="patient-card-field">
+                        <div class="patient-card-label">Birthdate</div>
+                        <div class="patient-card-value">${birthDateObj && !Number.isNaN(birthDateObj.getTime()) ? birthDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : escapeHtml(record.birthdate || '')} (${age} years old)</div>
+                    </div>
+                    <div class="patient-card-field">
+                        <div class="patient-card-label">Gender</div>
+                        <div class="patient-card-value">${escapeHtml(record.gender || '')}</div>
+                    </div>
+                    <div class="patient-card-field">
+                        <div class="patient-card-label">Email</div>
+                        <div class="patient-card-value">${escapeHtml(record.email || '')}</div>
+                    </div>
+                    <div class="patient-card-field">
+                        <div class="patient-card-label">Phone</div>
+                        <div class="patient-card-value">${escapeHtml(record.phone || '')}</div>
+                    </div>
+                    <div class="patient-card-field">
+                        <div class="patient-card-label">Address</div>
+                        <div class="patient-card-value">${escapeHtml(record.address || '')}</div>
+                    </div>
+                </div>
+                <div class="patient-card-actions">
+                    <button class="action-btn btn-primary" title="Edit" onclick="editPatient('${escapeHtml(record.patient_id)}')">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="action-btn btn-danger" title="Archive" onclick="archivePatient(${JSON.stringify(record.patient_id)})">
+                        <i class="fa-solid fa-box-archive"></i>
+                    </button>
+                    <button class="action-btn btn-gray" title="See More" onclick="seeMoreDetails('${escapeHtml(record.patient_id)}', event)">
+                        <i class="fa-solid fa-circle-info"></i>
+                    </button>
+                </div>
+            `;
+            mobileContainer.insertBefore(div, mobileContainer.firstChild);
+        }
+
+        // Re-apply filters/pagination
+        filterPatients();
     }
 </script>
 

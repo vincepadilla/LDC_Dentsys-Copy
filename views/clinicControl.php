@@ -130,6 +130,145 @@ if (empty($_SESSION['admin_verified'])) {
             color: var(--primary-color);
         }
 
+        /* Inputs, helpers, and modern field styling */
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .field-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            color: #0f172a;
+            font-size: 0.95rem;
+        }
+        .field-hint {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 2px;
+        }
+        
+        
+
+        /* Option cards (for closure type) */
+        .option-group {
+            display: grid;
+            gap: 8px;
+        }
+        .option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 8px 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: transparent;
+            transition: border-color 0.12s ease;
+        }
+        .option:hover {
+            border-color: #cbd5e1;
+        }
+        .option.selected {
+            border-color: #6366f1;
+            box-shadow: none;
+        }
+        .option .option-body {
+            display: grid;
+            gap: 2px;
+        }
+        .option .option-title {
+            font-weight: 600;
+            color: #0f172a;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            line-height: 1.2;
+            font-size: 0.92rem;
+        }
+        .option .option-desc {
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.15;
+        }
+        .option input[type="radio"] {
+            margin: 0 6px 0 0;
+            align-self: center;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #3730a3;
+            border: 1px solid #c7d2fe;
+        }
+
+        /* Toggle switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+            vertical-align: middle;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #e5e7eb;
+            transition: .2s;
+            border-radius: 999px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .2s;
+            border-radius: 50%;
+            box-shadow: 0 1px 2px rgba(0,0,0,.2);
+        }
+        input:checked + .slider {
+            background-color: #34d399;
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
+        /* Info banner */
+        .info-banner {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #075985;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 13px;
+            display: grid;
+            grid-template-columns: 20px 1fr;
+            gap: 10px;
+        }
+        .info-banner i {
+            color: #0284c7;
+            margin-top: 1px;
+        }
+
         /* Modern card look for the Active Closures section */
         #clinicClosureList {
             background: #ffffff;
@@ -198,7 +337,7 @@ if (empty($_SESSION['admin_verified'])) {
 
         .clinic-modal .clinic-modal-content {
             width: 100%;
-            max-height: 90vh;
+            max-height: 88vh;
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -209,8 +348,60 @@ if (empty($_SESSION['admin_verified'])) {
         }
 
         .clinic-modal .clinic-modal-body {
-            padding: 18px 20px 20px;
-            overflow-y: auto;
+            padding: 14px 16px 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Two-column layout for Block Day modal */
+        .blockday-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            align-items: stretch;
+            grid-auto-rows: 1fr;
+        }
+        .blockday-card {
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 14px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .blockday-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            color: #0f172a;
+            margin: 0 0 10px 0;
+            font-size: 0.95rem;
+        }
+        .blockday-scroll {
+            flex: 1 1 auto;
+            overflow: auto;
+            padding: 4px 4px 0;
+            margin: 0 4px;
+        }
+        .blockday-actions {
+            position: sticky;
+            bottom: 0;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            background: #ffffff;
+            border-top: 1px solid rgba(226, 232, 240, 0.9);
+            padding: 12px 4px 12px;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 720px) {
+            .blockday-grid {
+                grid-template-columns: 1fr;
+            }
         }
 
         .clinic-modal-header {
@@ -219,7 +410,7 @@ if (empty($_SESSION['admin_verified'])) {
             justify-content: space-between;
             padding: 14px 20px 10px;
             border-bottom: 1px solid rgba(226, 232, 240, 0.9);
-            background: linear-gradient(to right, #eff6ff, #f5f3ff);
+            
         }
 
         .clinic-modal-title {
@@ -329,19 +520,21 @@ if (empty($_SESSION['admin_verified'])) {
         <!-- Control Buttons -->
         <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 30px;">
             <button class="btn btn-warning" onclick="openBlockDayModal()">
-                <i class="fas fa-calendar-times"></i> Block Entire Day
-            </button>
-            <button class="btn btn-info" onclick="openHolidayModal()">
-                <i class="fas fa-calendar-star"></i> Manage Holidays
+                <i class="fa-solid fa-calendar-day"></i> Block Entire Day
             </button>
             <button class="btn btn-danger" onclick="openEmergencyClosureModal()">
-                <i class="fas fa-exclamation-triangle"></i> Emergency Closure
+                <i class="fas fa-calendar-times"></i> Date Range Closure
             </button>
         </div>
         
         <!-- Active Closures List -->
         <div id="clinicClosureList" style="margin-top: 20px;">
-            <h3><i class="fas fa-list"></i> Active Closures</h3>
+            <h3>
+                <i class="fas fa-list"></i> Active Closures
+                <button class="btn btn-secondary" style="margin-left: auto;" onclick="removeAllClosures()" title="Remove all active closures">
+                    <i class="fas fa-trash-alt"></i> Remove All
+                </button>
+            </h3>
             <div id="closuresContent" style="margin-top: 15px;">
                 <!-- Closures will be loaded here -->
             </div>
@@ -351,10 +544,10 @@ if (empty($_SESSION['admin_verified'])) {
 
 <!-- Block Entire Day Modal -->
 <div id="blockDayModal" class="modal clinic-modal" style="display:none;">
-    <div class="modal-content clinic-modal-content" style="max-width: 600px;">
+    <div class="modal-content clinic-modal-content" style="max-width: 820px;">
         <div class="clinic-modal-header">
             <div class="clinic-modal-title">
-                <i class="fas fa-calendar-times"></i>
+            <i class="fa-solid fa-calendar-day"></i>
                 Block Entire Day
             </div>
             <button type="button" class="clinic-modal-close" onclick="closeBlockDayModal()">
@@ -363,51 +556,99 @@ if (empty($_SESSION['admin_verified'])) {
         </div>
         <div class="clinic-modal-body">
         <form id="blockDayForm" onsubmit="handleBlockDaySubmit(event)">
-            <div style="margin-bottom: 15px;">
-                <label for="blockDayDate"><strong>Select Date:</strong></label>
-                <input type="date" id="blockDayDate" name="closure_date" required min="<?= date('Y-m-d') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px;">
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label><strong>Closure Type:</strong></label>
-                <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-                        <input type="radio" name="closure_type" value="full_day" checked>
-                        <span><i class="fas fa-ban" style="color: #dc3545;"></i> Full Day Closure (All appointments blocked)</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-                        <input type="radio" name="closure_type" value="no_new_appointments">
-                        <span><i class="fas fa-exclamation-circle" style="color: #ffc107;"></i> No New Appointments (Existing appointments remain)</span>
-                    </label>
+
+            <div class="blockday-scroll">
+                <div class="blockday-grid">
+                    <div class="blockday-card">
+                        <div class="blockday-section-title">
+                            <i class="fas fa-calendar-day"></i> Date & Type
+                        </div>
+                        <div class="field" style="margin-bottom: 12px;">
+                            <label for="blockDayDate" class="field-label">
+                                <i class="fa-solid fa-calendar"></i>
+                                Select Date
+                                <span class="badge"><i class="fa-regular fa-clock"></i> Clinic timezone</span>
+                            </label>
+                            <div class="input-affix">
+                                <input type="date" id="blockDayDate" name="closure_date" required min="<?= date('Y-m-d') ?>">
+                            </div>
+                            <div class="field-hint">Patients with appointments on this date may be notified.</div>
+                        </div>
+                        <div class="field" style="margin-bottom: 4px;">
+                            <div class="field-label">
+                                <i class="fa-solid fa-toggle-off"></i>
+                                Closure Type
+                            </div>
+                        <div class="option-group" id="closureTypeOptions" style="margin-top: 6px;">
+                            <label class="option" data-value="full_day">
+                                <input type="radio" name="closure_type" value="full_day" checked>
+                                <div class="option-body">
+                                    <div class="option-title">Full Day Closure</div>
+                                    <div class="option-desc">Blocks all appointment activity for the day.</div>
+                                </div>
+                            </label>
+                            <label class="option" data-value="no_new_appointments">
+                                <input type="radio" name="closure_type" value="no_new_appointments">
+                                <div class="option-body">
+                                    <div class="option-title">No New Appointments</div>
+                                    <div class="option-desc">Existing appointments remain; only new bookings are blocked.</div>
+                                </div>
+                            </label>
+                        </div>
+                            
+                        </div>
+                    </div>
+                    <div class="blockday-card">
+                        <div class="blockday-section-title">
+                            <i class="fas fa-align-left"></i> Reason & Notifications
+                        </div>
+                        <div class="field" style="margin-bottom: 12px;">
+                            <label for="blockDayReason" class="field-label">
+                                <i class="fa-solid fa-list-check"></i>
+                                Reason
+                            </label>
+                            <div class="input-affix">
+                                <select id="blockDayReason" name="reason" required>
+                                    <option value="">Select Reason</option>
+                                    <option value="Holiday">Holiday</option>
+                                    <option value="Maintenance">Maintenance</option>
+                                    <option value="Staff Training">Staff Training</option>
+                                    <option value="Emergency">Emergency</option>
+                                    <option value="Weather">Weather Conditions</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="blockDayCustomReasonContainer" style="margin-bottom: 12px; display: none;">
+                            <label for="blockDayCustomReason" class="field-label">
+                                <i class="fa-regular fa-pen-to-square"></i>
+                                Custom Reason (if Other)
+                            </label>
+                            <textarea id="blockDayCustomReason" name="custom_reason" rows="4" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px; margin-top: 5px; background:#fff;" placeholder="Enter custom reason..."></textarea>
+                        </div>
+                        <div class="info-banner" style="margin-bottom: 10px;">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <div>
+                                Blocking the day prevents new bookings for the selected date. Existing appointments are not cancelled automatically.
+                            </div>
+                        </div>
+                        <div class="field" style="margin-bottom: 0;">
+                            <div class="field-label" style="justify-content: space-between;">
+                                <span style="display:inline-flex; align-items:center; gap:8px;">
+                                    <i class="fa-regular fa-bell"></i>
+                                    Notify patients with appointments
+                                </span>
+                                <label class="switch">
+                                    <input type="checkbox" id="notifyPatients" name="notify_patients" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="field-hint">A message will be queued for all affected patients.</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label for="blockDayReason"><strong>Reason:</strong></label>
-                <select id="blockDayReason" name="reason" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; margin-top: 5px;">
-                    <option value="">Select Reason</option>
-                    <option value="Holiday">Holiday</option>
-                    <option value="Maintenance">Maintenance</option>
-                    <option value="Staff Training">Staff Training</option>
-                    <option value="Emergency">Emergency</option>
-                    <option value="Weather">Weather Conditions</option>
-                    <option value="Other">Other</option>
-                </select>
-            </div>
-            
-            <div id="blockDayCustomReasonContainer" style="margin-bottom: 15px; display: none;">
-                <label for="blockDayCustomReason"><strong>Custom Reason (if Other):</strong></label>
-                <textarea id="blockDayCustomReason" name="custom_reason" rows="3" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-top: 5px;" placeholder="Enter custom reason..."></textarea>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                    <input type="checkbox" id="notifyPatients" name="notify_patients" checked>
-                    <span>Notify patients with appointments on this date</span>
-                </label>
-            </div>
-            
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+            <div class="blockday-actions">
                 <button type="button" class="btn btn-secondary" onclick="closeBlockDayModal()">Cancel</button>
                 <button type="submit" class="btn btn-danger">Block Day</button>
             </div>
@@ -416,88 +657,13 @@ if (empty($_SESSION['admin_verified'])) {
     </div>
 </div>
 
-<!-- Holiday Management Modal -->
-<div id="holidayModal" class="modal clinic-modal" style="display:none;">
-    <div class="modal-content clinic-modal-content" style="max-width: 700px;">
-        <div class="clinic-modal-header">
-            <div class="clinic-modal-title">
-                <i class="fas fa-calendar-star"></i>
-                Manage Holidays
-            </div>
-            <button type="button" class="clinic-modal-close" onclick="closeHolidayModal()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="clinic-modal-body">
-            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                <button class="btn btn-primary" onclick="showAddHolidayForm()">
-                    <i class="fas fa-plus"></i> Add Holiday
-                </button>
-            </div>
-            
-            <!-- Add Holiday Form -->
-            <div id="addHolidayForm" style="display:none; background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <h4 style="margin-top:0; margin-bottom:12px;">Add New Holiday</h4>
-                <form id="holidayForm" onsubmit="handleHolidaySubmit(event)">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                        <div>
-                            <label for="holidayName"><strong>Holiday Name:</strong></label>
-                            <input type="text" id="holidayName" name="holiday_name" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-                        </div>
-                        <div>
-                            <label for="holidayDate"><strong>Date:</strong></label>
-                            <input type="date" id="holidayDate" name="holiday_date" required min="<?= date('Y-m-d') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-                        </div>
-                    </div>
-                    
-                    <div style="margin-bottom: 15px;">
-                        <label><strong>Recurrence:</strong></label>
-                        <div style="display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap;">
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="radio" name="recurrence" value="once" checked>
-                                <span>One Time</span>
-                            </label>
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="radio" name="recurrence" value="yearly">
-                                <span>Yearly (Recurring)</span>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                        <button type="button" class="btn btn-secondary" onclick="hideAddHolidayForm()">Cancel</button>
-                        <button type="submit" class="btn btn-success">Add Holiday</button>
-                    </div>
-                </form>
-            </div>
-            
-            <!-- Holidays List -->
-            <div id="holidaysList">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
-                            <th style="padding: 12px; text-align: left;">Holiday Name</th>
-                            <th style="padding: 12px; text-align: left;">Date</th>
-                            <th style="padding: 12px; text-align: left;">Recurrence</th>
-                            <th style="padding: 12px; text-align: center;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="holidaysTableBody">
-                        <!-- Holidays will be loaded here -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Emergency Closure Modal -->
 <div id="emergencyClosureModal" class="modal clinic-modal" style="display:none;">
-    <div class="modal-content clinic-modal-content" style="max-width: 600px;">
+    <div class="modal-content clinic-modal-content" style="max-width: 820px;">
         <div class="clinic-modal-header">
             <div class="clinic-modal-title">
-                <i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i>
-                Emergency Closure
+            <i class="fas fa-calendar-times"></i>
+                Date Range Closure
             </div>
             <button type="button" class="clinic-modal-close" onclick="closeEmergencyClosureModal()">
                 <i class="fas fa-times"></i>
@@ -505,50 +671,69 @@ if (empty($_SESSION['admin_verified'])) {
         </div>
         <div class="clinic-modal-body">
         <form id="emergencyClosureForm" onsubmit="handleEmergencyClosureSubmit(event)">
-            <div style="margin-bottom: 15px;">
-                <label><strong>Closure Duration:</strong></label>
-                <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-                        <input type="radio" name="closure_duration" value="single_day" checked>
-                        <span>Single Day</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-                        <input type="radio" name="closure_duration" value="date_range">
-                        <span>Date Range</span>
-                    </label>
+            <div class="blockday-scroll">
+                <div class="blockday-grid">
+                    <div class="blockday-card">
+                        <div class="blockday-section-title">
+                            <i class="fas fa-calendar-range"></i> Dates
+                        </div>
+                        <div class="field" style="margin-bottom: 12px;">
+                            <label for="emergencyStartDate" class="field-label">
+                                <i class="fa-solid fa-calendar"></i>
+                                Start Date
+                            </label>
+                            <div class="input-affix">
+                                <input type="date" id="emergencyStartDate" name="start_date" required min="<?= date('Y-m-d') ?>">
+                            </div>
+                            <div class="field-hint">Select the first day of the closure.</div>
+                        </div>
+                        <div class="field" id="emergencyEndDateContainer" style="margin-bottom: 0;">
+                            <label for="emergencyEndDate" class="field-label">
+                                <i class="fa-solid fa-calendar"></i>
+                                End Date
+                            </label>
+                            <div class="input-affix">
+                                <input type="date" id="emergencyEndDate" name="end_date" required min="<?= date('Y-m-d') ?>">
+                            </div>
+                            <div class="field-hint">Must be after the start date.</div>
+                        </div>
+                    </div>
+                    <div class="blockday-card">
+                        <div class="blockday-section-title">
+                            <i class="fas fa-align-left"></i> Reason & Notifications
+                        </div>
+                        <div class="field" style="margin-bottom: 12px;">
+                            <label for="emergencyReason" class="field-label">
+                                <i class="fa-solid fa-list-check"></i>
+                                Reason
+                            </label>
+                            <textarea id="emergencyReason" name="reason" rows="6" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px; margin-top: 5px; background:#fff;" placeholder="Describe the emergency situation..."></textarea>
+                        </div>
+                        <div class="info-banner" style="margin-bottom: 10px;">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <div>
+                                This will mark the selected date range as clinic closed and notify affected patients. Appointments are not cancelled automatically.
+                            </div>
+                        </div>
+                        <div class="field" style="margin-bottom: 0;">
+                            <div class="field-label" style="justify-content: space-between;">
+                                <span style="display:inline-flex; align-items:center; gap:8px;">
+                                    <i class="fa-regular fa-bell"></i>
+                                    Notify all affected patients
+                                </span>
+                                <label class="switch">
+                                    <input type="checkbox" id="emergencyNotifyPatients" name="notify_patients" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="field-hint">Immediate notification will be sent to all affected patients.</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label for="emergencyStartDate"><strong>Start Date:</strong></label>
-                <input type="date" id="emergencyStartDate" name="start_date" required min="<?= date('Y-m-d') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px;">
-            </div>
-            
-            <div style="margin-bottom: 15px;" id="emergencyEndDateContainer" style="display:none;">
-                <label for="emergencyEndDate"><strong>End Date:</strong></label>
-                <input type="date" id="emergencyEndDate" name="end_date" min="<?= date('Y-m-d') ?>" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px;">
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label for="emergencyReason"><strong>Emergency Reason:</strong></label>
-                <textarea id="emergencyReason" name="reason" rows="4" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-top: 5px;" placeholder="Describe the emergency situation..."></textarea>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                    <input type="checkbox" id="emergencyNotifyPatients" name="notify_patients" checked>
-                    <span>Notify all affected patients immediately</span>
-                </label>
-            </div>
-            
-            <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 15px; margin-bottom: 15px;">
-                <strong style="color: #856404;">⚠️ Warning:</strong>
-                <p style="color: #856404; margin: 5px 0 0 0;">This will automatically cancel all appointments during the closure period. Affected patients will be notified.</p>
-            </div>
-            
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+            <div class="blockday-actions">
                 <button type="button" class="btn btn-secondary" onclick="closeEmergencyClosureModal()">Cancel</button>
-                <button type="submit" class="btn btn-danger">Confirm Emergency Closure</button>
+                <button type="submit" class="btn btn-danger">Apply Date Range Closure</button>
             </div>
         </form>
         </div>
@@ -645,23 +830,68 @@ if (empty($_SESSION['admin_verified'])) {
                 }
             });
         }
-        
-        // Handle closure duration radio buttons
-        const closureDurationRadios = document.querySelectorAll('input[name="closure_duration"]');
-        const endDateContainer = document.getElementById('emergencyEndDateContainer');
-        if (closureDurationRadios.length > 0 && endDateContainer) {
-            closureDurationRadios.forEach(radio => {
-                radio.addEventListener('change', function() {
-                    if (this.value === 'date_range') {
-                        endDateContainer.style.display = 'block';
-                        document.getElementById('emergencyEndDate').setAttribute('required', 'required');
+
+        // Enhance closure type option cards (selected state)
+        const optionContainer = document.getElementById('closureTypeOptions');
+        if (optionContainer) {
+            const optionLabels = Array.from(optionContainer.querySelectorAll('label.option'));
+            const syncSelected = () => {
+                optionLabels.forEach(l => {
+                    const input = l.querySelector('input[type="radio"]');
+                    if (input && input.checked) {
+                        l.classList.add('selected');
                     } else {
-                        endDateContainer.style.display = 'none';
-                        document.getElementById('emergencyEndDate').removeAttribute('required');
-                        document.getElementById('emergencyEndDate').value = '';
+                        l.classList.remove('selected');
+                    }
+                });
+            };
+            optionLabels.forEach(l => {
+                const input = l.querySelector('input[type="radio"]');
+                if (input) {
+                    input.addEventListener('change', syncSelected);
+                }
+                // Also allow clicking anywhere on the label to select
+                l.addEventListener('click', function(e) {
+                    const radio = this.querySelector('input[type="radio"]');
+                    if (radio) {
+                        radio.checked = true;
+                        radio.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                 });
             });
+            // Initialize visual state
+            syncSelected();
+        }
+
+        // Ensure end date is visible and required for date range closure
+        const endDateContainer = document.getElementById('emergencyEndDateContainer');
+        const endDateInput = document.getElementById('emergencyEndDate');
+        const startDateInput = document.getElementById('emergencyStartDate');
+        if (endDateContainer && endDateInput) {
+            endDateContainer.style.display = 'block';
+            endDateInput.setAttribute('required', 'required');
+        }
+        // Ensure end date cannot be before or equal to start date (must be next day or later)
+        if (startDateInput && endDateInput) {
+            const enforceEndMin = () => {
+                const startVal = startDateInput.value;
+                if (!startVal) return;
+                const d = new Date(startVal);
+                // Add 1 day
+                d.setDate(d.getDate() + 1);
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const nextDay = `${yyyy}-${mm}-${dd}`;
+                endDateInput.min = nextDay;
+                if (endDateInput.value && endDateInput.value < nextDay) {
+                    endDateInput.value = nextDay;
+                }
+            };
+            // On load (in case start date already selected)
+            enforceEndMin();
+            // On change
+            startDateInput.addEventListener('change', enforceEndMin);
         }
     });
     
@@ -695,7 +925,8 @@ if (empty($_SESSION['admin_verified'])) {
     function closeEmergencyClosureModal() {
         document.getElementById('emergencyClosureModal').style.display = 'none';
         document.getElementById('emergencyClosureForm').reset();
-        document.getElementById('emergencyEndDateContainer').style.display = 'none';
+        const endDateContainer = document.getElementById('emergencyEndDateContainer');
+        if (endDateContainer) endDateContainer.style.display = 'block';
     }
     
     // Handle block day form submission
@@ -864,11 +1095,21 @@ if (empty($_SESSION['admin_verified'])) {
         
         const startDate = formData.get('start_date');
         const endDate = formData.get('end_date');
-        const closureDuration = formData.get('closure_duration');
         const reason = formData.get('reason');
         const notifyPatients = formData.get('notify_patients') === 'on';
+
+        // Basic validation: end date must be present and >= start date
+        if (!endDate) {
+            showNotification('error', 'Error', 'Please select an end date.');
+            return;
+        }
+        // Must be strictly after start date
+        if (startDate && endDate && endDate <= startDate) {
+            showNotification('error', 'Error', 'End date must be after start date.');
+            return;
+        }
         
-        if (!confirm('⚠️ WARNING: This will cancel all appointments during the closure period. Are you absolutely sure you want to proceed?')) {
+        if (!confirm('This will mark the selected dates as clinic closed and notify affected patients. Appointments will NOT be cancelled automatically. Proceed?')) {
             return;
         }
         
@@ -880,7 +1121,7 @@ if (empty($_SESSION['admin_verified'])) {
         const requestData = {
             action: 'emergency_closure',
             start_date: startDate,
-            end_date: closureDuration === 'date_range' ? endDate : startDate,
+            end_date: endDate,
             reason: reason,
             notify_patients: notifyPatients
         };
@@ -892,7 +1133,7 @@ if (empty($_SESSION['admin_verified'])) {
         })
         .then(data => {
             if (data.success) {
-                showNotification('warning', 'Emergency Closure Activated', `Clinic closed from ${startDate} to ${requestData.end_date}. ${data.cancelled_count || 0} appointments cancelled. ${notifyPatients ? 'Patients have been notified.' : ''}`);
+                showNotification('warning', 'Date Range Closure Applied', `Clinic closed from ${startDate} to ${requestData.end_date}. ${notifyPatients ? 'Patients have been notified.' : ''}`);
                 closeEmergencyClosureModal();
                 loadClinicClosures();
             } else {
@@ -919,6 +1160,8 @@ if (empty($_SESSION['admin_verified'])) {
             if (data.success && data.closures && data.closures.length > 0) {
                 let html = '<div style="display: grid; gap: 10px;">';
                 data.closures.forEach(closure => {
+                    // Map "Emergency:" prefix to "Date Range Closure:" for display
+                    const displayReason = String(closure.reason || '').replace(/^\s*Emergency\s*:/i, 'Date Range Closure:');
                     const closureTypeBadge = closure.closure_type === 'full_day' ? 
                         '<span style="background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Full Day</span>' :
                         '<span style="background: #ffc107; color: #856404; padding: 4px 8px; border-radius: 4px; font-size: 12px;">No New Appointments</span>';
@@ -926,7 +1169,7 @@ if (empty($_SESSION['admin_verified'])) {
                     html += `
                         <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <strong>${closure.date}</strong> - ${closure.reason}
+                                <strong>${closure.date}</strong> - ${displayReason}
                                 ${closureTypeBadge}
                             </div>
                             <button class="btn btn-sm btn-secondary" onclick="removeClosure('${closure.date}')" title="Remove Closure">
@@ -967,6 +1210,30 @@ if (empty($_SESSION['admin_verified'])) {
         .catch(error => {
             console.error('Error:', error);
             showNotification('error', 'Error', error?.message || 'An error occurred while removing closure.');
+        });
+    }
+
+    // Remove all active closures
+    function removeAllClosures() {
+        if (!confirm('Are you sure you want to remove ALL active closures?')) return;
+
+        fetchJson('../controllers/manage_clinic_closure.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'remove_all_closures' })
+        })
+        .then(data => {
+            if (data.success) {
+                const count = typeof data.removed_count === 'number' ? data.removed_count : 0;
+                showNotification('success', 'All Closures Removed', `Removed ${count} active ${count === 1 ? 'closure' : 'closures'}.`);
+                loadClinicClosures();
+            } else {
+                showNotification('error', 'Error', data.message || 'Failed to remove all closures.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('error', 'Error', error?.message || 'An error occurred while removing all closures.');
         });
     }
     
