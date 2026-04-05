@@ -617,28 +617,6 @@ if (empty($_SESSION['admin_verified'])) {
                     </select>
                 </div>
             </div>
-
-            <!-- Action Buttons Card -->
-            <div class="control-card">
-                <div class="control-card-header">
-                    <i class="fas fa-tools"></i>
-                    <h4>Quick Actions</h4>
-                </div>
-                <div class="control-card-content">
-                    <button class="control-card-button btn-primary" onclick="openBlockDayModal()">
-                        <i class="fas fa-calendar-times"></i>
-                        <span>Block Day</span>
-                    </button>
-                    <button class="control-card-button btn-accent" onclick="openHolidayModal()">
-                        <i class="fas fa-calendar-star"></i>
-                        <span>Manage Holidays</span>
-                    </button>
-                    <button class="control-card-button btn-danger" onclick="openEmergencyClosureModal()">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <span>Emergency Closure</span>
-                    </button>
-                </div>
-            </div>
         </div>
 
         <!-- Weekly Schedule View -->
@@ -1330,6 +1308,9 @@ if (empty($_SESSION['admin_verified'])) {
         updateSelectedDayTitleFromActiveTab();
         updateWeekNavigationButtons();
         updateCardViewDates();
+        // Auto-select today's tab and disable past days when showing current week
+        selectTodayTabIfCurrentWeek();
+        disablePastDaysIfCurrentWeek();
     }
 
     function updateCardViewDates() {
@@ -1488,6 +1469,72 @@ if (empty($_SESSION['admin_verified'])) {
         if (dayDateDisplay) {
             titleEl.textContent = `${dayName} – ${dayDateDisplay}`;
         }
+    }
+
+    // Select today's day tab if viewing the current week
+    function selectTodayTabIfCurrentWeek() {
+        const thisWeekMonday = getMondayOf(new Date());
+        if (currentWeekStart.getTime() !== thisWeekMonday.getTime()) return;
+        const dow = new Date().getDay(); // 0=Sun..6=Sat
+        const map = {1:'mon',2:'tue',3:'wed',4:'thu',5:'fri',6:'sat',0:'mon'}; // default Sun->Mon
+        const dayKey = map[dow] || 'mon';
+        setActiveDayTab(dayKey);
+    }
+
+    // Disable selection for past days (current week only)
+    function disablePastDaysIfCurrentWeek() {
+        const thisWeekMonday = getMondayOf(new Date());
+        if (currentWeekStart.getTime() !== thisWeekMonday.getTime()) return;
+
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const isoToday = `${yyyy}-${mm}-${dd}`;
+
+        // Disable desktop grid cells (past dates)
+        document.querySelectorAll('.time-slot-cell').forEach(cell => {
+            const date = cell.getAttribute('data-date');
+            if (!date) return;
+            const statusEl = cell.querySelector('.slot-status');
+            if (statusEl) {
+                if (date < isoToday) {
+                    statusEl.removeAttribute('onclick');
+                    statusEl.style.cursor = 'not-allowed';
+                    statusEl.style.opacity = '0.6';
+                }
+            }
+        });
+
+        // Disable past day tabs
+        dayTabKeys.forEach(dayKey => {
+            const cell = document.querySelector(`.time-slot-cell[data-day="${dayKey}"]`);
+            const tab = document.querySelector(`.day-tab[data-day="${dayKey}"]`);
+            if (!cell || !tab) return;
+            const date = cell.getAttribute('data-date');
+            if (date && date < isoToday) {
+                tab.setAttribute('disabled', 'true');
+                tab.style.opacity = '0.6';
+                tab.style.cursor = 'not-allowed';
+                tab.style.pointerEvents = 'none';
+            } else {
+                tab.removeAttribute('disabled');
+                tab.style.opacity = '';
+                tab.style.cursor = '';
+                tab.style.pointerEvents = '';
+            }
+        });
+
+        // Disable mobile card slots (past dates)
+        document.querySelectorAll('.time-slot-card-slot').forEach(slot => {
+            const date = slot.getAttribute('data-date');
+            if (!date) return;
+            if (date < isoToday) {
+                slot.removeAttribute('onclick');
+                slot.style.cursor = 'not-allowed';
+                slot.style.opacity = '0.6';
+            }
+        });
     }
 
     function setActiveDayTab(dayKey) {

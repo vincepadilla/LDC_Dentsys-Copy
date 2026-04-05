@@ -91,8 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Validate numeric fields
-        if (in_array($key, ['advance_booking_limit', 'reservation_fee_amount', 
-                           'max_login_attempts', 'session_timeout'])) {
+        if (in_array($key, ['advance_booking_limit', 'reservation_fee_amount'])) {
             if (!is_numeric($value) || $value < 0) {
                 $errors[] = "Invalid value for {$key}";
                 $success = false;

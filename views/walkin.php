@@ -1186,7 +1186,23 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
                 }
             });
 
-            // 4) Load appointments per day (no dentist filter = whole clinic)
+            // 4) Load clinic full-day closures and holidays; mark as fully blocked
+            try {
+                const closedRes = await fetch('../controllers/getClosedDates.php');
+                const closedJson = await closedRes.json();
+                const closedDates = Array.isArray(closedJson?.closed_dates) ? closedJson.closed_dates : [];
+                closedDates.forEach(cd => {
+                    const date = cd.date;
+                    if (scheduleData[date]) {
+                        // Mark as fully blocked by adding all time slots
+                        scheduleData[date].blockedSlots = [...timeSlotKeys];
+                    }
+                });
+            } catch (e) {
+                // Ignore closure fetch errors to avoid breaking calendar
+            }
+
+            // 5) Load appointments per day (no dentist filter = whole clinic)
             const appointmentPromises = [];
             for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
                 const dateStr = formatLocalDate(d);
@@ -1379,6 +1395,20 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
 
     // Initial render
     renderCalendar();
+
+    // Real-time refresh every 3 seconds (avoid overlaps and respect tab visibility)
+    let isRendering = false;
+    async function refreshCalendarLoop() {
+        if (document.hidden) return; // skip when tab not visible
+        if (isRendering) return; // prevent overlapping renders
+        isRendering = true;
+        try {
+            await renderCalendar();
+        } finally {
+            isRendering = false;
+        }
+    }
+    setInterval(refreshCalendarLoop, 3000);
 })();
 
 // Notification System
