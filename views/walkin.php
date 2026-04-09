@@ -8,7 +8,7 @@ if (!isset($_SESSION['userID'])) {
     exit("You must be logged in to view this page.");
 }
 
-define("TITLE", "Payment");
+define("TITLE", "Walk-In Appointment");
 require_once(__DIR__ . "/../database/config.php");
 
 // Include PHPMailer for email functionality
@@ -384,6 +384,94 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
     } catch (Exception $e) {
         // ignore
     }
+}
+
+// Guard: missing full name or appointment details -> animated alert then redirect
+if (empty(trim(($fname ?? ''))) || empty(trim(($lname ?? ''))) || empty(trim(($service_id ?? ''))) || $service_id === 'N/A' || empty(trim(($subService ?? ''))) || $subService === 'N/A') {
+    echo "<!DOCTYPE html>
+    <html lang='en'>
+    <head>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <title>Missing Details</title>
+        <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css'>
+        <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap' rel='stylesheet'>
+        <style>
+            * { box-sizing: border-box; }
+            body {
+                font-family: 'Poppins', sans-serif;
+                background: linear-gradient(135deg, #fdf2f8 0%, #e0f2fe 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+            }
+            .toast {
+                background: #fff;
+                border-radius: 14px;
+                box-shadow: 0 20px 50px rgba(0,0,0,0.12);
+                padding: 22px 24px;
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                border-left: 5px solid #ef4444;
+                animation: slideIn 0.35s ease-out;
+                max-width: 520px;
+                width: 100%;
+            }
+            .toast .icon {
+                width: 46px;
+                height: 46px;
+                border-radius: 50%;
+                background: #fee2e2;
+                color: #b91c1c;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 22px;
+                flex-shrink: 0;
+                animation: pop 0.4s ease-out;
+            }
+            .toast .content {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .toast .title {
+                font-weight: 700;
+                color: #111827;
+                font-size: 16px;
+            }
+            .toast .msg {
+                color: #6b7280;
+                font-size: 14px;
+            }
+            @keyframes slideIn {
+                from { transform: translateY(-10px); opacity: 0; }
+                to { transform: translateY(0); opacity: 1; }
+            }
+            @keyframes pop {
+                0% { transform: scale(0.8); }
+                60% { transform: scale(1.08); }
+                100% { transform: scale(1); }
+            }
+        </style>
+    </head>
+    <body>
+        <div class='toast'>
+            <div class='icon'><i class='fas fa-exclamation-circle'></i></div>
+            <div class='content'>
+                <div class='title'>Missing required details</div>
+                <div class='msg'>Please provide your full name and appointment details before proceeding with a walk-in reservation.</div>
+            </div>
+        </div>
+        <script>
+            setTimeout(function(){ window.location.href = 'index.php'; }, 2200);
+        </script>
+    </body>
+    </html>";
+    exit();
 }
 ?>
 
@@ -831,6 +919,99 @@ if (!empty($birthdate) && $birthdate !== 'N/A') {
             color: #3B82F6;
         }
 
+        /* Centered Modal for Existing Walk-In */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100000;
+            animation: fadeIn 0.2s ease-out;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal-box {
+            width: 92%;
+            max-width: 520px;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.28);
+            overflow: hidden;
+            transform: translateY(8px) scale(0.98);
+            animation: modalIn 0.28s ease-out forwards;
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 20px;
+            background: #fff7ed;
+            border-bottom: 1px solid #fed7aa;
+        }
+        .modal-header .icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 999px;
+            background: #ffedd5;
+            color: #b45309;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        .modal-title {
+            font-weight: 700;
+            color: #7c2d12;
+            font-size: 16px;
+        }
+        .modal-body {
+            padding: 18px 20px 10px;
+            color: #374151;
+            line-height: 1.55;
+            font-size: 14px;
+        }
+        .modal-body .walkin-id {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-weight: 700;
+            font-size: 13px;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 14px 20px 18px;
+        }
+        .btn {
+            appearance: none;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+        .btn-primary {
+            background: #166088;
+            color: #ffffff;
+        }
+        @keyframes modalIn {
+            from { transform: translateY(8px) scale(0.98); opacity: 0; }
+            to   { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
         .notification-content {
             flex: 1;
         }
@@ -1473,17 +1654,37 @@ function closeNotification(btn) {
 document.addEventListener('DOMContentLoaded', function() {
     <?php if (isset($_GET['error']) && $_GET['error'] === 'existing_walkin' && isset($_SESSION['walkin_limit_error'])): ?>
         const errorData = <?php echo json_encode($_SESSION['walkin_limit_error']); ?>;
-        showNotification(
-            'warning',
-            'Walk-In Limit Reached',
-            'You already have a walk-in appointment (ID: ' + errorData.walkin_id + '). Each user is limited to one walk-in appointment at a time. Please complete or cancel your existing walk-in appointment before creating a new one.',
-            null,
-            8000
-        );
-        // Redirect to account page after showing notification
-        setTimeout(() => {
-            window.location.href = 'account.php';
-        }, 3000);
+        // Show centered modal (distinct from missing-details toast)
+        (function showExistingWalkinModal(walkinId) {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay show';
+            overlay.innerHTML = `
+                <div class="modal-box">
+                    <div class="modal-header">
+                        <div class="icon"><i class="fas fa-user-check"></i></div>
+                        <div class="modal-title">Existing Walk-In Reservation</div>
+                    </div>
+                    <div class="modal-body">
+                        <p>You already have an active walk-in reservation.</p>
+                        <p>Reservation ID: <span class="walkin-id">${walkinId ? String(walkinId) : ''}</span></p>
+                        <p>Only one walk-in is allowed at a time. You can view or manage it from your account.</p>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" id="modalStayBtn">Stay</button>
+                        <button type="button" class="btn btn-primary" id="modalGoBtn">Go to My Account</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            const goBtn = overlay.querySelector('#modalGoBtn');
+            const stayBtn = overlay.querySelector('#modalStayBtn');
+            if (goBtn) goBtn.onclick = () => { window.location.href = 'account.php'; };
+            if (stayBtn) stayBtn.onclick = () => {
+                overlay.classList.remove('show');
+                setTimeout(() => overlay.remove(), 200);
+            };
+            setTimeout(() => { window.location.href = 'account.php'; }, 3500);
+        })(errorData && errorData.walkin_id ? errorData.walkin_id : '');
         <?php unset($_SESSION['walkin_limit_error']); ?>
     <?php endif; ?>
 });

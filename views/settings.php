@@ -97,6 +97,18 @@ foreach ($defaults as $key => $value) {
 $success_msg = '';
 $error_msg = '';
 
+// Prepare QR preview paths (resolve relative URLs for views/)
+$gcash_qr_stored = isset($settingsData['gcash_qr_code']) ? trim((string)$settingsData['gcash_qr_code']) : '';
+$maya_qr_stored = isset($settingsData['maya_qr_code']) ? trim((string)$settingsData['maya_qr_code']) : '';
+$gcash_qr_src = '';
+$maya_qr_src = '';
+if (!empty($gcash_qr_stored)) {
+    $gcash_qr_src = (strpos($gcash_qr_stored, 'uploads/') === 0) ? ('../' . $gcash_qr_stored) : $gcash_qr_stored;
+}
+if (!empty($maya_qr_stored)) {
+    $maya_qr_src = (strpos($maya_qr_stored, 'uploads/') === 0) ? ('../' . $maya_qr_stored) : $maya_qr_stored;
+}
+
 if (isset($_SESSION['settings_success'])) {
     $success_msg = $_SESSION['settings_success'];
     unset($_SESSION['settings_success']);
@@ -607,7 +619,7 @@ if (isset($_SESSION['settings_error'])) {
             
         </div>
 
-        <form id="settingsForm" action="../controllers/update_settings.php" method="POST">
+        <form id="settingsForm" action="../controllers/update_settings.php" method="POST" enctype="multipart/form-data" novalidate>
             <div class="content-area">
                 <div id="settingsAlertContainer">
                     <?php if ($success_msg): ?>
@@ -715,6 +727,86 @@ if (isset($_SESSION['settings_error'])) {
                                    value="<?php echo htmlspecialchars($settingsData['reservation_fee_amount']); ?>" 
                                    min="0" step="0.01" required>
                             <div class="form-help">Amount required to reserve an appointment</div>
+                        </div>
+                    </div>
+
+                    <!-- GCash Settings Card -->
+                    <div class="section-header" style="margin-top: 10px;">
+                        <div class="section-title">
+                            <i class="fas fa-wallet"></i>
+                            GCash Settings
+                        </div>
+                        <div class="section-description">
+                            Configure GCash account details and QR code for payments
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">GCash Account Name</label>
+                            <input type="text" name="gcash_account_name" class="form-input"
+                                   value="<?php echo isset($settingsData['gcash_account_name']) ? htmlspecialchars($settingsData['gcash_account_name']) : ''; ?>"
+                                   placeholder="e.g., Juan Dela Cruz">
+                            <div class="form-help">Name that appears on your GCash account</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">GCash Account Number</label>
+                            <input type="text" name="gcash_account_number" class="form-input"
+                                   value="<?php echo isset($settingsData['gcash_account_number']) ? htmlspecialchars($settingsData['gcash_account_number']) : ''; ?>"
+                                   placeholder="e.g., 09XXXXXXXXX" maxlength="11" pattern="\d{11}" inputmode="numeric" title="GCash number must be exactly 11 digits">
+                            <div class="form-help">Mobile number linked to your GCash</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Upload GCash QR Code</label>
+                            <input type="file" name="gcash_qr_code" accept=".jpg,.jpeg,.png" class="form-input">
+                            <div class="form-help">Accepts JPG or PNG. Max 5 MB.</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Current GCash QR Preview</label>
+                            <?php if (!empty($gcash_qr_src)): ?>
+                                <img id="gcashQrPreview" src="<?php echo htmlspecialchars($gcash_qr_src); ?>?v=<?php echo time(); ?>" alt="GCash QR Code" style="max-width: 220px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px; background: #fff;">
+                            <?php else: ?>
+                                <div class="form-help" id="gcashQrPreviewHelp">No QR uploaded yet</div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <!-- Maya Settings Card -->
+                    <div class="section-header" style="margin-top: 10px;">
+                        <div class="section-title">
+                            <i class="fas fa-credit-card"></i>
+                            Maya Settings
+                        </div>
+                        <div class="section-description">
+                            Configure Maya account details and QR code for payments
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">Maya Account Name</label>
+                            <input type="text" name="maya_account_name" class="form-input"
+                                   value="<?php echo isset($settingsData['maya_account_name']) ? htmlspecialchars($settingsData['maya_account_name']) : ''; ?>"
+                                   placeholder="e.g., Juan Dela Cruz">
+                            <div class="form-help">Name that appears on your Maya account</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Maya Account Number</label>
+                            <input type="text" name="maya_account_number" class="form-input"
+                                   value="<?php echo isset($settingsData['maya_account_number']) ? htmlspecialchars($settingsData['maya_account_number']) : ''; ?>"
+                                   placeholder="e.g., 09XXXXXXXXX" maxlength="11" pattern="\d{11}" inputmode="numeric" title="Maya number must be exactly 11 digits">
+                            <div class="form-help">Mobile number linked to your Maya</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Upload Maya QR Code</label>
+                            <input type="file" name="maya_qr_code" accept=".jpg,.jpeg,.png" class="form-input">
+                            <div class="form-help">Accepts JPG or PNG. Max 5 MB.</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Current Maya QR Preview</label>
+                            <?php if (!empty($maya_qr_src)): ?>
+                                <img id="mayaQrPreview" src="<?php echo htmlspecialchars($maya_qr_src); ?>?v=<?php echo time(); ?>" alt="Maya QR Code" style="max-width: 220px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px; background: #fff;">
+                            <?php else: ?>
+                                <div class="form-help" id="mayaQrPreviewHelp">No QR uploaded yet</div>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -878,6 +970,55 @@ if (isset($_SESSION['settings_error'])) {
             // AJAX save to avoid full page refresh and keep tab state
             const settingsForm = document.getElementById('settingsForm');
             if (!settingsForm) return;
+
+            // Local instant preview for QR uploads
+            const gcashFileInput = settingsForm.querySelector('input[name="gcash_qr_code"]');
+            const mayaFileInput = settingsForm.querySelector('input[name="maya_qr_code"]');
+            const gcashNumberInput = settingsForm.querySelector('input[name="gcash_account_number"]');
+            const mayaNumberInput = settingsForm.querySelector('input[name="maya_account_number"]');
+            function setPreview(fileInput, imgId, helpId) {
+                const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+                const img = document.getElementById(imgId);
+                const help = document.getElementById(helpId);
+                if (!file) return;
+                const validTypes = ['image/jpeg', 'image/png'];
+                if (!validTypes.includes(file.type)) return;
+                const url = URL.createObjectURL(file);
+                if (img) {
+                    img.src = url;
+                    img.style.display = '';
+                }
+                if (help) {
+                    help.style.display = 'none';
+                }
+            }
+            if (gcashFileInput) {
+                gcashFileInput.addEventListener('change', function() {
+                    setPreview(this, 'gcashQrPreview', 'gcashQrPreviewHelp');
+                });
+            }
+            if (mayaFileInput) {
+                mayaFileInput.addEventListener('change', function() {
+                    setPreview(this, 'mayaQrPreview', 'mayaQrPreviewHelp');
+                });
+            }
+            // Enforce 11-digit numeric only for account numbers
+            function enforceElevenDigits(el) {
+                if (!el) return;
+                el.addEventListener('input', function() {
+                    this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11);
+                });
+                el.addEventListener('blur', function() {
+                    if (this.value.length > 0 && this.value.length !== 11) {
+                        this.setCustomValidity('Number must be exactly 11 digits');
+                        this.reportValidity();
+                    } else {
+                        this.setCustomValidity('');
+                    }
+                });
+            }
+            enforceElevenDigits(gcashNumberInput);
+            enforceElevenDigits(mayaNumberInput);
 
             settingsForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
