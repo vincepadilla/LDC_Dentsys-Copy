@@ -62,15 +62,15 @@ $user_query->close();
 
 $patient_name = ($user_data['first_name'] ?? '') . ' ' . ($user_data['last_name'] ?? '');
 
-// Insert feedback with pending status (needs admin approval)
+// Insert feedback as approved so it appears immediately on homepage.
 $insert_feedback = $con->prepare("
     INSERT INTO feedback (user_id, patient_name, feedback_text, appointment_id, status) 
-    VALUES (?, ?, ?, ?, 'pending')
+    VALUES (?, ?, ?, ?, 'approved')
 ");
 $insert_feedback->bind_param("sssi", $user_id, $patient_name, $feedback_text, $appointment_id);
 
 if ($insert_feedback->execute()) {
-    $_SESSION['feedback_success'] = "Thank you! Your feedback has been submitted and is pending approval. It will be displayed on our website once approved.";
+    $_SESSION['feedback_success'] = "Thank you! Your feedback has been posted and is now visible on our homepage.";
 } else {
     $_SESSION['feedback_error'] = "Error posting feedback. Please try again.";
 }

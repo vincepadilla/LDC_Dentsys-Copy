@@ -6,12 +6,6 @@ require_once __DIR__ . "/../libraries/pdf/reportExport.php";
 
 header("X-Content-Type-Options: nosniff");
 
-// Must be admin.
-if (!isset($_SESSION["userID"]) || strtolower($_SESSION["role"] ?? "") !== "admin" || empty($_SESSION["admin_verified"])) {
-    header("Content-Type: application/json; charset=utf-8");
-    echo json_encode(["success" => false, "message" => "Unauthorized access. Please login as admin."]);
-    exit();
-}
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     header("Content-Type: application/json; charset=utf-8");

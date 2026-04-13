@@ -1,6 +1,51 @@
 <?php
 session_start();
 require_once(__DIR__ . "/../database/config.php");
+require_once __DIR__ . '/../includes/in_session_users.php';
+
+/**
+ * Inserts in-app notifications for users currently in session when maintenance mode is enabled.
+ */
+function ldcdents_notify_in_session_maintenance(mysqli $con): void
+{
+    $userIds = ldcdents_get_in_session_user_ids($con);
+    if (empty($userIds)) {
+        return;
+    }
+    $tableCheck = @mysqli_query($con, "SHOW TABLES LIKE 'notifications'");
+    if (!$tableCheck || mysqli_num_rows($tableCheck) === 0) {
+        return;
+    }
+    $message = 'The clinic system is entering maintenance mode. Booking and payments may be unavailable until maintenance is complete.';
+
+    $res = @mysqli_query($con, "SELECT notification_id FROM notifications ORDER BY notification_id DESC LIMIT 1");
+    $nextNum = 1;
+    if ($res && ($row = mysqli_fetch_assoc($res)) && !empty($row['notification_id'])) {
+        $nextNum = (int) substr($row['notification_id'], 1) + 1;
+    }
+
+    $stmt = $con->prepare(
+        'INSERT INTO notifications (notification_id, user_id, type, appointment_date, appointment_time, message, is_read, created_at)
+         VALUES (?, ?, \'maintenance\', \'\', \'\', ?, 0, NOW())'
+    );
+    if (!$stmt) {
+        $stmt = $con->prepare(
+            'INSERT INTO notifications (notification_id, user_id, type, appointment_date, appointment_time, dentist_name, is_read, created_at)
+             VALUES (?, ?, \'maintenance\', \'\', \'\', ?, 0, NOW())'
+        );
+    }
+    if (!$stmt) {
+        return;
+    }
+
+    foreach ($userIds as $uid) {
+        $nid = 'N' . str_pad((string) $nextNum, 3, '0', STR_PAD_LEFT);
+        $nextNum++;
+        $stmt->bind_param('sss', $nid, $uid, $message);
+        @$stmt->execute();
+    }
+    $stmt->close();
+}
 
 function isAjaxRequest() {
     return (
@@ -42,6 +87,19 @@ $createTableQuery = "CREATE TABLE IF NOT EXISTS system_settings (
 mysqli_query($con, $createTableQuery);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $prevMaintenanceMode = '0';
+    $pmStmt = $con->prepare('SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1');
+    if ($pmStmt) {
+        $mk = 'maintenance_mode';
+        $pmStmt->bind_param('s', $mk);
+        $pmStmt->execute();
+        $pmRes = $pmStmt->get_result();
+        if ($pmRow = $pmRes->fetch_assoc()) {
+            $prevMaintenanceMode = ($pmRow['setting_value'] === '1') ? '1' : '0';
+        }
+        $pmStmt->close();
+    }
+
     // Current, supported setting keys in the system (table now contains only these)
     $knownKeys = [
         'appointment_slot_duration',
@@ -218,6 +276,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($success) {
+        $newMaintenanceMode = isset($_POST['maintenance_mode']) ? '1' : '0';
+        if ($prevMaintenanceMode === '0' && $newMaintenanceMode === '1') {
+            ldcdents_notify_in_session_maintenance($con);
+        }
         $_SESSION['settings_success'] = 'Settings updated successfully!';
         respond(true, 'Settings updated successfully!');
     } else {

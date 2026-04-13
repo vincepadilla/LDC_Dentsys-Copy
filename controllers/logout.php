@@ -239,6 +239,16 @@ if (isset($_SESSION['userID'])) {
     $checkDentist->close();
 }
 
+if (isset($_SESSION['userID'])) {
+    $logoutUid = (string) $_SESSION['userID'];
+    $clearActivity = $con->prepare('UPDATE user_account SET last_activity = NULL WHERE user_id = ?');
+    if ($clearActivity) {
+        $clearActivity->bind_param('s', $logoutUid);
+        $clearActivity->execute();
+        $clearActivity->close();
+    }
+}
+
 session_destroy(); 
 header("Location: ../views/login.php"); 
 exit();

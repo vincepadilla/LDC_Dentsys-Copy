@@ -7,11 +7,6 @@ if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     exit();
 }
 
-if (empty($_SESSION['admin_verified'])) {
-    header("Location: admin_verify.php");
-    exit();
-}
-
 // Get patients data
 $patientSql = "SELECT patient_id, first_name, last_name, birthdate, gender, email, phone, address 
               FROM patient_information
@@ -346,10 +341,6 @@ if ($lastIdRes && mysqli_num_rows($lastIdRes) > 0) {
                                         <i class="fas fa-edit"></i>
                                     </button>
 
-                                    <button class="action-btn btn-danger" title="Archive" onclick="archivePatient(<?php echo $row['patient_id']; ?>)">
-                                        <i class="fa-solid fa-box-archive"></i>
-                                    </button>
-
                                     <button class="action-btn btn-gray" title="See More" onclick="seeMoreDetails('<?php echo $row['patient_id']; ?>', event)">
                                         <i class="fa-solid fa-circle-info"></i>
                                     </button>
@@ -437,9 +428,7 @@ if ($lastIdRes && mysqli_num_rows($lastIdRes) > 0) {
                         <button class="action-btn btn-primary" title="Edit" onclick="editPatient('<?php echo $row['patient_id']; ?>')">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button class="action-btn btn-danger" title="Archive" onclick="archivePatient(<?php echo $row['patient_id']; ?>)">
-                            <i class="fa-solid fa-box-archive"></i>
-                        </button>
+                        
                         <button class="action-btn btn-gray" title="See More" onclick="seeMoreDetails('<?php echo $row['patient_id']; ?>', event)">
                             <i class="fa-solid fa-circle-info"></i>
                         </button>

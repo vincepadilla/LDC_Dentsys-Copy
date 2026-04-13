@@ -7,10 +7,6 @@ if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     exit();
 }
 
-if (empty($_SESSION['admin_verified'])) {
-    header("Location: admin_verify.php");
-    exit();
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">

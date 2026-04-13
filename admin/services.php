@@ -7,10 +7,6 @@ if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     exit();
 }
 
-if (empty($_SESSION['admin_verified'])) {
-    header("Location: admin_verify.php");
-    exit();
-}
 
 // Get unique service categories for filter
 $categoriesQuery = "SELECT DISTINCT service_category FROM services WHERE service_category IS NOT NULL AND service_category != '' ORDER BY service_category";
@@ -354,10 +350,6 @@ $servicesResult = mysqli_query($con, $servicesSql);
             </div>
             
             <button class="btn btn-primary" id="openAddServiceBtn">ADD NEW SERVICE</button>
-            
-            <button class="btn btn-accent" onclick="printServices()">
-                <i class="fas fa-print"></i> Print
-            </button>
         </div>
 
         <div class="table-responsive">

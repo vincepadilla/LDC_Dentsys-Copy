@@ -42,6 +42,7 @@ $user = $user_result->fetch_assoc();
 
 // ✅ Fetch all appointments (if patient exists)
 $all_appointments = [];
+$hasFeedback = false;
 if (!empty($user['patient_id'])) {
     // Check if ticket_code column exists
     $colCheck = mysqli_query($con, "SHOW COLUMNS FROM appointments LIKE 'ticket_code'");
@@ -121,6 +122,15 @@ if (!empty($user['patient_id'])) {
         
         return 0;
     });
+
+    $feedback_check = $con->prepare("SELECT feedback_id FROM feedback WHERE user_id = ?");
+    if ($feedback_check) {
+        $feedback_check->bind_param("s", $user_id);
+        $feedback_check->execute();
+        $feedback_result = $feedback_check->get_result();
+        $hasFeedback = $feedback_result && $feedback_result->num_rows > 0;
+        $feedback_check->close();
+    }
 }
 ?>
 
@@ -154,6 +164,127 @@ if (!empty($user['patient_id'])) {
             width: 100%;
             max-width: 1200px;
             margin: 0 auto;
+        }
+
+        .appointments-full-width > .card {
+            background: linear-gradient(180deg, #f8fbff 0%, #ffffff 30%);
+        }
+
+        .appointments-grid {
+            display: flex;
+            flex-direction: column;
+            margin-top: 14px;
+            flex: 1;
+        }
+
+        .appointment-section-card {
+            border: 1px solid #e6edf5;
+            border-radius: 14px;
+            background: #ffffff;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .appointment-card {
+            border: 1px solid #e6edf5;
+            border-radius: 14px;
+            background: #fcfdff;
+            padding: 14px;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+            margin-bottom: 20px;
+        }
+
+        .appointment-card:last-child {
+            margin-bottom: 0;
+        }
+
+        .appointment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            padding: 0;
+            background: transparent;
+            border-bottom: none;
+        }
+
+        .appointment-header h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 0.96rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .walkin-tag {
+            background: #a5f9c8;
+            color: #155724;
+            border: 1px solid #000;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+        }
+
+        .appointment-details {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+            padding: 0;
+        }
+
+        .detail-item {
+            background: #f8fafc;
+            border: 1px solid #e7eef5;
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-label {
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 0;
+        }
+
+        .detail-label-icon {
+            font-size: 12px;
+        }
+
+        .detail-value {
+            margin-top: 6px;
+            color: #0f172a;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .appointment-message {
+            margin-top: 12px;
+            padding: 0;
+            color: #475569;
+            font-style: normal;
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        .appointment-actions {
+            display: flex;
+            gap: 10px;
+            padding: 0;
+            margin-top: 14px;
         }
         
         /* Notification System Styles */
@@ -437,9 +568,118 @@ if (!empty($user['patient_id'])) {
         
         /* Walk-in Status Badge */
         .status-walkin {
-            background-color: #E9D5FF;
-            color: #6B21A8;
-            border: 1px solid #8B5CF6;
+            background-color: #a5f9c8;
+            color: #155724;
+            border: 1px solid black;
+        }
+
+        .btn-feedback {
+            background: #10B981;
+            color: white;
+        }
+
+        .btn-feedback:hover:not(.disabled) {
+            background: #059669;
+        }
+
+        .btn-feedback.disabled {
+            background: #6B7280;
+        }
+
+        #feedbackModal .edit-modal-content {
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 24px 60px rgba(2, 6, 23, 0.28);
+            border: 1px solid #e5e7eb;
+        }
+
+        #feedbackModal .close {
+            top: 14px;
+            right: 14px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #f3f4f6;
+            color: #374151;
+            font-size: 20px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #feedbackModal .close:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .feedback-modal-heading {
+            margin-bottom: 18px;
+        }
+
+        .feedback-modal-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        #feedbackModal .feedback-modal-heading h3 {
+            margin: 0 0 6px 0;
+            font-size: 1.35rem;
+            color: #111827;
+            font-weight: 700;
+            text-align: left;
+        }
+
+        .feedback-modal-subtitle {
+            margin: 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .feedback-modal-counter {
+            text-align: right;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #6B7280;
+        }
+
+        #feedbackModal .modal-actions {
+            margin-top: 18px;
+            gap: 10px;
+        }
+
+        #feedbackModal .btn-submit,
+        #feedbackModal .btn-cancel {
+            border-radius: 10px;
+            padding: 11px 18px;
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        #feedbackModal .btn-submit {
+            background: #48A6A7;
+            color: #fff;
+        }
+
+        #feedbackModal .btn-submit:hover {
+            background: #2a9d8f;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
         }
 
         /* Reschedule modal */
@@ -511,12 +751,46 @@ if (!empty($user['patient_id'])) {
         .reschedule-submit-btn { background: #48A6A7; color: #fff; }
         .reschedule-cancel-btn { background: #f3f4f6; color: #374151; }
         .time-slot-disabled { color: #9ca3af; cursor: not-allowed; }
+
+        @media (max-width: 768px) {
+            .appointment-details {
+                grid-template-columns: 1fr;
+            }
+
+            .appointment-actions {
+                flex-direction: column;
+            }
+
+            .appointment-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
     </style>
 </head>
 <body>
 
 <!-- Notification Container -->
 <div class="notification-container" id="notificationContainer"></div>
+
+<?php
+if (isset($_SESSION['feedback_success'])) {
+    echo "<script>
+        document.addEventListener('DOMContentLoaded', function() {
+            showNotification('success', 'Feedback Posted!', '" . addslashes($_SESSION['feedback_success']) . "');
+        });
+    </script>";
+    unset($_SESSION['feedback_success']);
+}
+if (isset($_SESSION['feedback_error'])) {
+    echo "<script>
+        document.addEventListener('DOMContentLoaded', function() {
+            showNotification('error', 'Error', '" . addslashes($_SESSION['feedback_error']) . "');
+        });
+    </script>";
+    unset($_SESSION['feedback_error']);
+}
+?>
 
 <!-- Confirmation Modal -->
 <div id="confirmationModal" class="confirmation-modal">
@@ -565,6 +839,32 @@ if (!empty($user['patient_id'])) {
     </div>
 </div>
 
+<!-- Feedback Modal -->
+<div id="feedbackModal" class="edit-modal">
+    <div class="edit-modal-content">
+        <span class="close" onclick="closeFeedbackModal()">&times;</span>
+        <div class="feedback-modal-heading">
+            <span class="feedback-modal-badge">Feedback</span>
+            <h3>Post your feedback</h3>
+            <p class="feedback-modal-subtitle">Share your experience with us. Your feedback will be displayed on our homepage.</p>
+        </div>
+        <form action="../controllers/submitFeedback.php" method="POST" id="feedbackForm">
+            <input type="hidden" name="appointment_id" id="feedback_appointment_id" value="">
+            <div class="form-group full-width">
+                <label>Your Feedback:</label>
+                <textarea name="feedback_text" id="feedback_text" rows="6" placeholder="Tell us about your experience..." required maxlength="500"></textarea>
+                <div class="feedback-modal-counter">
+                    <span id="charCount">0</span>/500 characters
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-cancel" onclick="closeFeedbackModal()">Cancel</button>
+                <button type="submit" class="btn-submit">POST FEEDBACK</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="account-container">
     <!-- Welcome Section -->
     <div class="welcome-section">
@@ -576,9 +876,7 @@ if (!empty($user['patient_id'])) {
                 <h1>All Your Appointments</h1>
                 <p>View and manage all your appointment history</p>
             </div>
-            <div class="header-actions">
-                <a href="../controllers/logout.php" class="btn btn-secondary logout-btn">Logout</a>
-            </div>
+            
         </div>
     </div>
 
@@ -587,7 +885,45 @@ if (!empty($user['patient_id'])) {
             <h2 class="card-title">Appointment History</h2>
             <p class="card-subtitle">Total Appointments: <?= count($all_appointments); ?></p>
 
+            <div class="appointments-grid">
+                <div class="appointment-section-card">
             <?php if (!empty($all_appointments)): ?>
+                <?php
+                $completedAppointmentId = null;
+                foreach ($all_appointments as $appointmentCheck) {
+                    $appointmentTypeCheck = $appointmentCheck['appointment_type'] ?? 'appointment';
+                    if (
+                        ($appointmentCheck['status'] === 'Complete' || $appointmentCheck['status'] === 'Completed') &&
+                        $appointmentTypeCheck === 'appointment'
+                    ) {
+                        $completedAppointmentId = $appointmentCheck['appointment_id'];
+                        break;
+                    }
+                }
+                ?>
+                <?php if ($completedAppointmentId && !$hasFeedback): ?>
+                    <div style="margin-bottom: 20px; padding: 15px; background: #f0fdf4; border: 2px solid #10B981; border-radius: 8px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+                            <div>
+                                <p style="margin: 0; font-weight: 600; color: #065f46;">Share Your Experience</p>
+                                <p style="margin: 5px 0 0 0; font-size: 14px; color: #047857;">Help us improve by posting your feedback</p>
+                            </div>
+                            <button type="button"
+                               class="btn btn-feedback"
+                               data-appointment-id="<?= htmlspecialchars($completedAppointmentId); ?>"
+                               onclick="openFeedbackModal(this)">
+                                Post Feedback
+                            </button>
+                        </div>
+                    </div>
+                <?php elseif ($hasFeedback): ?>
+                    <div style="margin-bottom: 20px; padding: 15px; background: #f0f9ff; border: 2px solid #3b82f6; border-radius: 8px;">
+                        <p style="margin: 0; color: #1e40af; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Thank you! You have already posted your feedback.</span>
+                        </p>
+                    </div>
+                <?php endif; ?>
                 <?php foreach ($all_appointments as $appointment): ?>
                     <?php
                     $status = $appointment['status'];
@@ -683,7 +1019,7 @@ if (!empty($user['patient_id'])) {
                         'Complete' => 'status-completed',
                         'Completed' => 'status-completed',
                         'Reschedule' => 'status-reschedule',
-                        'Walk-in' => 'status-walkin',
+                        'Walk-in' => 'status-confirmed',
                         default => 'status-default'
                     };
                     
@@ -717,12 +1053,12 @@ if (!empty($user['patient_id'])) {
                                          $status != 'Complete' && 
                                          $status != 'Completed');
                     ?>
-                    <div class="appointment-card" style="margin-bottom: 20px; <?= $isWalkin ? 'border-left: 4px solid #8B5CF6;' : ''; ?>">
+                    <div class="appointment-card" style="<?= $isWalkin ? 'border-left: 4px solid #8B5CF6;' : ''; ?>">
                         <div class="appointment-header">
                             <h3>
                                 <?= $isWalkin ? 'Walk-in #' : 'Appointment #'; ?><?= htmlspecialchars($appointment['appointment_id']); ?>
                                 <?php if ($isWalkin): ?>
-                                    <span style="background: #8B5CF6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 10px;">Walk-in</span>
+                                    <span class="walkin-tag">Walk-in</span>
                                 <?php endif; ?>
                             </h3>
                             <span class="status-badge <?= $statusClass; ?>"><?= htmlspecialchars($status); ?></span>
@@ -731,30 +1067,30 @@ if (!empty($user['patient_id'])) {
                         <div class="appointment-details">
                             <?php if (!$isWalkin): ?>
                                 <div class="detail-item">
-                                    <span class="detail-label">Date</span>
+                                    <span class="detail-label"><span class="detail-label-icon">📅</span> Date</span>
                                     <span class="detail-value"><?= htmlspecialchars($appointment['appointment_date'] ?? 'N/A'); ?></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Time</span>
+                                    <span class="detail-label"><span class="detail-label-icon">⏰</span> Time</span>
                                     <span class="detail-value"><?= htmlspecialchars($appointment['appointment_time'] ?? 'N/A'); ?></span>
                                 </div>
                             <?php else: ?>
                                 <div class="detail-item">
-                                    <span class="detail-label">Created</span>
+                                    <span class="detail-label"><span class="detail-label-icon">📅</span> Created</span>
                                     <span class="detail-value"><?= date('F j, Y', strtotime($appointment['created_at'])); ?></span>
                                 </div>
                             <?php endif; ?>
                             <div class="detail-item">
-                                <span class="detail-label">Service</span>
+                                <span class="detail-label"><span class="detail-label-icon">🦷</span> Service</span>
                                 <span class="detail-value"><?= htmlspecialchars($appointment['sub_service'] ?? $appointment['service_category'] ?? 'N/A'); ?></span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">Dentist</span>
+                                <span class="detail-label"><span class="detail-label-icon">👨‍⚕️</span> Dentist</span>
                                 <span class="detail-value"><?= $isWalkin ? htmlspecialchars($appointment['dentist_name'] ?? 'N/A') : 'Dr. Michelle Landero'; ?></span>
                             </div>
                             <?php if ($isWalkin && !empty($appointment['branch'])): ?>
                                 <div class="detail-item">
-                                    <span class="detail-label">Branch</span>
+                                    <span class="detail-label"><span class="detail-label-icon">📍</span> Branch</span>
                                     <span class="detail-value"><?= htmlspecialchars($appointment['branch']); ?></span>
                                 </div>
                             <?php endif; ?>
@@ -859,6 +1195,14 @@ if (!empty($user['patient_id'])) {
                                    <?= $buttonsDisabled ? 'disabled style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"' : 'onclick="openRescheduleModal(this)"'; ?>>
                                     Reschedule
                                 </button>
+                                <?php if (($status === 'Complete' || $status === 'Completed') && !$isWalkin && !$hasFeedback): ?>
+                                    <button type="button"
+                                       class="btn btn-feedback"
+                                       data-appointment-id="<?= htmlspecialchars($appointment['appointment_id']); ?>"
+                                       onclick="openFeedbackModal(this)">
+                                        Post Feedback
+                                    </button>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -871,6 +1215,8 @@ if (!empty($user['patient_id'])) {
                     <a href="index.php" class="btn btn-primary">Book an Appointment</a>
                 </div>
             <?php endif; ?>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -985,15 +1331,35 @@ function closeConfirmationModal() {
     pendingAction = null;
 }
 
+function openFeedbackModal(button) {
+    const modal = document.getElementById("feedbackModal");
+    const appointmentId = button.getAttribute('data-appointment-id');
+    document.getElementById('feedback_appointment_id').value = appointmentId;
+    document.getElementById('feedback_text').value = '';
+    document.getElementById('charCount').textContent = '0';
+    modal.style.display = "flex";
+    setTimeout(() => modal.classList.add("show"), 10);
+}
+
+function closeFeedbackModal() {
+    const modal = document.getElementById("feedbackModal");
+    modal.classList.remove("show");
+    setTimeout(() => modal.style.display = "none", 300);
+}
+
 // Close modal when clicking outside
 window.addEventListener('click', function(event) {
     const modal = document.getElementById('confirmationModal');
     const rescheduleModal = document.getElementById('rescheduleModal');
+    const feedbackModal = document.getElementById('feedbackModal');
     if (event.target === modal) {
         closeConfirmationModal();
     }
     if (event.target === rescheduleModal) {
         closeRescheduleModal();
+    }
+    if (event.target === feedbackModal) {
+        closeFeedbackModal();
     }
 });
 // ==================== END CONFIRMATION MODAL ====================
@@ -1319,6 +1685,42 @@ function requestRefund(button) {
     });
 }
 // ==================== END REFUND REQUEST AJAX ====================
+
+document.addEventListener('DOMContentLoaded', function() {
+    const feedbackText = document.getElementById('feedback_text');
+    const charCount = document.getElementById('charCount');
+
+    if (feedbackText && charCount) {
+        feedbackText.addEventListener('input', function() {
+            const length = this.value.length;
+            charCount.textContent = length;
+            if (length > 500) {
+                charCount.style.color = '#EF4444';
+            } else if (length > 400) {
+                charCount.style.color = '#F59E0B';
+            } else {
+                charCount.style.color = '#6B7280';
+            }
+        });
+    }
+
+    const feedbackForm = document.getElementById('feedbackForm');
+    if (feedbackForm) {
+        feedbackForm.addEventListener('submit', function(e) {
+            const value = (feedbackText ? feedbackText.value : '').trim();
+            if (value.length < 10) {
+                e.preventDefault();
+                showNotification('warning', 'Feedback Too Short', 'Please provide at least 10 characters of feedback.');
+                return false;
+            }
+            if (value.length > 500) {
+                e.preventDefault();
+                showNotification('error', 'Feedback Too Long', 'Please keep your feedback under 500 characters.');
+                return false;
+            }
+        });
+    }
+});
 </script>
 
 <?php include_once('../layouts/footer.php'); ?>

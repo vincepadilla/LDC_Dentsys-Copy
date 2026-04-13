@@ -109,7 +109,7 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
         <a href="../views/admin.php" class="back-button" onclick="navigateBack(event)">
             <i class="fas fa-arrow-left"></i> Back to Admin
         </a>
-        <h2><i class="fas fa-calendar-alt"></i> APPOINTMENTS</h2>
+        <h2><i class="fas fa-calendar-alt"></i> APPOINTMENT MANAGEMENT</h2>
         <p style="color: #6b7280; margin-bottom: 30px;">Manage patient appointments, confirm, reschedule, cancel, and mark as completed.</p>
         
         <!-- Action Buttons -->
@@ -146,6 +146,15 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
                     <option value="cancelled">Cancelled</option>
                     <option value="no-show">No-Show</option>
                 </select> 
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-branch"><i class="fa-solid fa-house-chimney-medical"></i> Branch:</label>
+                <select id="filter-branch" onchange="filterAppointments()">
+                    <option value="">All Branches</option>
+                    <option value="comembo">Comembo</option>
+                    <option value="taytay">Taytay</option>
+                </select>
             </div>
 
             <div class="filter-group">
@@ -1103,6 +1112,7 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
             dateCategory: document.getElementById('filter-date-category')?.value || '',
             date: document.getElementById('filter-date')?.value || '',
             status: document.getElementById('filter-status')?.value || '',
+            branch: document.getElementById('filter-branch')?.value || '',
             page: currentPage
         };
 
@@ -1132,9 +1142,11 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
                 const dateCategoryEl = document.getElementById('filter-date-category');
                 const dateEl = document.getElementById('filter-date');
                 const statusEl = document.getElementById('filter-status');
+                const branchEl = document.getElementById('filter-branch');
                 if (dateCategoryEl) dateCategoryEl.value = state.dateCategory;
                 if (dateEl) dateEl.value = state.date;
                 if (statusEl) statusEl.value = state.status;
+                if (branchEl) branchEl.value = state.branch;
 
                 handleDateCategoryChange();
                 filterAppointments();
@@ -1228,6 +1240,7 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
         const dateCategory = document.getElementById("filter-date-category").value;
         const selectedDate = document.getElementById("filter-date").value;
         const selectedStatus = document.getElementById("filter-status").value.toLowerCase();
+        const selectedBranch = (document.getElementById("filter-branch")?.value || "").toLowerCase();
         const searchText = (document.getElementById("filter-search")?.value || "").toLowerCase().trim();
         // Get all appointment rows (includes both table rows TR and mobile cards div since cards have both classes)
         const allRows = document.querySelectorAll(".appointment-row");
@@ -1279,6 +1292,7 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
         allRows.forEach(row => {
             const rowDate = row.getAttribute("data-date");
             const rowStatus = row.getAttribute("data-status") ? row.getAttribute("data-status").toLowerCase() : "";
+            const rowBranch = (row.getAttribute("data-branch") || "").toLowerCase();
             const rowSearchText = (
                 (row.getAttribute("data-appointment-id") || '') + ' ' +
                 (row.getAttribute("data-patient-name") || '') + ' ' +
@@ -1288,8 +1302,14 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
             const matchesDate = matchesDateFilter(rowDate, dateCategory, selectedDate, todayStr, weekStart, weekEnd, monthStart, monthEnd);
             const matchesStatus = selectedStatus === "" || rowStatus === selectedStatus;
             const matchesSearch = searchText === "" || rowSearchText.includes(searchText);
+            let matchesBranch = true;
+            if (selectedBranch === "comembo") {
+                matchesBranch = rowBranch.includes("comembo");
+            } else if (selectedBranch === "taytay") {
+                matchesBranch = rowBranch.includes("taytay");
+            }
             
-            if (matchesDate && matchesStatus && matchesSearch) {
+            if (matchesDate && matchesStatus && matchesSearch && matchesBranch) {
                 row.setAttribute("data-visible", "true");
                 visibleRows.push(row);
             } else {

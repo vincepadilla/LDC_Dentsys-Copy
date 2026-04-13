@@ -61,6 +61,7 @@ if (empty($user)) {
 
 // ✅ Fetch most recent appointment (if patient exists)
 $recent_appointments = [];
+$upcoming_appointment = null;
 $hasFeedback = false;
 if (!empty($user['patient_id'])) {
     // Query for the most recent appointment with payment information
@@ -99,6 +100,26 @@ if (!empty($user['patient_id'])) {
     $feedback_result = $feedback_check->get_result();
     $hasFeedback = $feedback_result->num_rows > 0;
     $feedback_check->close();
+
+    // Fetch upcoming appointment (today or tomorrow)
+    $todayDate = date('Y-m-d');
+    $tomorrowDate = date('Y-m-d', strtotime('+1 day'));
+    $upcoming_query = $con->prepare("
+        SELECT a.appointment_id, a.appointment_date, a.appointment_time,
+               COALESCE(s.sub_service, s.service_category) as service_display,
+               s.sub_service, s.service_category, a.status, a.branch
+        FROM appointments a
+        INNER JOIN services s ON a.service_id = s.service_id
+        WHERE a.patient_id = ?
+          AND a.appointment_date IN (?, ?)
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
+        LIMIT 1
+    ");
+    $upcoming_query->bind_param("sss", $user['patient_id'], $todayDate, $tomorrowDate);
+    $upcoming_query->execute();
+    $upcoming_result = $upcoming_query->get_result();
+    $upcoming_appointment = $upcoming_result->fetch_assoc() ?: null;
+    $upcoming_query->close();
 }
 
 // ✅ Fetch most recent walk-in appointment from database
@@ -1015,6 +1036,608 @@ console.log('DEBUG: Found appointments => " . count($recent_appointments) . "');
                 width: 100%;
             }
         }
+
+        /* Change password modal refresh (match edit account modal layout) */
+        #credentialsModal .edit-modal-content {
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 24px 60px rgba(2, 6, 23, 0.28);
+            border: 1px solid #e5e7eb;
+        }
+
+        #credentialsModal .close {
+            top: 14px;
+            right: 14px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #f3f4f6;
+            color: #374151;
+            font-size: 20px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #credentialsModal .close:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .credentials-modal-heading {
+            margin-bottom: 18px;
+        }
+
+        .credentials-modal-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        #credentialsModal .credentials-modal-heading h3 {
+            margin: 0 0 6px 0;
+            font-size: 1.35rem;
+            color: #111827;
+            font-weight: 700;
+            text-align: left;
+        }
+
+        .credentials-modal-subtitle {
+            margin: 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        #credentialsModal .form-group {
+            margin: 0 0 14px 0;
+            position: relative;
+        }
+
+        #credentialsModal .form-group:last-of-type {
+            margin-bottom: 0;
+        }
+
+        #credentialsModal label {
+            margin-bottom: 8px;
+            color: #111827;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        #credentialsModal input {
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 11px 42px 11px 12px;
+            background: #fff;
+            font-size: 14px;
+            width: 100%;
+        }
+
+        #credentialsModal input:focus {
+            outline: none;
+            border-color: #48A6A7;
+            box-shadow: 0 0 0 3px rgba(72, 166, 167, 0.18);
+        }
+
+        #credentialsModal .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 38px;
+            cursor: pointer;
+            user-select: none;
+            color: #64748b;
+            font-size: 16px;
+        }
+
+        #credentialsModal .password-requirements {
+            margin-top: 16px;
+        }
+
+        #credentialsModal .modal-actions {
+            margin-top: 18px;
+            gap: 10px;
+        }
+
+        #credentialsModal .btn-submit,
+        #credentialsModal .btn-cancel {
+            border-radius: 10px;
+            padding: 11px 18px;
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        #credentialsModal .btn-submit {
+            background: #48A6A7;
+            color: #fff;
+        }
+
+        #credentialsModal .btn-submit:hover {
+            background: #2a9d8f;
+        }
+
+        @media (max-width: 720px) {
+            #credentialsModal .edit-modal-content {
+                padding: 20px;
+            }
+
+            #credentialsModal .modal-actions {
+                flex-direction: column;
+            }
+
+            #credentialsModal .btn-submit,
+            #credentialsModal .btn-cancel {
+                width: 100%;
+            }
+        }
+
+        /* Dashboard UI refresh (layout/styling only) */
+        .account-layout {
+            display: grid;
+            grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.4fr);
+            gap: 24px;
+            align-items: stretch;
+        }
+
+        .left-column,
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            height: 100%;
+        }
+
+        .card {
+            background: #ffffff;
+            border: 1px solid #e9edf3;
+            border-radius: 18px;
+            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+            padding: 22px;
+        }
+
+        .left-column > .card,
+        .right-column > .card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+        }
+
+        .card-subtitle {
+            margin: 8px 0 0;
+            color: #64748b;
+            font-size: 0.92rem;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 6px;
+        }
+
+        .btn-edit {
+            border: 1px solid #d5deea;
+            background: #f8fafc;
+            color: #0f172a;
+            font-weight: 600;
+            border-radius: 10px;
+            padding: 8px 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-edit:hover {
+            background: #eef6f6;
+            border-color: #48A6A7;
+            color: #0b7285;
+        }
+
+        .account-section-heading {
+            margin: 16px 0 10px;
+            color: #334155;
+            font-size: 0.92rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        .info-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .info-item {
+            background: #f8fafc;
+            border: 1px solid #e6edf5;
+            border-radius: 12px;
+            padding: 12px 14px;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .info-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            background: #e7f5f5;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .info-label {
+            color: #64748b;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .info-value {
+            color: #0f172a;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .action-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .action-item {
+            border: 1px solid #e6edf5;
+            border-radius: 12px;
+            background: #ffffff;
+            padding: 11px 13px;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .action-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+            border-color: #cfe2f3;
+        }
+
+        .action-item.logout-action {
+            width: 100%;
+            border: 1px solid rgba(220, 38, 38, 0.45);
+            border-radius: 18px;
+            padding: 14px 16px;
+            color: #ffffff;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 45%, #b91c1c 100%);
+            box-shadow: 0 12px 24px rgba(185, 28, 28, 0.24);
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .action-item.logout-action::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(120deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+            opacity: 0.8;
+            pointer-events: none;
+        }
+
+        .logout-main {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            position: relative;
+            z-index: 1;
+        }
+
+        .logout-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #ffffff;
+            flex-shrink: 0;
+        }
+
+        .logout-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .logout-title {
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.2;
+        }
+
+        .logout-subtitle {
+            font-size: 0.73rem;
+            color: rgba(255, 255, 255, 0.88);
+            line-height: 1.35;
+            white-space: normal;
+        }
+
+        .logout-arrow {
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #ffffff;
+            transform: translateX(0);
+            transition: transform 0.25s ease, background 0.25s ease;
+            position: relative;
+            z-index: 1;
+            flex-shrink: 0;
+        }
+
+        .action-item.logout-action:hover {
+            transform: translateY(-2px);
+            border-color: rgba(248, 113, 113, 0.6);
+            box-shadow: 0 16px 30px rgba(185, 28, 28, 0.3);
+        }
+
+        .action-item.logout-action:hover .logout-arrow {
+            transform: translateX(3px);
+            background: rgba(255, 255, 255, 0.28);
+        }
+
+        .action-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #f1f5f9;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+        }
+
+        .action-text {
+            font-weight: 600;
+            color: #0f172a;
+            font-size: 0.92rem;
+        }
+
+        .appointments-board {
+            background: linear-gradient(180deg, #f8fbff 0%, #ffffff 30%);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .welcome-instructions {
+            margin-top: 16px;
+            background: #eff6ff;
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+            padding: 14px 16px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .welcome-instructions-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #1e3a8a;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .welcome-instructions p {
+            margin: 8px 0 0 0;
+            color: #334155;
+            font-size: 0.92rem;
+            line-height: 1.55;
+        }
+
+        .appointments-grid {
+            display: flex;
+            flex-direction: column;
+            margin-top: 14px;
+            flex: 1;
+        }
+
+        .appointment-section-card {
+            border: 1px solid #e6edf5;
+            border-radius: 14px;
+            background: #ffffff;
+            padding: 16px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .appointment-section-header {
+            margin-bottom: 12px;
+        }
+
+        .appointment-tabs {
+            display: inline-flex;
+            align-self: flex-start;
+            background: #f1f5f9;
+            border: 1px solid #dbe6f2;
+            border-radius: 999px;
+            padding: 4px;
+            margin-bottom: 14px;
+            gap: 4px;
+        }
+
+        .appointment-tab-btn {
+            border: none;
+            border-radius: 999px;
+            background: transparent;
+            color: #64748b;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .appointment-tab-btn:hover {
+            background: #e2e8f0;
+            color: #1e293b;
+        }
+
+        .appointment-tab-btn.active {
+            background: #48A6A7;
+            color: #ffffff;
+            box-shadow: 0 6px 16px rgba(72, 166, 167, 0.28);
+        }
+
+        .appointment-tab-panels {
+            flex: 1;
+            min-height: 0;
+        }
+
+        .appointment-tab-panel {
+            display: none;
+            animation: appointmentTabFade 0.2s ease;
+        }
+
+        .appointment-tab-panel.active {
+            display: block;
+        }
+
+        @keyframes appointmentTabFade {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .appointment-section-title {
+            margin: 0;
+            font-size: 1.02rem;
+            color: #0f172a;
+            font-weight: 700;
+        }
+
+        .appointment-section-subtitle {
+            margin: 5px 0 0;
+            color: #64748b;
+            font-size: 0.84rem;
+        }
+
+        .appointment-card {
+            border: 1px solid #e6edf5;
+            border-radius: 14px;
+            background: #fcfdff;
+            padding: 14px;
+        }
+
+        .appointment-header h3 {
+            font-size: 0.96rem;
+            margin: 0;
+            color: #0f172a;
+        }
+
+        .appointment-details {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .detail-item {
+            background: #f8fafc;
+            border: 1px solid #e7eef5;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .detail-label {
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .detail-label-icon {
+            font-size: 12px;
+        }
+
+        .detail-value {
+            margin-top: 6px;
+            color: #0f172a;
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: block;
+        }
+
+        .upcoming-empty-state {
+            text-align: center;
+            border: 1px dashed #d5e2ee;
+            border-radius: 14px;
+            padding: 24px 18px;
+            background: #fbfdff;
+        }
+
+        .upcoming-empty-state .no-appointment-icon {
+            font-size: 34px;
+            margin-bottom: 8px;
+        }
+
+        .upcoming-empty-state h3 {
+            margin: 4px 0;
+            color: #0f172a;
+            font-size: 1rem;
+        }
+
+        .upcoming-empty-state p {
+            margin: 0;
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 1024px) {
+            .account-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .appointment-details {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1081,23 +1704,24 @@ if (isset($_SESSION['password_error'])) {
                 <h1>Welcome back, <?= htmlspecialchars($user['first_name'] ?? 'User'); ?></h1>
                 <p>Manage your appointments and account settings</p>
             </div>
-            <div class="header-actions">
-                <a href="../controllers/patientLogout.php" class="btn btn-secondary logout-btn">Logout</a>
-            </div>
+        </div>
+        <div class="welcome-instructions">
+            <h3 class="welcome-instructions-title"><span>ℹ️</span><span>Instructions</span></h3>
+            <p>To cancel or reschedule your appointment, please click the Recent Appointment section.</p>
         </div>
     </div>
 
     <div class="account-layout">
         <!-- Left Column - Account Info & Quick Actions -->
         <div class="left-column">
-            <!-- Account Information -->
             <div class="card">
                 <div class="card-header">
-                    <h2 class="card-title">Account Information</h2>
+                    <h2 class="card-title">Account &amp; Actions</h2>
                     <button class="btn-edit" onclick="openEditModal()">Edit</button>
                 </div>
-                <p class="card-subtitle">Your personal details</p>
+                <p class="card-subtitle">Your personal details and quick actions</p>
                 
+                <p class="account-section-heading">Account Information</p>
                 <div class="info-list">
                     <div class="info-item">
                         <span class="info-label">Username</span>
@@ -1112,12 +1736,7 @@ if (isset($_SESSION['password_error'])) {
                         <span class="info-value"><?= htmlspecialchars($user['email'] ?? ''); ?></span>
                     </div>
                 </div>
-            </div>
-
-            <!-- Quick Actions -->
-            <div class="card">
-                <h2 class="card-title">Quick Actions</h2>
-                
+                <p class="account-section-heading">Quick Actions</p>
                 <div class="action-list">
                     <a href="allAppointments.php" class="action-item">
                         <span class="action-icon">📋</span>
@@ -1131,17 +1750,99 @@ if (isset($_SESSION['password_error'])) {
                         <span class="action-icon">📍</span>
                         <span class="action-text">Find Locations</span>
                     </a>
+                    <a href="../controllers/patientLogout.php" class="action-item logout-action">
+                        <span class="logout-main">
+                            <span class="logout-icon"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+                            <span class="logout-copy">
+                                <span class="logout-title">Logout</span>
+                                <span class="logout-subtitle">Sign out of your account securely</span>
+                            </span>
+                        </span>
+                        <span class="logout-arrow" aria-hidden="true">→</span>
+                    </a>
                 </div>
             </div>
         </div>
 
-        <!-- Right Column - Recent Appointments -->
+        <!-- Right Column - Upcoming and Recent Appointments -->
         <div class="right-column">
-            <div class="card">
-                <h2 class="card-title">Your Recent Appointment</h2>
-                <p class="card-subtitle">View and manage your most recent appointment</p>
+            <div class="card appointments-board">
+                <h2 class="card-title">Appointments</h2>
+                <p class="card-subtitle">Manage your upcoming and recent appointments</p>
 
-                <?php if (!empty($recent_appointments)): ?>
+                <div class="appointments-grid">
+                    <div class="appointment-section-card">
+                        <div class="appointment-tabs" role="tablist" aria-label="Appointment views">
+                            <button type="button" class="appointment-tab-btn active" data-tab-target="upcoming" role="tab" aria-selected="true">Upcoming</button>
+                            <button type="button" class="appointment-tab-btn" data-tab-target="recent" role="tab" aria-selected="false">Recent</button>
+                        </div>
+
+                        <div class="appointment-tab-panels">
+                            <div class="appointment-tab-panel active" data-tab-panel="upcoming">
+                        <div class="appointment-section-header">
+                            <h3 class="appointment-section-title">Your Upcoming Appointment</h3>
+                            <p class="appointment-section-subtitle">Today or tomorrow's scheduled appointment</p>
+                        </div>
+
+                        <?php if (!empty($upcoming_appointment)): ?>
+                            <?php
+                            $upcomingStatus = $upcoming_appointment['status'];
+                            $upcomingStatusClass = match($upcomingStatus) {
+                                'Pending' => 'status-pending',
+                                'Confirmed' => 'status-confirmed',
+                                'Walk-in' => 'status-confirmed',
+                                'Follow-up' => 'status-follow-up',
+                                'Cancelled' => 'status-cancelled',
+                                'Complete' => 'status-completed',
+                                'Completed' => 'status-completed',
+                                'Reschedule' => 'status-reschedule',
+                                default => 'status-default'
+                            };
+                            ?>
+                            <div class="appointment-card" style="margin-bottom: 0;">
+                                <div class="appointment-header">
+                                    <h3>Appointment #<?= htmlspecialchars($upcoming_appointment['appointment_id']); ?></h3>
+                                    <span class="status-badge <?= $upcomingStatusClass; ?>"><?= htmlspecialchars($upcomingStatus); ?></span>
+                                </div>
+
+                                <div class="appointment-details">
+                                    <div class="detail-item">
+                                        <span class="detail-label"><span class="detail-label-icon">📅</span> Date</span>
+                                        <span class="detail-value"><?= htmlspecialchars($upcoming_appointment['appointment_date']); ?></span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label"><span class="detail-label-icon">⏰</span> Time</span>
+                                        <span class="detail-value"><?= htmlspecialchars($upcoming_appointment['appointment_time']); ?></span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label"><span class="detail-label-icon">🦷</span> Service</span>
+                                        <span class="detail-value"><?= htmlspecialchars($upcoming_appointment['service_display'] ?? $upcoming_appointment['sub_service'] ?? $upcoming_appointment['service_category'] ?? 'N/A'); ?></span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label"><span class="detail-label-icon">👨‍⚕️</span> Dentist</span>
+                                        <span class="detail-value">Dr. Michelle Landero</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label"><span class="detail-label-icon">📍</span> Place</span>
+                                        <span class="detail-value">Landero Dental Clinic - <?= htmlspecialchars($upcoming_appointment['branch'] ?? 'Selected Branch'); ?></span>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php else: ?>
+                            <div class="no-appointment upcoming-empty-state">
+                                <div class="no-appointment-icon">📅</div>
+                                <h3>No upcoming appointments</h3>
+                            </div>
+                        <?php endif; ?>
+                            </div>
+
+                            <div class="appointment-tab-panel" data-tab-panel="recent">
+                        <div class="appointment-section-header">
+                            <h3 class="appointment-section-title">Your Recent Appointment</h3>
+                            <p class="appointment-section-subtitle">View and manage your most recent appointment</p>
+                        </div>
+
+                        <?php if (!empty($recent_appointments)): ?>
                     <?php 
                     // Check if any appointment is completed and user hasn't posted feedback
                     $showFeedbackButton = false;
@@ -1297,19 +1998,19 @@ if (isset($_SESSION['password_error'])) {
                             
                             <div class="appointment-details">
                                 <div class="detail-item">
-                                    <span class="detail-label">Date</span>
+                                    <span class="detail-label"><span class="detail-label-icon">📅</span> Date</span>
                                     <span class="detail-value js-appointment-date"><?= htmlspecialchars($recent_appointment['appointment_date']); ?></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Time</span>
+                                    <span class="detail-label"><span class="detail-label-icon">⏰</span> Time</span>
                                     <span class="detail-value js-appointment-time"><?= htmlspecialchars($recent_appointment['appointment_time']); ?></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Service</span>
+                                    <span class="detail-label"><span class="detail-label-icon">🦷</span> Service</span>
                                     <span class="detail-value js-appointment-service"><?= htmlspecialchars($recent_appointment['service_display'] ?? $recent_appointment['sub_service'] ?? $recent_appointment['service_category'] ?? 'N/A'); ?></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Dentist</span>
+                                    <span class="detail-label"><span class="detail-label-icon">👨‍⚕️</span> Dentist</span>
                                     <span class="detail-value">Dr. Michelle Landero</span>
                                 </div>
                             </div>
@@ -1440,7 +2141,11 @@ if (isset($_SESSION['password_error'])) {
                         <a href="index.php" class="btn btn-primary">Book an Appointment</a>
                         <a href="allAppointments.php" class="btn btn-secondary" style="margin-top: 10px; display: inline-block;">View All Appointments</a>
                     </div>
-                <?php endif; ?>
+                        <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1610,7 +2315,11 @@ if (isset($_SESSION['password_error'])) {
 <div id="credentialsModal" class="edit-modal">
     <div class="edit-modal-content">
         <span class="close" onclick="closeCredentialsModal()">&times;</span>
-        <h3>CHANGE PASSWORD</h3>
+        <div class="credentials-modal-heading">
+            <span class="credentials-modal-badge">Security</span>
+            <h3>Change password</h3>
+            <p class="credentials-modal-subtitle">Update your password to keep your account secure.</p>
+        </div>
         <form action="../controllers/updateCredentials.php" method="POST" id="credentialsForm">
             <div class="form-group full-width">
                 <label>Current Password:</label>
@@ -2593,6 +3302,29 @@ function requestRefund(button) {
     });
 }
 // ==================== END REFUND REQUEST AJAX ====================
+
+document.addEventListener('DOMContentLoaded', function() {
+    const tabButtons = document.querySelectorAll('.appointment-tab-btn');
+    const tabPanels = document.querySelectorAll('.appointment-tab-panel');
+
+    if (!tabButtons.length || !tabPanels.length) return;
+
+    tabButtons.forEach(function(button) {
+        button.addEventListener('click', function() {
+            const target = button.getAttribute('data-tab-target');
+
+            tabButtons.forEach(function(btn) {
+                const isActive = btn === button;
+                btn.classList.toggle('active', isActive);
+                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+
+            tabPanels.forEach(function(panel) {
+                panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === target);
+            });
+        });
+    });
+});
 
 </script>
 

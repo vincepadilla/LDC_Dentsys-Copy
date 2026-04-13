@@ -264,7 +264,6 @@
                     <h3>Quick Links</h3>
                     <ul class="footer-links">
                         <!-- PHP condition for login/account link would go here -->
-                        <li><a href="/login">Login</a></li>
                         <li><a href="/#services">Services</a></li>
                         <li><a href="/#dentists">Dentists</a></li>
                         <li><a href="/about">About Us</a></li>

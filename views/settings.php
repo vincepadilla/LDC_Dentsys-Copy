@@ -487,6 +487,85 @@ if (isset($_SESSION['settings_error'])) {
             margin-top: 2px;
         }
 
+        .maintenance-session-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 30000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .maintenance-session-modal.is-open {
+            display: flex;
+        }
+
+        .maintenance-session-modal__backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+        }
+
+        .maintenance-session-modal__dialog {
+            position: relative;
+            background: #fff;
+            border-radius: 16px;
+            padding: 28px;
+            max-width: 440px;
+            width: 100%;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+            border: 1px solid #e5e7eb;
+        }
+
+        .maintenance-session-modal__dialog h3 {
+            margin: 0 0 12px;
+            font-size: 18px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .maintenance-session-modal__dialog p {
+            margin: 0 0 24px;
+            font-size: 15px;
+            line-height: 1.5;
+            color: #4b5563;
+        }
+
+        .maintenance-session-modal__actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .maintenance-session-modal__actions button {
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s ease, transform 0.15s ease;
+        }
+
+        .maintenance-session-modal__btn-cancel {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .maintenance-session-modal__btn-cancel:hover {
+            background: #e5e7eb;
+        }
+
+        .maintenance-session-modal__btn-confirm {
+            background: #48A6A7;
+            color: #fff;
+        }
+
+        .maintenance-session-modal__btn-confirm:hover {
+            background: #3d8e90;
+        }
+
         .file-input-wrapper {
             position: relative;
             display: inline-block;
@@ -619,7 +698,8 @@ if (isset($_SESSION['settings_error'])) {
             
         </div>
 
-        <form id="settingsForm" action="../controllers/update_settings.php" method="POST" enctype="multipart/form-data" novalidate>
+        <form id="settingsForm" action="../controllers/update_settings.php" method="POST" enctype="multipart/form-data" novalidate
+              data-maintenance-was-on="<?php echo ($settingsData['maintenance_mode'] == '1') ? '1' : '0'; ?>">
             <div class="content-area">
                 <div id="settingsAlertContainer">
                     <?php if ($success_msg): ?>
@@ -881,6 +961,18 @@ if (isset($_SESSION['settings_error'])) {
         </form>
     </div>
 
+    <div id="maintenanceSessionModal" class="maintenance-session-modal" aria-hidden="true">
+        <div class="maintenance-session-modal__backdrop" data-maint-modal-dismiss="1"></div>
+        <div class="maintenance-session-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="maintenanceSessionModalTitle">
+            <h3 id="maintenanceSessionModalTitle">Maintenance mode</h3>
+            <p>There are users currently in session. Are you sure you want to enable Maintenance Mode?</p>
+            <div class="maintenance-session-modal__actions">
+                <button type="button" class="maintenance-session-modal__btn-cancel" id="maintenanceSessionModalCancel">Cancel</button>
+                <button type="button" class="maintenance-session-modal__btn-confirm" id="maintenanceSessionModalConfirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         function toggleSidebar() {
             const sidebar = document.getElementById("sidebar");
@@ -955,6 +1047,45 @@ if (isset($_SESSION['settings_error'])) {
             `;
         }
 
+        function openMaintenanceSessionConfirmModal() {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('maintenanceSessionModal');
+                const btnConfirm = document.getElementById('maintenanceSessionModalConfirm');
+                const btnCancel = document.getElementById('maintenanceSessionModalCancel');
+                const backdrop = modal ? modal.querySelector('[data-maint-modal-dismiss="1"]') : null;
+                if (!modal || !btnConfirm || !btnCancel) {
+                    resolve(false);
+                    return;
+                }
+
+                const finish = (value) => {
+                    modal.classList.remove('is-open');
+                    modal.setAttribute('aria-hidden', 'true');
+                    btnConfirm.removeEventListener('click', onConfirm);
+                    btnCancel.removeEventListener('click', onCancel);
+                    if (backdrop) {
+                        backdrop.removeEventListener('click', onCancel);
+                    }
+                    resolve(value);
+                };
+
+                function onConfirm() {
+                    finish(true);
+                }
+                function onCancel() {
+                    finish(false);
+                }
+
+                btnConfirm.addEventListener('click', onConfirm);
+                btnCancel.addEventListener('click', onCancel);
+                if (backdrop) {
+                    backdrop.addEventListener('click', onCancel);
+                }
+                modal.classList.add('is-open');
+                modal.setAttribute('aria-hidden', 'false');
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             // Restore previously active tab if available
             try {
@@ -1025,6 +1156,35 @@ if (isset($_SESSION['settings_error'])) {
 
                 const submitBtn = settingsForm.querySelector('.btn-save');
                 const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+
+                const wasMaintenanceOn = settingsForm.dataset.maintenanceWasOn === '1';
+                const maintenanceCb = settingsForm.querySelector('[name="maintenance_mode"]');
+                const nowMaintenanceOn = !!(maintenanceCb && maintenanceCb.checked);
+
+                if (nowMaintenanceOn && !wasMaintenanceOn && settingsForm.dataset.maintenanceSessionBypass !== '1') {
+                    try {
+                        const sessRes = await fetch('userControl.php?ajax_in_session_count=1', {
+                            credentials: 'same-origin',
+                            headers: { 'Accept': 'application/json' }
+                        });
+                        const sessData = await sessRes.json().catch(() => ({}));
+                        if (!sessRes.ok || !sessData.success) {
+                            throw new Error('session check failed');
+                        }
+                        const inSession = parseInt(sessData.in_session_count, 10) || 0;
+                        if (inSession > 0) {
+                            const confirmed = await openMaintenanceSessionConfirmModal();
+                            if (!confirmed) {
+                                return;
+                            }
+                            settingsForm.dataset.maintenanceSessionBypass = '1';
+                        }
+                    } catch (err) {
+                        renderSettingsAlert('error', 'Could not verify active user sessions. Please try again.');
+                        return;
+                    }
+                }
+
                 if (submitBtn) {
                     submitBtn.disabled = true;
                     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
@@ -1044,11 +1204,16 @@ if (isset($_SESSION['settings_error'])) {
                     const data = await response.json().catch(() => ({}));
                     if (response.ok && data.success) {
                         renderSettingsAlert('success', data.message || 'Settings updated successfully!');
+                        const cb = settingsForm.querySelector('[name="maintenance_mode"]');
+                        settingsForm.dataset.maintenanceWasOn = (cb && cb.checked) ? '1' : '0';
+                        delete settingsForm.dataset.maintenanceSessionBypass;
                     } else {
                         renderSettingsAlert('error', data.message || 'Some settings could not be updated.');
+                        delete settingsForm.dataset.maintenanceSessionBypass;
                     }
                 } catch (error) {
                     renderSettingsAlert('error', 'Failed to save settings. Please try again.');
+                    delete settingsForm.dataset.maintenanceSessionBypass;
                 } finally {
                     if (submitBtn) {
                         submitBtn.disabled = false;

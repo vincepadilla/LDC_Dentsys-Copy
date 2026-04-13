@@ -11,11 +11,6 @@ function hasColumn($con, $table, $column) {
     return $result && mysqli_num_rows($result) > 0;
 }
 
-if (!isset($_SESSION['userID']) || strtolower($_SESSION['role'] ?? '') !== 'admin' || empty($_SESSION['admin_verified'])) {
-    echo json_encode(["success" => false, "message" => "Unauthorized access."]);
-    exit();
-}
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(["success" => false, "message" => "Invalid request method."]);
     exit();

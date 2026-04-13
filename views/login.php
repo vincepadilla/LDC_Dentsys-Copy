@@ -37,7 +37,7 @@ if (isset($_POST['submit'])) {
                 // ✅ Verify password
                 if (password_verify($password, $row['password_hash'])) {
                     // ✅ Update last login timestamp
-                    $updateLastLogin = "UPDATE user_account SET last_login = NOW() WHERE user_id = ?";
+                    $updateLastLogin = "UPDATE user_account SET last_login = NOW(), last_activity = NOW() WHERE user_id = ?";
                     $updateStmt = $con->prepare($updateLastLogin);
                     $updateStmt->bind_param("s", $row['user_id']);
                     $updateStmt->execute();

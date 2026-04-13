@@ -112,6 +112,28 @@ foreach ($defaults as $key => $defaultValue) {
         $siteContent[$key] = $defaultValue;
     }
 }
+
+// Load service details grouped by category for dynamic modal content.
+$servicesByCategory = [];
+$servicesQuery = "SELECT service_category, sub_service, description FROM services ORDER BY service_category, sub_service";
+if ($serviceStmt = $con->prepare($servicesQuery)) {
+    $serviceStmt->execute();
+    $serviceResult = $serviceStmt->get_result();
+    while ($serviceRow = $serviceResult->fetch_assoc()) {
+        $categoryName = trim((string)($serviceRow['service_category'] ?? ''));
+        if ($categoryName === '') {
+            continue;
+        }
+        if (!isset($servicesByCategory[$categoryName])) {
+            $servicesByCategory[$categoryName] = [];
+        }
+        $servicesByCategory[$categoryName][] = [
+            'sub_service' => (string)($serviceRow['sub_service'] ?? ''),
+            'description' => (string)($serviceRow['description'] ?? '')
+        ];
+    }
+    $serviceStmt->close();
+}
 ?>
 
 
@@ -129,9 +151,68 @@ foreach ($defaults as $key => $defaultValue) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         .nav-links .login-status { display: inline-flex; align-items: center; margin-left: 8px; font-size: 18px; }
+        .nav-links .nav-account-item {
+            margin-left: auto;
+            margin-right: 12px;
+        }
+
+        .nav-links .nav-account-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            padding: 0;
+            font-size: 30px;
+            line-height: 1;
+            background: rgba(37, 99, 235, 0.1);
+            color: #1d4ed8;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+            transition: transform 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease, color 0.25s ease;
+            overflow: hidden;
+        }
+
+        .nav-links .nav-account-icon:after {
+            display: none;
+        }
+
+        .nav-links .nav-account-icon:hover {
+            transform: scale(1.07);
+            background: rgba(37, 99, 235, 0.18);
+            color: #1e40af;
+            box-shadow: 0 10px 18px rgba(30, 64, 175, 0.22);
+        }
+
+        .nav-links .nav-account-icon:focus-visible {
+            outline: 3px solid rgba(37, 99, 235, 0.35);
+            outline-offset: 2px;
+        }
+
+        @media (max-width: 768px) {
+            .nav-links .nav-account-item {
+                margin-left: 0;
+                margin-right: 0;
+            }
+        }
 
         .services-grid .service-card {
             overflow: hidden;
+        }
+
+        .service-card.is-clickable {
+            cursor: pointer;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .service-card.is-clickable:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 14px 30px rgba(17, 24, 39, 0.14);
+        }
+
+        .service-card.is-clickable:focus-visible {
+            outline: 3px solid #2563eb;
+            outline-offset: 2px;
         }
 
         .service-image {
@@ -141,6 +222,41 @@ foreach ($defaults as $key => $defaultValue) {
             overflow: hidden;
             margin-bottom: 18px;
             box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.08);
+        }
+
+        .services-subtitle {
+            margin-top: 10px;
+            color: #64748b;
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1.65;
+        }
+
+        .services-note-box {
+            margin-top: 16px;
+            display: inline-flex;
+            align-items: flex-start;
+            gap: 10px;
+            text-align: left;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 12px;
+            padding: 12px 14px;
+            color: #1e3a8a;
+            max-width: 760px;
+        }
+
+        .services-note-box .note-icon {
+            font-size: 18px;
+            line-height: 1;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+
+        .services-note-box .note-text {
+            margin: 0;
+            font-size: 0.95rem;
+            line-height: 1.5;
         }
 
         .service-image img {
@@ -153,6 +269,10 @@ foreach ($defaults as $key => $defaultValue) {
         @media (max-width: 600px) {
             .service-image {
                 height: 220px;
+            }
+
+            .services-note-box {
+                width: 100%;
             }
         }
 
@@ -484,6 +604,136 @@ foreach ($defaults as $key => $defaultValue) {
                 gap: 20px;
             }
         }
+
+        /* Service details modal */
+        .service-details-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 12000;
+            padding: 20px;
+            backdrop-filter: blur(3px);
+            opacity: 0;
+            transition: opacity 0.18s ease;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .service-details-modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        .service-details-modal {
+            width: min(760px, 100%);
+            max-height: 88vh;
+            overflow: hidden;
+            border-radius: 18px;
+            background: #ffffff;
+            box-shadow: 0 25px 60px rgba(2, 6, 23, 0.35);
+            display: flex;
+            flex-direction: column;
+            transform: translateY(10px) scale(0.95);
+            opacity: 0;
+            transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1.2), opacity 0.16s ease;
+        }
+
+        .service-details-modal-overlay.show .service-details-modal {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+        }
+
+        .service-details-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 18px 22px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f8fafc;
+        }
+
+        .service-details-modal-title {
+            margin: 0;
+            font-size: 22px;
+            color: #0f172a;
+            line-height: 1.3;
+        }
+
+        .service-details-close {
+            border: none;
+            background: #e2e8f0;
+            color: #0f172a;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .service-details-modal-body {
+            overflow-y: auto;
+            padding: 20px 22px 24px;
+        }
+
+        .service-details-image {
+            width: 100%;
+            height: 220px;
+            object-fit: cover;
+            border-radius: 12px;
+            margin-bottom: 18px;
+        }
+
+        .service-details-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            gap: 12px;
+        }
+
+        .service-details-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 14px;
+            background: #ffffff;
+        }
+
+        .service-details-item h4 {
+            margin: 0 0 6px;
+            font-size: 17px;
+            color: #1f2937;
+        }
+
+        .service-details-item p {
+            margin: 0;
+            color: #4b5563;
+            line-height: 1.55;
+        }
+
+        .service-details-empty {
+            color: #6b7280;
+            margin: 0;
+        }
+
+        @media (max-width: 640px) {
+            .service-details-modal-title {
+                font-size: 18px;
+            }
+
+            .service-details-modal-body {
+                padding: 16px;
+            }
+
+            .service-details-image {
+                height: 180px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -503,12 +753,16 @@ foreach ($defaults as $key => $defaultValue) {
             </a>
             
             <ul class="nav-links">
+                <li><a href="/views/index.php">Home</a></li>
                 <li><a href="#services">Services</a></li>
                 <li><a href="#dentists">Dentists</a></li>
                 <li><a href="#contact">Contact</a></li>
                 <?php if (isset($_SESSION['valid'])): ?>
-                    <!-- Account link first -->
-                    <li><a href="account.php" class="nav-btn">Account</a></li>
+                    <li class="nav-account-item">
+                        <a href="account.php" class="nav-btn nav-account-icon" aria-label="Account">
+                            <i class="fas fa-user-circle" aria-hidden="true"></i>
+                        </a>
+                    </li>
                 <?php else: ?>
                     <!-- Login link for non-logged in users -->
                     <li><a href="/views/login.php" class="nav-btn">Login</a></li>
@@ -554,11 +808,15 @@ foreach ($defaults as $key => $defaultValue) {
         <div class="container">
             <div class="section-title">
                 <h2 data-content-key="services_title"><?php echo htmlspecialchars($siteContent['services_title']); ?></h2>
-                <p data-content-key="services_subtitle"><?php echo htmlspecialchars($siteContent['services_subtitle']); ?></p>
+                <p class="services-subtitle">Comprehensive dental care for the whole family</p>
+                <div class="services-note-box" role="note" aria-label="Service cards instruction">
+                    <span class="note-icon" aria-hidden="true">ℹ️</span>
+                    <p class="note-text">You may click on each service card to view detailed information about the treatments offered.</p>
+                </div>
             </div>
             
             <div class="services-grid">
-                <div class="service-card" data-service="S001">
+                <div class="service-card is-clickable" data-service="S001" data-service-category="General Dentistry" role="button" tabindex="0" aria-label="View General Dentistry services">
                     <div class="service-image">
                         <img src="../assets/images/generaldentistry.jpg" alt="General Dentistry service">
                     </div>
@@ -567,7 +825,7 @@ foreach ($defaults as $key => $defaultValue) {
                     <button class="service-book-btn">Book Appointment</button>
                 </div>
                 
-                <div class="service-card" data-service="S002">
+                <div class="service-card is-clickable" data-service="S002" data-service-category="Orthodontics" role="button" tabindex="0" aria-label="View Orthodontics services">
                     <div class="service-image">
                         <img src="../assets/images/ortho.jpg" alt="Orthodontics service">
                     </div>
@@ -576,7 +834,7 @@ foreach ($defaults as $key => $defaultValue) {
                     <button class="service-book-btn">Book Appointment</button>
                 </div>
 
-                <div class="service-card" data-service="S003">
+                <div class="service-card is-clickable" data-service="S003" data-service-category="Oral Surgery" role="button" tabindex="0" aria-label="View Oral Surgery services">
                     <div class="service-image">
                         <img src="../assets/images/oralsur2.jpg" alt="Oral Surgery service">
                     </div>
@@ -585,7 +843,7 @@ foreach ($defaults as $key => $defaultValue) {
                     <button class="service-book-btn">Book Appointment</button>
                 </div>
 
-                <div class="service-card" data-service="S004">
+                <div class="service-card is-clickable" data-service="S004" data-service-category="Endodontics" role="button" tabindex="0" aria-label="View Endodontics services">
                     <div class="service-image">
                         <img src="../assets/images/endo.jpg" alt="Endodontics service">
                     </div>
@@ -594,7 +852,7 @@ foreach ($defaults as $key => $defaultValue) {
                     <button class="service-book-btn">Book Appointment</button>
                 </div>
 
-                <div class="service-card" data-service="S005">
+                <div class="service-card is-clickable" data-service="S005" data-service-category="Prosthodontics Treatments (Pustiso)" role="button" tabindex="0" aria-label="View Prosthodontics services">
                     <div class="service-image">
                         <img src="../assets/images/prosti.jpg" alt="Prosthodontics service">
                     </div>
@@ -885,6 +1143,16 @@ foreach ($defaults as $key => $defaultValue) {
         </div>
     </div>
 
+    <div id="serviceDetailsModal" class="service-details-modal-overlay" aria-hidden="true">
+        <div class="service-details-modal" role="dialog" aria-modal="true" aria-labelledby="serviceDetailsModalTitle">
+            <div class="service-details-modal-header">
+                <h3 id="serviceDetailsModalTitle" class="service-details-modal-title">Service Details</h3>
+                <button type="button" class="service-details-close" id="serviceDetailsClose" aria-label="Close service details modal">&times;</button>
+            </div>
+            <div class="service-details-modal-body" id="serviceDetailsBody"></div>
+        </div>
+    </div>
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>                    
    <script>
 	// Expose select system settings to client (read-only; keeps current behaviors intact)
@@ -894,6 +1162,7 @@ foreach ($defaults as $key => $defaultValue) {
 		walkInsEnabled: <?php echo $__walkInsEnabled ? 'true' : 'false'; ?>,
 		maintenanceMode: <?php echo $__maintenanceMode ? 'true' : 'false'; ?>
 	};
+    window.servicesByCategory = <?php echo json_encode($servicesByCategory, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
 
 	// Real-time settings polling (non-intrusive, safe fallbacks)
 	(function initRealtimeSettings() {
@@ -1320,37 +1589,50 @@ foreach ($defaults as $key => $defaultValue) {
 
     function initializeModal() {
         const modal = document.getElementById("appointmentModal");
-        const serviceCards = document.querySelectorAll(".service-book-btn");
+        const serviceCards = document.querySelectorAll(".service-card");
+        const serviceButtons = document.querySelectorAll(".service-book-btn");
         const closeModal = document.querySelector(".close-modal");
 
         if (!modal || !closeModal) return;
 
-        // Open modal only if logged in
+        serviceButtons.forEach((button) => {
+            button.addEventListener("click", function(event) {
+                event.stopPropagation();
+            });
+        });
+
+        // Open service details modal on card click
         serviceCards.forEach(card => {
             card.addEventListener("click", function() {
-                console.log("Clicked service button"); // Debug
-                console.log("isLoggedIn:", isLoggedIn);
+                openServiceDetailsModal(this);
+            });
 
-				// Block booking attempts during maintenance
-				if (isMaintenanceEnabled()) {
-					showMaintenancePopup();
-					return;
-				}
+            card.addEventListener("keydown", function(event) {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openServiceDetailsModal(this);
+                }
+            });
+        });
+
+        // Open booking modal only from Book Appointment button
+        serviceButtons.forEach(button => {
+            button.addEventListener("click", function() {
+                if (isMaintenanceEnabled()) {
+                    showMaintenancePopup();
+                    return;
+                }
 
                 if (!isLoggedIn) {
                     if (confirm("You need to log in before booking. Do you want to log in now?")) {
                         window.location.href = "login.php";
                     }
-                    return; // stop modal from opening
+                    return;
                 }
 
                 const serviceCard = this.closest('.service-card');
-                if (!serviceCard) {
-                    console.log("Could not find closest service-card");
-                    return;
-                }
+                if (!serviceCard) return;
                 const serviceId = serviceCard.getAttribute('data-service');
-                console.log("Service ID:", serviceId);
 
                 const serviceSelect = document.getElementById('popup_service');
                 if (serviceSelect) {
@@ -1358,7 +1640,6 @@ foreach ($defaults as $key => $defaultValue) {
                     updateSubServices();
                 }
 
-                console.log("Opening modal...");
                 modal.style.display = "block";
             });
         });
@@ -1375,6 +1656,77 @@ foreach ($defaults as $key => $defaultValue) {
             }
         });
     }
+
+    function openServiceDetailsModal(cardElement) {
+        const modal = document.getElementById('serviceDetailsModal');
+        const title = document.getElementById('serviceDetailsModalTitle');
+        const body = document.getElementById('serviceDetailsBody');
+        if (!modal || !title || !body || !cardElement) return;
+
+        const category = cardElement.getAttribute('data-service-category') || '';
+        const cardImage = cardElement.querySelector('.service-image img');
+        const imageSrc = cardImage ? cardImage.getAttribute('src') : '';
+        const imageAlt = cardImage ? cardImage.getAttribute('alt') : (category + ' image');
+        const serviceItems = (window.servicesByCategory && window.servicesByCategory[category]) ? window.servicesByCategory[category] : [];
+
+        title.textContent = category || 'Service Details';
+
+        let contentHtml = '';
+        if (imageSrc) {
+            contentHtml += '<img class="service-details-image" src="' + escapeHtml(imageSrc) + '" alt="' + escapeHtml(imageAlt || 'Service image') + '">';
+        }
+
+        if (Array.isArray(serviceItems) && serviceItems.length > 0) {
+            contentHtml += '<ul class="service-details-list">';
+            serviceItems.forEach((item) => {
+                const subService = item && item.sub_service ? item.sub_service : 'Service';
+                const description = item && item.description ? item.description : 'No description available.';
+                contentHtml += '<li class="service-details-item">';
+                contentHtml += '<h4>' + escapeHtml(subService) + '</h4>';
+                contentHtml += '<p>' + escapeHtml(description) + '</p>';
+                contentHtml += '</li>';
+            });
+            contentHtml += '</ul>';
+        } else {
+            contentHtml += '<p class="service-details-empty">No details are available for this service category yet.</p>';
+        }
+
+        body.innerHTML = contentHtml;
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeServiceDetailsModal() {
+        const modal = document.getElementById('serviceDetailsModal');
+        if (!modal) return;
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const detailsModal = document.getElementById('serviceDetailsModal');
+        const closeButton = document.getElementById('serviceDetailsClose');
+
+        if (closeButton) {
+            closeButton.addEventListener('click', closeServiceDetailsModal);
+        }
+
+        if (detailsModal) {
+            detailsModal.addEventListener('click', function(event) {
+                if (event.target === detailsModal) {
+                    closeServiceDetailsModal();
+                }
+            });
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && detailsModal && detailsModal.classList.contains('show')) {
+                closeServiceDetailsModal();
+            }
+        });
+    });
 
     // Update sub-services function
     function updateSubServices() {

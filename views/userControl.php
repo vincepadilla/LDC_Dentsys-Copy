@@ -22,6 +22,27 @@ if (mysqli_num_rows($lastLoginCheck) == 0) {
     mysqli_query($con, "ALTER TABLE user_account ADD COLUMN last_login TIMESTAMP NULL DEFAULT NULL AFTER status");
 }
 
+$checkLastActivity = "SHOW COLUMNS FROM user_account LIKE 'last_activity'";
+$lastActivityCheck = mysqli_query($con, $checkLastActivity);
+if (mysqli_num_rows($lastActivityCheck) == 0) {
+    mysqli_query($con, "ALTER TABLE user_account ADD COLUMN last_activity TIMESTAMP NULL DEFAULT NULL AFTER last_login");
+}
+
+// Consider a user "In Session" if last_activity is within this many seconds (updated each request + cleared on logout).
+$userSessionOnlineSeconds = 120;
+
+require_once __DIR__ . '/../includes/in_session_users.php';
+
+if (isset($_GET['ajax_in_session_count']) && $_GET['ajax_in_session_count'] === '1') {
+    header('Content-Type: application/json');
+    $count = ldcdents_count_in_session_users($con, (int) $userSessionOnlineSeconds);
+    echo json_encode([
+        'success' => true,
+        'in_session_count' => $count,
+    ]);
+    exit();
+}
+
 // Pagination settings
 $recordsPerPage = 10;
 $currentPage = isset($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -51,6 +72,7 @@ $usersQuery = "
         ua.role,
         ua.created_at,
         COALESCE(ua.status, 'active') as account_status,
+        ua.last_activity,
         COALESCE(p.patient_id, 'N/A') as patient_id,
         COUNT(DISTINCT a.appointment_id) as appointment_count,
         MAX(a.appointment_date) as last_appointment_date
@@ -58,18 +80,36 @@ $usersQuery = "
     LEFT JOIN patient_information p ON ua.user_id = p.user_id
     LEFT JOIN appointments a ON p.patient_id = a.patient_id
     WHERE ua.role != 'super-admin'
-    GROUP BY ua.user_id, ua.username, ua.first_name, ua.last_name, ua.email, ua.phone, ua.role, ua.created_at, ua.status, p.patient_id
+    GROUP BY ua.user_id, ua.username, ua.first_name, ua.last_name, ua.email, ua.phone, ua.role, ua.created_at, ua.status, ua.last_activity, p.patient_id
     ORDER BY ua.created_at DESC
     LIMIT $recordsPerPage OFFSET $offset
 ";
 $usersResult = mysqli_query($con, $usersQuery);
 
 function renderUsersTableRows($usersResult) {
+    global $userSessionOnlineSeconds;
+    $onlineWindow = isset($userSessionOnlineSeconds) ? (int) $userSessionOnlineSeconds : 120;
+
     if ($usersResult && mysqli_num_rows($usersResult) > 0) {
         while ($user = mysqli_fetch_assoc($usersResult)) {
             $hasAppointments = $user['appointment_count'] > 0;
-            $statusClass = ($user['account_status'] === 'blocked' || $user['account_status'] === 'Blocked') ? 'status-blocked' : 'status-active';
-            $statusText = ($user['account_status'] === 'blocked' || $user['account_status'] === 'Blocked') ? 'Blocked' : 'Active';
+            $isBlocked = ($user['account_status'] === 'blocked' || $user['account_status'] === 'Blocked');
+            $statusText = $isBlocked ? 'Blocked' : 'Active';
+
+            $lastAct = !empty($user['last_activity']) ? strtotime($user['last_activity']) : false;
+            $isInSession = !$isBlocked && $lastAct && (time() - $lastAct) <= $onlineWindow;
+
+            if ($isBlocked) {
+                $statusClass = 'status-blocked';
+                $displayStatus = 'Blocked';
+            } elseif ($isInSession) {
+                $statusClass = 'status-session';
+                $displayStatus = 'In Session';
+            } else {
+                $statusClass = 'status-active';
+                $displayStatus = 'Active';
+            }
+
             $rowClass = $hasAppointments ? 'user-row has-appointments' : 'user-row';
             $lastAppt = $user['last_appointment_date'] ? date('M j, Y', strtotime($user['last_appointment_date'])) : 'N/A';
 
@@ -82,14 +122,14 @@ function renderUsersTableRows($usersResult) {
             echo "<td><span class='{$roleBadgeClass}' style='text-transform: capitalize;'>{$roleText}</span></td>";
             echo "<td><span class='badge'>" . ($user['appointment_count'] > 0 ? $user['appointment_count'] : '0') . "</span></td>";
             echo "<td style='color: #64748b;'>{$lastAppt}</td>";
-            echo "<td><span class='{$statusClass}'>{$statusText}</span></td>";
+            echo "<td><span class='{$statusClass}'>{$displayStatus}</span></td>";
             echo "<td>";
             echo "<div style='display: flex; gap: 8px; align-items: center;'>";
             echo "<button class='action-btn btn-warning' onclick='openEditUserModal(\"{$user['user_id']}\", \"" . htmlspecialchars($user['username'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['first_name'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['last_name'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['email'], ENT_QUOTES) . "\", \"" . htmlspecialchars($user['phone'] ?? '', ENT_QUOTES) . "\", \"{$user['role']}\")' title='Edit User'>";
             echo "<i class='fas fa-edit'></i>";
             echo "</button>";
 
-            if ($user['account_status'] !== 'blocked' && $user['account_status'] !== 'Blocked') {
+            if (!$isBlocked) {
                 echo "<button class='action-btn btn-danger' onclick='blockUser(\"{$user['user_id']}\", \"{$user['first_name']} {$user['last_name']}\")' title='Block User'>";
                 echo "<i class='fas fa-ban'></i>";
                 echo "</button>";
@@ -733,6 +773,15 @@ if (isset($_GET['ajax_users']) && $_GET['ajax_users'] === '1') {
         .status-blocked {
             background: #fee2e2;
             color: #991b1b;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-session {
+            background: #e0f2fe;
+            color: #0369a1;
             padding: 6px 12px;
             border-radius: 20px;
             font-size: 12px;
