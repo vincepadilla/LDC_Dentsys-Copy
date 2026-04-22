@@ -64,70 +64,150 @@ if (empty($_SESSION['admin_verified'])) {
         .notification.warning { border-left: 4px solid #F59E0B; }
         .notification.error { border-left: 4px solid #EF4444; }
         .notification.info { border-left: 4px solid #3B82F6; }
-        
-        /* Hide sidebar in clinic control page */
-        .sidebar {
-            display: none !important;
-        }
-        
-        .menu-toggle {
-            display: none !important;
-        }
-        
-        /* Full width content without sidebar */
+
+        /* Layout aligned with edit_content / settings (sidebar + main) */
         .main-content {
-            margin-left: 0 !important;
+            margin-left: 260px;
+            padding: 30px;
+            min-height: 100vh;
+            background: #f3f4f6;
             animation: pageFadeIn 0.3s ease-in-out;
         }
+
         @keyframes pageFadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
         }
-        
-        /* Back button styling */
-        .back-button {
+
+        .menu-toggle {
+            display: none;
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1002;
+            background: white;
+            color: var(--secondary-color);
+            border: none;
+            padding: 0;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            width: 44px;
+            height: 44px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .menu-toggle:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .menu-toggle i {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        .sidebar-text {
+            transition: opacity 0.3s ease;
+        }
+
+        .clinic-page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 0 auto 30px;
+            max-width: 1040px;
+            width: 100%;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .clinic-page-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #111827;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .clinic-page-title i {
+            color: #48A6A7;
+        }
+
+        .clinic-page-subtitle {
+            color: #6b7280;
+            margin-top: 6px;
+            font-size: 14px;
+        }
+
+        .back-to-dashboard {
             display: inline-flex;
             align-items: center;
             gap: 8px;
             padding: 10px 20px;
-            background: var(--primary-color);
-            color: white;
-            border: none;
+            background: white;
+            color: #48A6A7;
+            border: 2px solid #48A6A7;
             border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 20px;
             text-decoration: none;
-        }
-        
-        .back-button:hover {
-            background: #3d8e90;
-            transform: translateX(-3px);
-        }
-        
-        .back-button i {
-            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
         }
 
-        /* Clinic Control layout refinement */
-        .main-content .container {
+        .back-to-dashboard:hover {
+            background: #48A6A7;
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(72, 166, 167, 0.3);
+        }
+
+        .content-area {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e5e7eb;
             max-width: 1040px;
+            width: 100%;
             margin: 0 auto;
-            padding: 24px 20px 40px;
+            box-sizing: border-box;
         }
 
-        .main-content h2 {
-            font-weight: 600;
-            letter-spacing: 0.08em;
-            color: #111827;
-            margin-bottom: 6px;
+        .clinic-actions-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
         }
 
-        .main-content h2 i {
-            margin-right: 8px;
-            color: var(--primary-color);
+        .content-area #clinicClosureList {
+            margin-top: 0;
+            background: #f9fafb;
+            box-shadow: none;
+            border: 1px solid #e5e7eb;
         }
 
         /* Inputs, helpers, and modern field styling */
@@ -148,54 +228,6 @@ if (empty($_SESSION['admin_verified'])) {
             color: #64748b;
             font-size: 12px;
             margin-top: 2px;
-        }
-        
-        
-
-        /* Option cards (for closure type) */
-        .option-group {
-            display: grid;
-            gap: 8px;
-        }
-        .option {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            cursor: pointer;
-            padding: 8px 10px;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            background: transparent;
-            transition: border-color 0.12s ease;
-        }
-        .option:hover {
-            border-color: #cbd5e1;
-        }
-        .option.selected {
-            border-color: #6366f1;
-            box-shadow: none;
-        }
-        .option .option-body {
-            display: grid;
-            gap: 2px;
-        }
-        .option .option-title {
-            font-weight: 600;
-            color: #0f172a;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            line-height: 1.2;
-            font-size: 0.92rem;
-        }
-        .option .option-desc {
-            color: #64748b;
-            font-size: 12px;
-            line-height: 1.15;
-        }
-        .option input[type="radio"] {
-            margin: 0 6px 0 0;
-            align-self: center;
         }
         .badge {
             display: inline-flex;
@@ -468,12 +500,28 @@ if (empty($_SESSION['admin_verified'])) {
             resize: vertical;
         }
 
-        /* Responsive */
-        @media (max-width: 640px) {
-            .main-content .container {
-                padding: 18px 14px 28px;
+        @media (max-width: 768px) {
+            .main-content {
+                margin-left: 0;
+                padding: 20px 16px;
             }
 
+            .menu-toggle {
+                display: flex;
+            }
+
+            .clinic-page-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .content-area {
+                padding: 24px 18px;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
             .clinic-modal .clinic-modal-content {
                 max-width: 100%;
                 border-radius: 14px;
@@ -486,39 +534,62 @@ if (empty($_SESSION['admin_verified'])) {
 <!-- Notification Container -->
 <div class="notification-container" id="notificationContainer"></div>
 
+<!-- Sidebar Overlay (for mobile) -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+<!-- Sidebar Toggle (mobile) -->
 <div class="menu-toggle" onclick="toggleSidebar()">
     <i class="fas fa-bars"></i>
 </div>
 
+<!-- Sidebar -->
 <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
-        <img src="../assets/images/landerologo.png">
+        <img src="../assets/images/landerologo.png" alt="Clinic Logo">
+        <h5 style="text-align: center; font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 10px;">Admin Control Center</h5>
     </div>
     <nav class="sidebar-nav">
-        <a href="admin.php#dashboard" onclick="return navigateToPage('admin.php#dashboard', this, event)"><i class="fa fa-tachometer"></i> Dashboard</a>
-        <a href="admin.php#appointment" onclick="return navigateToPage('admin.php#appointment', this, event)"><i class="fas fa-calendar-check"></i> Appointments</a>
-        <a href="admin.php#schedules" onclick="return navigateToPage('admin.php#schedules', this, event)"><i class="fas fa-calendar-days"></i> Time Slots</a>
-        <a href="#" class="active"><i class="fas fa-building"></i> Clinic Control</a>
-        <a href="admin.php#services" onclick="return navigateToPage('admin.php#services', this, event)"><i class="fa-solid fa-teeth"></i> Services</a>
-        <a href="admin.php#patients" onclick="return navigateToPage('admin.php#patients', this, event)"><i class="fa-solid fa-hospital-user"></i> Patients</a>
-        <a href="admin.php#treatment" onclick="return navigateToPage('admin.php#treatment', this, event)"><i class="fa-solid fa-notes-medical"></i> History</a>
-        <a href="admin.php#dentists" onclick="return navigateToPage('admin.php#dentists', this, event)"><i class="fa-solid fa-user-doctor"></i> Dentists & Staff</a>
-        <a href="admin.php#payment" onclick="return navigateToPage('admin.php#payment', this, event)"><i class="fa-solid fa-money-bill"></i> Transactions</a> 
-        <a href="admin.php#reports" onclick="return navigateToPage('admin.php#reports', this, event)"><i class="fa-solid fa-square-poll-vertical"></i> Reports</a> 
-        <a href="login.php"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+        <a href="userControl.php">
+            <i class="fas fa-users-cog"></i>
+            <span class="sidebar-text">User Control</span>
+        </a>
+        <a href="clinicControl.php" class="active">
+            <i class="fas fa-building"></i>
+            <span class="sidebar-text">Clinic Control</span>
+        </a> 
+        <a href="edit_content.php">
+            <i class="fas fa-edit"></i>
+            <span class="sidebar-text">Edit Content</span>
+        </a>
+        <a href="settings.php">
+            <i class="fas fa-cog"></i>
+            <span class="sidebar-text">Settings</span>
+        </a>
+        <a href="admin.php">
+            <i class="fa-solid fa-arrow-left"></i>
+            <span class="sidebar-text">Back</span>
+        </a>
     </nav>
 </div>
 
+<!-- Main Content -->
 <div class="main-content">
-    <div class="container">
-        <a href="admin.php" class="back-button" onclick="navigateBack(event)">
-            <i class="fas fa-arrow-left"></i> Back to Admin
-        </a>
-        <h2><i class="fas fa-building"></i> CLINIC CONTROL</h2>
-        <p style="color: #6b7280; margin-bottom: 30px;">Manage clinic-wide closures, holidays, and emergency closures.</p>
+    <div class="clinic-page-header">
+        <div>
+            <div class="clinic-page-title">
+                <i class="fas fa-building"></i>
+                Clinic Control
+            </div>
+            <div class="clinic-page-subtitle">
+                Manage clinic-wide closures, holidays, and emergency closures.
+            </div>
+        </div>
         
+    </div>
+
+    <div class="content-area">
         <!-- Control Buttons -->
-        <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 30px;">
+        <div class="clinic-actions-row">
             <button class="btn btn-warning" onclick="openBlockDayModal()">
                 <i class="fa-solid fa-calendar-day"></i> Block Entire Day
             </button>
@@ -526,9 +597,9 @@ if (empty($_SESSION['admin_verified'])) {
                 <i class="fas fa-calendar-times"></i> Date Range Closure
             </button>
         </div>
-        
+
         <!-- Active Closures List -->
-        <div id="clinicClosureList" style="margin-top: 20px;">
+        <div id="clinicClosureList">
             <h3>
                 <i class="fas fa-list"></i> Active Closures
                 <button class="btn btn-secondary" style="margin-left: auto;" onclick="removeAllClosures()" title="Remove all active closures">
@@ -556,12 +627,13 @@ if (empty($_SESSION['admin_verified'])) {
         </div>
         <div class="clinic-modal-body">
         <form id="blockDayForm" onsubmit="handleBlockDaySubmit(event)">
+            <input type="hidden" name="closure_type" value="full_day">
 
             <div class="blockday-scroll">
                 <div class="blockday-grid">
                     <div class="blockday-card">
                         <div class="blockday-section-title">
-                            <i class="fas fa-calendar-day"></i> Date & Type
+                            <i class="fas fa-calendar-day"></i> Date
                         </div>
                         <div class="field" style="margin-bottom: 12px;">
                             <label for="blockDayDate" class="field-label">
@@ -573,29 +645,6 @@ if (empty($_SESSION['admin_verified'])) {
                                 <input type="date" id="blockDayDate" name="closure_date" required min="<?= date('Y-m-d') ?>">
                             </div>
                             <div class="field-hint">Patients with appointments on this date may be notified.</div>
-                        </div>
-                        <div class="field" style="margin-bottom: 4px;">
-                            <div class="field-label">
-                                <i class="fa-solid fa-toggle-off"></i>
-                                Closure Type
-                            </div>
-                        <div class="option-group" id="closureTypeOptions" style="margin-top: 6px;">
-                            <label class="option" data-value="full_day">
-                                <input type="radio" name="closure_type" value="full_day" checked>
-                                <div class="option-body">
-                                    <div class="option-title">Full Day Closure</div>
-                                    <div class="option-desc">Blocks all appointment activity for the day.</div>
-                                </div>
-                            </label>
-                            <label class="option" data-value="no_new_appointments">
-                                <input type="radio" name="closure_type" value="no_new_appointments">
-                                <div class="option-body">
-                                    <div class="option-title">No New Appointments</div>
-                                    <div class="option-desc">Existing appointments remain; only new bookings are blocked.</div>
-                                </div>
-                            </label>
-                        </div>
-                            
                         </div>
                     </div>
                     <div class="blockday-card">
@@ -791,11 +840,42 @@ if (empty($_SESSION['admin_verified'])) {
         }, duration);
     }
     
-    // Toggle Sidebar
+    // Toggle Sidebar (matches edit_content / settings behavior)
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
-        sidebar.classList.toggle('active');
+        const menuToggle = document.querySelector('.menu-toggle');
+        const overlay = document.getElementById('sidebarOverlay');
+
+        if (sidebar) {
+            sidebar.classList.toggle('active');
+        }
+        if (menuToggle) {
+            menuToggle.classList.toggle('active');
+        }
+
+        if (window.innerWidth <= 768 && overlay) {
+            overlay.classList.toggle('active');
+        }
     }
+
+    document.addEventListener('click', function (event) {
+        const sidebar = document.getElementById('sidebar');
+        const menuToggle = document.querySelector('.menu-toggle');
+        const overlay = document.getElementById('sidebarOverlay');
+
+        if (!sidebar || !menuToggle) return;
+
+        const isClickInsideSidebar = sidebar.contains(event.target);
+        const isClickOnToggle = menuToggle.contains(event.target);
+
+        if (window.innerWidth <= 768 && sidebar.classList.contains('active') && !isClickInsideSidebar && !isClickOnToggle) {
+            sidebar.classList.remove('active');
+            menuToggle.classList.remove('active');
+            if (overlay) {
+                overlay.classList.remove('active');
+            }
+        }
+    });
     
     // Navigate back to admin page with animation
     function navigateBack(event) {
@@ -829,38 +909,6 @@ if (empty($_SESSION['admin_verified'])) {
                     customReasonTextarea.value = '';
                 }
             });
-        }
-
-        // Enhance closure type option cards (selected state)
-        const optionContainer = document.getElementById('closureTypeOptions');
-        if (optionContainer) {
-            const optionLabels = Array.from(optionContainer.querySelectorAll('label.option'));
-            const syncSelected = () => {
-                optionLabels.forEach(l => {
-                    const input = l.querySelector('input[type="radio"]');
-                    if (input && input.checked) {
-                        l.classList.add('selected');
-                    } else {
-                        l.classList.remove('selected');
-                    }
-                });
-            };
-            optionLabels.forEach(l => {
-                const input = l.querySelector('input[type="radio"]');
-                if (input) {
-                    input.addEventListener('change', syncSelected);
-                }
-                // Also allow clicking anywhere on the label to select
-                l.addEventListener('click', function(e) {
-                    const radio = this.querySelector('input[type="radio"]');
-                    if (radio) {
-                        radio.checked = true;
-                        radio.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                });
-            });
-            // Initialize visual state
-            syncSelected();
         }
 
         // Ensure end date is visible and required for date range closure
@@ -900,7 +948,15 @@ if (empty($_SESSION['admin_verified'])) {
     function openBlockDayModal() { document.getElementById('blockDayModal').style.display = 'flex'; }
     function closeBlockDayModal() {
         document.getElementById('blockDayModal').style.display = 'none';
-        document.getElementById('blockDayForm').reset();
+        const form = document.getElementById('blockDayForm');
+        if (form) form.reset();
+        // Reset submit button state in case a previous submit left it loading/disabled
+        const submitBtn = document.querySelector('#blockDayForm button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            const original = submitBtn.getAttribute('data-original-html');
+            if (original) submitBtn.innerHTML = original;
+        }
         const customReasonContainer = document.getElementById('blockDayCustomReasonContainer');
         if (customReasonContainer) customReasonContainer.style.display = 'none';
     }
@@ -924,7 +980,15 @@ if (empty($_SESSION['admin_verified'])) {
     function openEmergencyClosureModal() { document.getElementById('emergencyClosureModal').style.display = 'flex'; }
     function closeEmergencyClosureModal() {
         document.getElementById('emergencyClosureModal').style.display = 'none';
-        document.getElementById('emergencyClosureForm').reset();
+        const form = document.getElementById('emergencyClosureForm');
+        if (form) form.reset();
+        // Reset submit button state in case a previous submit left it loading/disabled
+        const submitBtn = document.querySelector('#emergencyClosureForm button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            const original = submitBtn.getAttribute('data-original-html');
+            if (original) submitBtn.innerHTML = original;
+        }
         const endDateContainer = document.getElementById('emergencyEndDateContainer');
         if (endDateContainer) endDateContainer.style.display = 'block';
     }
@@ -935,7 +999,7 @@ if (empty($_SESSION['admin_verified'])) {
         const form = event.target;
         const formData = new FormData(form);
         const closureDate = formData.get('closure_date');
-        const closureType = formData.get('closure_type');
+        const closureType = formData.get('closure_type') || 'full_day';
         let reason = formData.get('reason');
         const customReason = formData.get('custom_reason');
         const notifyPatients = formData.get('notify_patients') === 'on';
@@ -950,10 +1014,13 @@ if (empty($_SESSION['admin_verified'])) {
         }
         
         const submitBtn = form.querySelector('button[type="submit"]');
-        const originalText = submitBtn.innerHTML;
+        const originalText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn && !submitBtn.getAttribute('data-original-html')) {
+            submitBtn.setAttribute('data-original-html', originalText);
+        }
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-        
+
         const requestData = {
             action: 'block_day',
             date: closureDate,
@@ -962,28 +1029,55 @@ if (empty($_SESSION['admin_verified'])) {
             custom_reason: customReason || '',
             notify_patients: notifyPatients
         };
-        
+
+        const submitBlockDay = () => {
+            fetchJson('../controllers/manage_clinic_closure.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
+            })
+            .then(data => {
+                if (data.success) {
+                    showNotification('success', 'Day Blocked Successfully', `Date ${closureDate} has been blocked. ${notifyPatients ? 'Patients have been notified.' : ''}`);
+                    closeBlockDayModal();
+                    loadClinicClosures();
+                } else {
+                    showNotification('error', 'Error', data.message || 'Failed to block day. Please try again.');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('error', 'Error', error?.message || 'An error occurred while blocking the day. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            });
+        };
+
         fetchJson('../controllers/manage_clinic_closure.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestData)
+            body: JSON.stringify({ action: 'check_date_bookings', date: closureDate })
         })
-        .then(data => {
-            if (data.success) {
-                showNotification('success', 'Day Blocked Successfully', `Date ${closureDate} has been blocked. ${notifyPatients ? 'Patients have been notified.' : ''}`);
-                closeBlockDayModal();
-                loadClinicClosures();
-            } else {
-                showNotification('error', 'Error', data.message || 'Failed to block day. Please try again.');
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
+        .then(checkData => {
+            if (checkData && checkData.success && checkData.has_bookings) {
+                const bookedCount = Number(checkData.booked_count) || 0;
+                const proceed = confirm(
+                    `There ${bookedCount === 1 ? 'is' : 'are'} ${bookedCount} existing booked appointment${bookedCount === 1 ? '' : 's'} on ${closureDate}. Do you want to proceed with blocking this date?`
+                );
+                if (!proceed) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                    return;
+                }
             }
+            submitBlockDay();
         })
         .catch(error => {
-            console.error('Error:', error);
-            showNotification('error', 'Error', error?.message || 'An error occurred while blocking the day. Please try again.');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
+            // Fail-open to preserve existing blocking functionality if precheck fails.
+            console.warn('Booking precheck failed. Proceeding with block day request.', error);
+            submitBlockDay();
         });
     }
     
@@ -1108,16 +1202,7 @@ if (empty($_SESSION['admin_verified'])) {
             showNotification('error', 'Error', 'End date must be after start date.');
             return;
         }
-        
-        if (!confirm('This will mark the selected dates as clinic closed and notify affected patients. Appointments will NOT be cancelled automatically. Proceed?')) {
-            return;
-        }
-        
-        const submitBtn = form.querySelector('button[type="submit"]');
-        const originalText = submitBtn.innerHTML;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing Emergency Closure...';
-        
+
         const requestData = {
             action: 'emergency_closure',
             start_date: startDate,
@@ -1125,28 +1210,71 @@ if (empty($_SESSION['admin_verified'])) {
             reason: reason,
             notify_patients: notifyPatients
         };
-        
+
+        // Keep existing confirmation behavior FIRST (no loading state yet)
+        if (!confirm('This will mark the selected dates as clinic closed and notify affected patients. Appointments will NOT be cancelled automatically. Proceed?')) {
+            return;
+        }
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn && !submitBtn.getAttribute('data-original-html')) {
+            submitBtn.setAttribute('data-original-html', originalText);
+        }
+
+        const doSubmitEmergencyClosure = () => {
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing Emergency Closure...';
+            }
+            fetchJson('../controllers/manage_clinic_closure.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
+            })
+            .then(data => {
+                if (data.success) {
+                    showNotification('warning', 'Date Range Closure Applied', `Clinic closed from ${startDate} to ${requestData.end_date}. ${notifyPatients ? 'Patients have been notified.' : ''}`);
+                    closeEmergencyClosureModal();
+                    loadClinicClosures();
+                } else {
+                    showNotification('error', 'Error', data.message || 'Failed to process emergency closure. Please try again.');
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('error', 'Error', error?.message || 'An error occurred while processing emergency closure. Please try again.');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                }
+            });
+        };
+
+        // Precheck for booked appointments within the selected date range
         fetchJson('../controllers/manage_clinic_closure.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestData)
+            body: JSON.stringify({ action: 'check_range_bookings', start_date: startDate, end_date: endDate })
         })
-        .then(data => {
-            if (data.success) {
-                showNotification('warning', 'Date Range Closure Applied', `Clinic closed from ${startDate} to ${requestData.end_date}. ${notifyPatients ? 'Patients have been notified.' : ''}`);
-                closeEmergencyClosureModal();
-                loadClinicClosures();
-            } else {
-                showNotification('error', 'Error', data.message || 'Failed to process emergency closure. Please try again.');
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
+        .then(checkData => {
+            if (checkData && checkData.success && checkData.has_bookings) {
+                const bookedCount = Number(checkData.booked_count) || 0;
+                const proceed = confirm(
+                    `There ${bookedCount === 1 ? 'is' : 'are'} ${bookedCount} existing booked appointment${bookedCount === 1 ? '' : 's'} within ${startDate} to ${endDate}. Do you want to proceed with blocking this date range?`
+                );
+                if (!proceed) return;
             }
+            doSubmitEmergencyClosure();
         })
         .catch(error => {
-            console.error('Error:', error);
-            showNotification('error', 'Error', error?.message || 'An error occurred while processing emergency closure. Please try again.');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
+            // Fail-open: if the precheck fails, preserve current behavior.
+            console.warn('Range booking precheck failed. Proceeding with emergency closure flow.', error);
+            doSubmitEmergencyClosure();
         });
     }
     

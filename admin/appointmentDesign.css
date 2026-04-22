@@ -228,6 +228,16 @@ input[type="date"]:focus, select:focus {
     background: #7C3AED;
 }
 
+.btn-braces-schedule {
+    background: #0d9488;
+    color: #ffffff;
+    border: none;
+}
+
+.btn-braces-schedule:hover {
+    background: #0f766e;
+}
+
 .btn-success {
     background: var(--success);
     color: var(--white);
@@ -336,6 +346,11 @@ tbody td {
 .status-follow-up {
     background-color: rgba(196, 181, 253, 0.3);
     color: #6D28D9;
+}
+
+.status-take-action {
+    background-color: #FEE2E2; /* light orange background */
+    color: #B91C1C; /* orange text */
 }
 
 /* Action Buttons (desktop table) - compact icon style like Walk-in Records */

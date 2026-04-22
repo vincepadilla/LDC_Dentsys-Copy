@@ -2,6 +2,11 @@
 session_start();
 require_once(__DIR__ . "/../database/config.php");
 
+if (!function_exists('ldcdentsy_create_braces_auto_followup_after_booking')) {
+    define('APPOINTMENT_PHP_INCLUDE_ONLY', true);
+    require_once __DIR__ . '/../admin/appointment.php';
+}
+
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -198,6 +203,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
 
         $con->commit();
+
+        if (function_exists('ldcdentsy_create_braces_auto_followup_after_booking')) {
+            ldcdentsy_create_braces_auto_followup_after_booking(
+                $con,
+                $appointment_id,
+                $appointment_date,
+                $patient_id,
+                $team_id,
+                $service_id,
+                $branch,
+                $time_slot
+            );
+        }
 
         // Get patient and service details for email
         $patientQuery = $con->prepare("

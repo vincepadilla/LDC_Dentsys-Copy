@@ -3,7 +3,7 @@ session_start();
 require_once(__DIR__ . "/../database/config.php");
 
 // Redirect if not logged in or not admin
-if (!isset($_SESSION['userID']) || !isset($_SESSION['role']) || strtolower($_SESSION['role']) !== 'super-admin') {
+if (!isset($_SESSION['userID']) || !isset($_SESSION['role']) || strtolower($_SESSION['role']) !== 'admin') {
     header("Location: login.php");
     exit();
 }
@@ -569,15 +569,16 @@ if (isset($_SESSION['content_error'])) {
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <img src="../assets/images/landerologo.png" alt="Clinic Logo">
+            <h5 style="text-align: center; font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 10px;">Admin Control Center</h5>
         </div>
-        <nav class="sidebar-nav">
-            <a href="super_admin_portal.php">
-                <i class="fas fa-tachometer-alt"></i>
-                <span class="sidebar-text">Dashboard</span>
-            </a>
+        <nav class="sidebar-nav"> 
             <a href="userControl.php">
                 <i class="fas fa-users-cog"></i>
                 <span class="sidebar-text">User Control</span>
+            </a>
+            <a href="clinicControl.php">
+                <i class="fas fa-building"></i>
+                <span class="sidebar-text">Clinic Control</span>
             </a>
             <a href="edit_content.php" class="active">
                 <i class="fas fa-edit"></i>
@@ -588,9 +589,9 @@ if (isset($_SESSION['content_error'])) {
                 <i class="fas fa-cog"></i>
                 <span class="sidebar-text">Settings</span>
             </a>
-            <a href="../controllers/logout.php">
-                <i class="fa-solid fa-right-from-bracket"></i>
-                <span class="sidebar-text">Logout</span>
+            <a href="admin.php">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span class="sidebar-text">Back</span>
             </a>
         </nav>
     </div>

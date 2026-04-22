@@ -1118,7 +1118,7 @@ if ($serviceStmt = $con->prepare($servicesQuery)) {
                 </div>
 
                 <!-- Additional Service Request -->
-                <div class="form-group">
+                <div class="form-group" id="popup_request_group">
                     <label for="popup_request_note">Request</label>
                     <textarea
                         id="popup_request_note"
@@ -1776,6 +1776,8 @@ if ($serviceStmt = $con->prepare($servicesQuery)) {
     function checkAvailability() {
         var selectedDate = $("#popup_date").val();
         var closureWarningDiv = $("#closure-warning");
+		// Preserve the user's current selection so polling doesn't reset it
+		var previousTimeValue = $("#popup_time").val();
         
         // Remove any existing closure warning
         if (closureWarningDiv.length) {
@@ -1852,6 +1854,16 @@ if ($serviceStmt = $con->prepare($servicesQuery)) {
                         bookedSlots.forEach(slot => {
                             $("#popup_time option[value='" + slot + "']").prop("disabled", true);
                         });
+
+						// Restore previous selection if it still exists and is not disabled
+						if (previousTimeValue) {
+							const previousOption = $("#popup_time option[value='" + previousTimeValue + "']");
+							if (previousOption.length && !previousOption.prop("disabled")) {
+								$("#popup_time").val(previousTimeValue);
+							} else {
+								$("#popup_time").val('');
+							}
+						}
                         
                         if ($("#popup_time option:selected").prop("disabled")) {
                             $("#popup_time").val('');
@@ -1878,6 +1890,42 @@ if ($serviceStmt = $con->prepare($servicesQuery)) {
 
     const popupDateInput = document.getElementById('popup_date');
     if (popupDateInput) popupDateInput.addEventListener('change', checkAvailability);
+
+	// Real-time timeslot sync:
+	// When admin blocks a slot in `admin/timeslot.php`, `controllers/getAppointments.php`
+	// will immediately start returning it in `unavailable_slots`. This polling simply
+	// refreshes the UI so open `index.php` pages update without manual reload.
+	(function initRealtimeTimeslotSync(){
+		const POLL_MS = 3000;
+		const modal = document.getElementById("appointmentModal");
+		const dateEl = document.getElementById('popup_date');
+		const paymentModeEl = document.getElementById('popup_payment_method');
+
+		function isModalOpen() {
+			return !!(modal && modal.style && modal.style.display === "block");
+		}
+
+		function isDigitalMode() {
+			// Keep existing walk-in flow untouched: only sync slots when date/time are used.
+			return !(paymentModeEl && paymentModeEl.value === 'walkin');
+		}
+
+		function shouldPoll() {
+			return isModalOpen() && isDigitalMode() && !!(dateEl && dateEl.value);
+		}
+
+		function tick() {
+			try {
+				if (!shouldPoll()) return;
+				checkAvailability();
+			} catch (e) {
+				// silent - keep UI stable even if polling fails
+			}
+		}
+
+		// Poll frequently for near real-time updates, but only acts when modal/date are set.
+		setInterval(tick, POLL_MS);
+	})();
 
     // Function to show validation error with animation
     function showTimeSlotValidationError(message) {
@@ -2004,6 +2052,8 @@ if ($serviceStmt = $con->prepare($servicesQuery)) {
         const timeGroup = document.getElementById('popup_time_group');
         const dateEl = document.getElementById('popup_date');
         const timeEl = document.getElementById('popup_time');
+		const requestGroup = document.getElementById('popup_request_group');
+		const requestEl = document.getElementById('popup_request_note');
 
         if (!paymentModeEl || !dateGroup || !timeGroup || !dateEl || !timeEl) return;
 
@@ -2025,13 +2075,25 @@ if ($serviceStmt = $con->prepare($servicesQuery)) {
             }
         }
 
+		function setRequestVisible(visible) {
+			// Request is only applicable to digital payment appointments.
+			if (!requestGroup) return;
+			requestGroup.style.display = visible ? '' : 'none';
+			if (!visible && requestEl) {
+				// Avoid carrying over a request into Walk-In flow
+				requestEl.value = '';
+			}
+		}
+
         async function applyPaymentMode() {
             const mode = paymentModeEl.value;
             if (mode === 'walkin') {
                 setDateTimeVisible(false);
+				setRequestVisible(false);
                 // Don't force user to pick date/time in the modal; walk-in flow handles it separately.
             } else {
                 setDateTimeVisible(true);
+				setRequestVisible(true);
                 // Restore normal availability behavior if a date is selected
                 if (dateEl.value) {
                     checkAvailability();

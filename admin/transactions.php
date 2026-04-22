@@ -925,6 +925,16 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                         ?>
                             <tr class="all-tx-row" 
                                 data-patient-id="<?php echo htmlspecialchars($row['patient_id']); ?>"
+                                data-appointment-id="<?php echo htmlspecialchars($row['appointment_id'] ?? ''); ?>"
+                                data-treatment-id="<?php echo htmlspecialchars($row['treatment_id'] ?? ''); ?>"
+                                data-patient-name="<?php echo htmlspecialchars($row['patient_name'] ?? 'N/A'); ?>"
+                                data-patient-email="<?php echo htmlspecialchars($row['patient_email'] ?? ''); ?>"
+                                data-treatment-name="<?php echo htmlspecialchars($row['treatment'] ?? $row['service_name'] ?? 'N/A'); ?>"
+                                data-payment-method="<?php echo htmlspecialchars($row['payment_method'] ?? 'N/A'); ?>"
+                                data-transaction-date="<?php echo htmlspecialchars($transactionDate); ?>"
+                                data-appointment-fee="<?php echo htmlspecialchars((string)$appointmentFee); ?>"
+                                data-treatment-cost="<?php echo htmlspecialchars((string)$treatmentCost); ?>"
+                                data-total-amount="<?php echo htmlspecialchars((string)$total); ?>"
                                 data-date="<?php echo htmlspecialchars($transactionDate); ?>"
                                 data-bill-status-id="<?php echo htmlspecialchars($billStatusId); ?>"
                                 data-search="<?php echo htmlspecialchars($allTransactionsSearchText); ?>">
@@ -934,7 +944,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                                 <td>₱<?php echo number_format($treatmentCost, 2); ?></td>
                                 <td><strong style="color: #10B981; font-size: 16px;">₱<?php echo number_format($total, 2); ?></strong></td>
                                 <td>
-                                    <span class="badge" style="background: <?php echo $billStatus === 'paid' ? '#10B981' : '#EF4444'; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; text-transform: uppercase;">
+                                    <span class="badge bill-status-badge" data-bill-status="<?php echo htmlspecialchars($billStatus); ?>" style="background: <?php echo $billStatus === 'paid' ? '#10B981' : '#EF4444'; ?>; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; text-transform: uppercase;">
                                         <?php echo $billStatus === 'paid' ? 'Paid' : 'Unpaid'; ?>
                                     </span>
                                 </td>
@@ -952,7 +962,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                                             <i class="fas fa-file-invoice"></i>
                                         </button>
                                         <?php if ($billStatus === 'paid'): ?>
-                                        <button type="button" class="action-btn btn-invoice" 
+                                        <button type="button" class="action-btn btn-invoice dynamic-invoice-btn" 
                                                 title="View Invoice"
                                                 onclick="openReceiptModal('<?php echo htmlspecialchars($row['patient_id']); ?>', '<?php echo htmlspecialchars($row['patient_name'] ?? 'N/A'); ?>', '<?php echo htmlspecialchars($row['patient_email'] ?? ''); ?>', '<?php echo htmlspecialchars($row['treatment'] ?? $row['service_name'] ?? 'N/A'); ?>', '<?php echo htmlspecialchars($row['payment_method'] ?? 'N/A'); ?>', '<?php echo htmlspecialchars($transactionDate); ?>', <?php echo $appointmentFee; ?>, <?php echo $treatmentCost; ?>, <?php echo $total; ?>, '<?php echo htmlspecialchars($row['appointment_id'] ?? ''); ?>', '<?php echo htmlspecialchars($row['treatment_id'] ?? ''); ?>')">
                                             <i class="fas fa-receipt"></i>
@@ -981,6 +991,18 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
                         <?php } ?>
                     </tbody>
                 </table>
+            </div>
+            <div class="pagination-container" id="all-transactions-pagination-container">
+                <div class="pagination-info" id="all-transactions-pagination-info"></div>
+                <div class="pagination-controls">
+                    <button class="pagination-btn" id="all-transactions-prev-btn" onclick="changeAllTransactionsPage(-1)" disabled>
+                        <i class="fas fa-chevron-left"></i> Prev
+                    </button>
+                    <div class="pagination-numbers" id="all-transactions-pagination-numbers"></div>
+                    <button class="pagination-btn" id="all-transactions-next-btn" onclick="changeAllTransactionsPage(1)" disabled>
+                        Next <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
             </div>
         </div>
         <!-- End All Transactions Tab Content -->
@@ -1169,6 +1191,9 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
     // Pagination state for Payments
     let paymentsCurrentPage = 1;
     let paymentsRowsPerPage = 5;
+    // Pagination state for All Transactions
+    const allTransactionsRowsPerPage = 5;
+    let allTransactionsCurrentPage = 1;
     
     // Detect mobile/tablet and adjust rows per page
     function updateRowsPerPage() {
@@ -1782,11 +1807,113 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
     function filterAllTransactions() {
         const searchText = (document.getElementById("filter-all-transactions-search")?.value || "").toLowerCase().trim();
         const rows = document.querySelectorAll(".all-tx-row");
+        const visibleRows = [];
 
         rows.forEach(row => {
             const rowSearch = (row.getAttribute("data-search") || "").toLowerCase();
-            row.style.display = (searchText === "" || rowSearch.includes(searchText)) ? "table-row" : "none";
+            if (searchText === "" || rowSearch.includes(searchText)) {
+                visibleRows.push(row);
+            } else {
+                row.style.display = "none";
+            }
         });
+
+        allTransactionsCurrentPage = 1;
+        updateAllTransactionsPagination(visibleRows);
+    }
+
+    function getVisibleAllTransactionsRows() {
+        const searchText = (document.getElementById("filter-all-transactions-search")?.value || "").toLowerCase().trim();
+        const rows = document.querySelectorAll(".all-tx-row");
+        const visibleRows = [];
+
+        rows.forEach(row => {
+            const rowSearch = (row.getAttribute("data-search") || "").toLowerCase();
+            if (searchText === "" || rowSearch.includes(searchText)) {
+                visibleRows.push(row);
+            }
+        });
+
+        return visibleRows;
+    }
+
+    function showAllTransactionsPage(visibleRows, page) {
+        const allRows = document.querySelectorAll(".all-tx-row");
+        allRows.forEach(row => {
+            row.style.display = "none";
+        });
+
+        const startIndex = (page - 1) * allTransactionsRowsPerPage;
+        const endIndex = startIndex + allTransactionsRowsPerPage;
+        visibleRows.slice(startIndex, endIndex).forEach(row => {
+            row.style.display = "table-row";
+        });
+    }
+
+    function createAllTransactionsPageNumber(pageNum, container) {
+        const pageBtn = document.createElement("button");
+        pageBtn.className = "pagination-number" + (pageNum === allTransactionsCurrentPage ? " active" : "");
+        pageBtn.textContent = pageNum;
+        pageBtn.onclick = () => goToAllTransactionsPage(pageNum);
+        container.appendChild(pageBtn);
+    }
+
+    function updateAllTransactionsPagination(visibleRows) {
+        const totalRows = visibleRows.length;
+        const totalPages = Math.ceil(totalRows / allTransactionsRowsPerPage);
+        const container = document.getElementById("all-transactions-pagination-container");
+        const info = document.getElementById("all-transactions-pagination-info");
+        const numbers = document.getElementById("all-transactions-pagination-numbers");
+        const prevBtn = document.getElementById("all-transactions-prev-btn");
+        const nextBtn = document.getElementById("all-transactions-next-btn");
+
+        if (totalRows === 0) {
+            if (container) container.style.display = "none";
+            return;
+        }
+
+        if (container) container.style.display = "flex";
+        if (allTransactionsCurrentPage > totalPages) allTransactionsCurrentPage = totalPages;
+        if (allTransactionsCurrentPage < 1) allTransactionsCurrentPage = 1;
+
+        const startRow = (allTransactionsCurrentPage - 1) * allTransactionsRowsPerPage + 1;
+        const endRow = Math.min(allTransactionsCurrentPage * allTransactionsRowsPerPage, totalRows);
+        if (info) info.textContent = `Showing ${startRow}-${endRow} of ${totalRows} transactions`;
+
+        if (prevBtn) prevBtn.disabled = allTransactionsCurrentPage === 1;
+        if (nextBtn) nextBtn.disabled = allTransactionsCurrentPage >= totalPages;
+
+        if (numbers) {
+            numbers.innerHTML = "";
+            const maxPagesToShow = 3;
+            let startPage = Math.max(1, allTransactionsCurrentPage - 1);
+            let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+            if (endPage - startPage < maxPagesToShow - 1) {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+            for (let i = startPage; i <= endPage; i++) {
+                createAllTransactionsPageNumber(i, numbers);
+            }
+        }
+
+        showAllTransactionsPage(visibleRows, allTransactionsCurrentPage);
+    }
+
+    function goToAllTransactionsPage(page) {
+        const visibleRows = getVisibleAllTransactionsRows();
+        if (!visibleRows.length) return;
+        allTransactionsCurrentPage = page;
+        updateAllTransactionsPagination(visibleRows);
+    }
+
+    function changeAllTransactionsPage(direction) {
+        const visibleRows = getVisibleAllTransactionsRows();
+        if (!visibleRows.length) return;
+        const totalPages = Math.ceil(visibleRows.length / allTransactionsRowsPerPage);
+        const nextPage = allTransactionsCurrentPage + direction;
+        if (nextPage >= 1 && nextPage <= totalPages) {
+            goToAllTransactionsPage(nextPage);
+        }
     }
 
     // Initialize pagination on page load
@@ -1804,6 +1931,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         
         setTimeout(() => {
             filterPayments();
+            filterAllTransactions();
         }, 100);
     });
 
@@ -1843,6 +1971,7 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         } else if (tabName === 'all-transactions') {
             document.getElementById('all-transactions-tab').style.display = 'block';
             document.getElementById('tab-all-transactions').classList.add('active');
+            filterAllTransactions();
         }
     }
     
@@ -2260,7 +2389,187 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
     });
 
     // Update Bill Payment Status
-    function updateBillPaymentStatus(patientId, treatmentId, appointmentId, billStatusId, newStatus, totalAmount) {
+    function parseJsonResponseSafely(response) {
+        return response.text().then(text => {
+            const raw = String(text || '').trim();
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                // Some environments append notices/warnings before/after JSON.
+                // Extract the first complete JSON object so UI updates still work.
+                const extractFirstJsonObject = (input) => {
+                    const str = String(input || '');
+                    let start = -1;
+                    let depth = 0;
+                    let inString = false;
+                    let escaped = false;
+
+                    for (let i = 0; i < str.length; i++) {
+                        const ch = str[i];
+                        if (start === -1) {
+                            if (ch === '{') {
+                                start = i;
+                                depth = 1;
+                            }
+                            continue;
+                        }
+
+                        if (inString) {
+                            if (escaped) {
+                                escaped = false;
+                            } else if (ch === '\\') {
+                                escaped = true;
+                            } else if (ch === '"') {
+                                inString = false;
+                            }
+                            continue;
+                        }
+
+                        if (ch === '"') {
+                            inString = true;
+                            continue;
+                        }
+                        if (ch === '{') depth++;
+                        if (ch === '}') {
+                            depth--;
+                            if (depth === 0) {
+                                return str.slice(start, i + 1);
+                            }
+                        }
+                    }
+                    return '';
+                };
+
+                const jsonSlice = extractFirstJsonObject(raw);
+                if (jsonSlice) {
+                    try {
+                        return JSON.parse(jsonSlice);
+                    } catch (ignored) {}
+                }
+
+                return {
+                    success: response.ok,
+                    status: response.ok ? 'success' : 'error',
+                    message: raw || ''
+                };
+            }
+        });
+    }
+
+    function applyBillStatusToModal(newStatus) {
+        const billStatusBadge = document.getElementById('billStatusBadge');
+        const markPaidBtn = document.getElementById('markPaidBtn');
+        const markUnpaidBtn = document.getElementById('markUnpaidBtn');
+        const isPaid = String(newStatus).toLowerCase() === 'paid';
+
+        if (billStatusBadge) {
+            billStatusBadge.textContent = isPaid ? 'Paid' : 'Unpaid';
+            billStatusBadge.style.background = isPaid ? '#10b981' : '#ef4444';
+        }
+
+        if (markPaidBtn) {
+            markPaidBtn.disabled = isPaid;
+            markPaidBtn.style.opacity = isPaid ? '0.6' : '1';
+            markPaidBtn.style.cursor = isPaid ? 'not-allowed' : 'pointer';
+        }
+        if (markUnpaidBtn) {
+            markUnpaidBtn.disabled = !isPaid;
+            markUnpaidBtn.style.opacity = !isPaid ? '0.6' : '1';
+            markUnpaidBtn.style.cursor = !isPaid ? 'not-allowed' : 'pointer';
+        }
+    }
+
+    function findAllTransactionsRow(patientId, treatmentId, appointmentId, billStatusId) {
+        const rows = document.querySelectorAll('#all-transactions-table .all-tx-row');
+        const safe = value => (value === null || value === undefined) ? '' : String(value);
+        const targetBillStatusId = safe(billStatusId);
+        const targetPatientId = safe(patientId);
+        const targetTreatmentId = safe(treatmentId);
+        const targetAppointmentId = safe(appointmentId);
+
+        // Prefer exact bill status id match if present.
+        if (targetBillStatusId) {
+            for (const row of rows) {
+                if (safe(row.getAttribute('data-bill-status-id')) === targetBillStatusId) return row;
+            }
+        }
+
+        // Fallback matching by patient + treatment + appointment context.
+        for (const row of rows) {
+            if (safe(row.getAttribute('data-patient-id')) !== targetPatientId) continue;
+            if (targetTreatmentId && safe(row.getAttribute('data-treatment-id')) !== targetTreatmentId) continue;
+            if (targetAppointmentId && safe(row.getAttribute('data-appointment-id')) !== targetAppointmentId) continue;
+            return row;
+        }
+        return null;
+    }
+
+    function applyBillStatusToAllTransactionsRow(patientId, treatmentId, appointmentId, billStatusId, newStatus, newBillStatusId) {
+        const row = findAllTransactionsRow(patientId, treatmentId, appointmentId, billStatusId);
+        if (!row) return;
+
+        const normalizedStatus = String(newStatus || 'unpaid').toLowerCase() === 'paid' ? 'paid' : 'unpaid';
+        const badge = row.querySelector('.bill-status-badge');
+        if (badge) {
+            badge.textContent = normalizedStatus === 'paid' ? 'Paid' : 'Unpaid';
+            badge.setAttribute('data-bill-status', normalizedStatus);
+            badge.style.background = normalizedStatus === 'paid' ? '#10B981' : '#EF4444';
+        }
+
+        if (newBillStatusId) {
+            row.setAttribute('data-bill-status-id', String(newBillStatusId));
+        }
+
+        toggleInvoiceButtonForRow(row, normalizedStatus === 'paid');
+    }
+
+    function openReceiptModalFromRow(row) {
+        if (!row) return;
+        openReceiptModal(
+            row.getAttribute('data-patient-id') || '',
+            row.getAttribute('data-patient-name') || 'N/A',
+            row.getAttribute('data-patient-email') || '',
+            row.getAttribute('data-treatment-name') || 'N/A',
+            row.getAttribute('data-payment-method') || 'N/A',
+            row.getAttribute('data-transaction-date') || '',
+            parseFloat(row.getAttribute('data-appointment-fee') || 0),
+            parseFloat(row.getAttribute('data-treatment-cost') || 0),
+            parseFloat(row.getAttribute('data-total-amount') || 0),
+            row.getAttribute('data-appointment-id') || '',
+            row.getAttribute('data-treatment-id') || ''
+        );
+    }
+
+    function toggleInvoiceButtonForRow(row, shouldShow) {
+        const actionContainer = row.querySelector('.action-btns');
+        if (!actionContainer) return;
+
+        const existingBtn = actionContainer.querySelector('.dynamic-invoice-btn');
+        if (!shouldShow) {
+            if (existingBtn) existingBtn.remove();
+            return;
+        }
+
+        if (existingBtn) return;
+
+        const archiveBtn = actionContainer.querySelector('button[title="Archive Transaction"]');
+        const invoiceBtn = document.createElement('button');
+        invoiceBtn.type = 'button';
+        invoiceBtn.className = 'action-btn btn-invoice dynamic-invoice-btn';
+        invoiceBtn.title = 'View Invoice';
+        invoiceBtn.innerHTML = '<i class="fas fa-receipt"></i>';
+        invoiceBtn.addEventListener('click', function () {
+            openReceiptModalFromRow(row);
+        });
+
+        if (archiveBtn) {
+            actionContainer.insertBefore(invoiceBtn, archiveBtn);
+        } else {
+            actionContainer.appendChild(invoiceBtn);
+        }
+    }
+
+    async function updateBillPaymentStatus(patientId, treatmentId, appointmentId, billStatusId, newStatus, totalAmount) {
         if (!confirm(`Are you sure you want to mark this bill as ${newStatus.toUpperCase()}?`)) {
             return;
         }
@@ -2273,25 +2582,43 @@ $allTransactionsResult = mysqli_query($con, $allTransactionsSql);
         formData.append('payment_status', newStatus);
         formData.append('total_amount', totalAmount);
         
-        fetch('../controllers/updateBillPaymentStatus.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
+        try {
+            const response = await fetch('../controllers/updateBillPaymentStatus.php', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await parseJsonResponseSafely(response);
+            if (!data || typeof data !== 'object') {
+                throw new Error('Invalid server response');
+            }
+
             if (data.success || data.status === 'success') {
                 showNotification('success', 'Status Updated', `Bill payment status has been updated to ${newStatus.toUpperCase()}.`);
-                setTimeout(() => {
-                    location.reload();
-                }, 1500);
+
+                // Real-time UI update without page refresh.
+                const latestBillStatusId = (data.bill_status_id || data.id || billStatusId || '').toString();
+                try {
+                    applyBillStatusToModal(newStatus);
+                    applyBillStatusToAllTransactionsRow(patientId, treatmentId, appointmentId, billStatusId, newStatus, latestBillStatusId);
+                } catch (uiError) {
+                    // Do not fail the successful server update because of UI-sync issues.
+                    console.warn('Bill status saved but UI sync failed:', uiError);
+                }
+
+                if (window.currentBillData) {
+                    window.currentBillData.billStatusId = latestBillStatusId;
+                }
             } else {
                 showNotification('error', 'Error', data.message || 'Failed to update payment status. Please try again.');
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showNotification('error', 'Error', 'An error occurred while updating payment status. Please try again.');
-        });
+        } catch (error) {
+            console.error('Error updating bill payment status:', error);
+            showNotification(
+                'error',
+                'Error',
+                (error && error.message) ? error.message : 'An error occurred while updating payment status. Please try again.'
+            );
+        }
     }
     
     function printBillSummary() {

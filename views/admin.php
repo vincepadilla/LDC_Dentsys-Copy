@@ -820,17 +820,6 @@ if (empty($_SESSION['admin_verified'])) {
             <i class="fas fa-sliders-h"></i> Others
         </h3>
         <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
-            <button class="control-option-btn" onclick="navigateToClinicControl()">
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <div class="control-icon" style="background: #f59e0b20; color: #f59e0b;">
-                        <i class="fas fa-building"></i>
-                    </div>
-                    <div style="text-align: left;">
-                        <div style="font-weight: 600; font-size: 16px;">Clinic Control</div>
-                        <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">Manage closures & holidays</div>
-                    </div>
-                </div>
-            </button>
 
             <button class="control-option-btn" onclick="navigateToArchives()">
                 <div style="display: flex; align-items: center; gap: 15px;">
@@ -852,6 +841,18 @@ if (empty($_SESSION['admin_verified'])) {
                     <div style="text-align: left;">
                         <div style="font-weight: 600; font-size: 16px;">Walk-in Records</div>
                         <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">View and manage walk-in records</div>
+                    </div>
+                </div>
+            </button>
+
+            <button class="control-option-btn" onclick="navigateToUserControl()">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div class="control-icon" style="background: #8b5cf620; color: #8b5cf6;">
+                        <i class="fas fa-gear"></i>
+                    </div>
+                    <div style="text-align: left;">
+                        <div style="font-weight: 600; font-size: 16px;">Control Center</div>
+                        <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">Control Clinic,User Management, Edit Content, and Settings Configuration</div>
                     </div>
                 </div>
             </button>
@@ -1230,7 +1231,7 @@ if (empty($_SESSION['admin_verified'])) {
         }
         
         setTimeout(() => {
-            window.location.href = '../views/userControl.php';
+            window.location.href = 'userControl.php';
         }, 300);
     }
     

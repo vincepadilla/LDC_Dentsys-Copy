@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once(__DIR__ . "/../database/config.php");
+require_once(__DIR__ . "/../libraries/reports_period_scope.php");
 
 if (!isset($_SESSION['userID']) || strtolower($_SESSION['role']) !== 'admin') {
     header("Location: login.php");
@@ -12,218 +13,361 @@ if (empty($_SESSION['admin_verified'])) {
     exit();
 }
 
-// Prepare data for reports
-// Total Appointments
-$totalAppointments = mysqli_fetch_assoc(mysqli_query($con, "SELECT COUNT(*) AS total FROM appointments"))['total'];
+// Same period rules as controllers/exportAppointmentReportPdf.php (soft fallback on invalid GET)
+$periodInput = [
+    "range" => isset($_GET["range"]) ? (string)$_GET["range"] : "1y",
+    "date_from" => isset($_GET["date_from"]) ? (string)$_GET["date_from"] : "",
+    "date_to" => isset($_GET["date_to"]) ? (string)$_GET["date_to"] : "",
+];
+$period = reportsResolveReportingPeriod($periodInput);
+$startStr = $period["startStr"];
+$endStr = $period["endStr"];
+$dateRangeLabel = $period["dateRangeLabel"];
 
-// Total Down Payment
-$totaldownPayment = mysqli_fetch_assoc(mysqli_query($con, "
-    SELECT IFNULL(SUM(p.amount), 0) AS total
-    FROM payment p
-    WHERE COALESCE(p.is_archived, 0) = 0
-      AND LOWER(TRIM(p.status)) = 'paid'
-"))['total'];
-
-$totalRevenue = mysqli_fetch_assoc(mysqli_query($con, "SELECT IFNULL(SUM(treatment_cost), 0) AS total FROM treatment_history"))['total'];
-
-// Today's Appointments
-$todayAppointments = mysqli_fetch_assoc(mysqli_query($con, "
-    SELECT COUNT(*) AS total FROM appointments 
-    WHERE DATE(appointment_date) = CURDATE()
-"))['total'];
-
-// Appointment Status Breakdown
-$statusQuery = mysqli_query($con, "
-    SELECT status, COUNT(*) as count 
-    FROM appointments 
-    GROUP BY status
+// —— Total Appointments (period)
+$totalAppointments = 0;
+$st = mysqli_prepare($con, "
+    SELECT COUNT(*) AS total
+    FROM appointments a
+    WHERE COALESCE(a.is_archived, 0) = 0
+      AND a.appointment_date BETWEEN ? AND ?
 ");
-$appointmentStatuses = [];
-while ($row = mysqli_fetch_assoc($statusQuery)) {
-    $appointmentStatuses[$row['status']] = $row['count'];
+if ($st) {
+    mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+    mysqli_stmt_execute($st);
+    $r = mysqli_stmt_get_result($st);
+    if ($row = mysqli_fetch_assoc($r)) {
+        $totalAppointments = (int)$row["total"];
+    }
+    mysqli_stmt_close($st);
 }
 
-// Total Downpayment by Services
-$serviceRevenueQuery = mysqli_query($con, "
-    SELECT s.service_category, SUM(p.amount) as total_amount
+$currentMonthLabel = date("F Y");
+
+// —— Total Down Payment (period; tied to appointment date, same as PDF)
+$totaldownPayment = 0.0;
+$st = mysqli_prepare($con, "
+    SELECT IFNULL(SUM(p.amount), 0) AS total
+    FROM payment p
+    INNER JOIN appointments a ON p.appointment_id = a.appointment_id
+    WHERE COALESCE(p.is_archived, 0) = 0
+      AND LOWER(TRIM(p.status)) = 'paid'
+      AND COALESCE(a.is_archived, 0) = 0
+      AND a.appointment_date BETWEEN ? AND ?
+");
+if ($st) {
+    mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+    mysqli_stmt_execute($st);
+    $r = mysqli_stmt_get_result($st);
+    if ($row = mysqli_fetch_assoc($r)) {
+        $totaldownPayment = (float)$row["total"];
+    }
+    mysqli_stmt_close($st);
+}
+
+// —— Today's Appointments (only if today falls inside the selected period)
+$todayAppointments = 0;
+$todayYmd = date("Y-m-d");
+if ($todayYmd >= $startStr && $todayYmd <= $endStr) {
+    $st = mysqli_prepare($con, "
+        SELECT COUNT(*) AS total
+        FROM appointments a
+        WHERE COALESCE(a.is_archived, 0) = 0
+          AND DATE(a.appointment_date) = CURDATE()
+          AND a.appointment_date BETWEEN ? AND ?
+    ");
+    if ($st) {
+        mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+        mysqli_stmt_execute($st);
+        $r = mysqli_stmt_get_result($st);
+        if ($row = mysqli_fetch_assoc($r)) {
+            $todayAppointments = (int)$row["total"];
+        }
+        mysqli_stmt_close($st);
+    }
+}
+
+// —— Appointment Status Breakdown (period)
+$appointmentStatuses = [];
+$st = mysqli_prepare($con, "
+    SELECT a.status, COUNT(*) AS cnt
+    FROM appointments a
+    WHERE COALESCE(a.is_archived, 0) = 0
+      AND a.appointment_date BETWEEN ? AND ?
+    GROUP BY a.status
+");
+if ($st) {
+    mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+    mysqli_stmt_execute($st);
+    $r = mysqli_stmt_get_result($st);
+    while ($row = mysqli_fetch_assoc($r)) {
+        $appointmentStatuses[$row["status"]] = (int)$row["cnt"];
+    }
+    mysqli_stmt_close($st);
+}
+
+// —— Total Downpayment by Services (period)
+$serviceRevenueLabels = [];
+$serviceRevenueAmounts = [];
+$st = mysqli_prepare($con, "
+    SELECT s.service_category, SUM(p.amount) AS total_amount
     FROM payment p
     INNER JOIN appointments a ON p.appointment_id = a.appointment_id
     INNER JOIN services s ON a.service_id = s.service_id
     WHERE COALESCE(p.is_archived, 0) = 0
       AND LOWER(TRIM(p.status)) = 'paid'
+      AND COALESCE(a.is_archived, 0) = 0
+      AND a.appointment_date BETWEEN ? AND ?
     GROUP BY s.service_category
 ");
-$serviceRevenueLabels = [];
-$serviceRevenueAmounts = [];
-while ($row = mysqli_fetch_assoc($serviceRevenueQuery)) {
-    $serviceRevenueLabels[] = $row['service_category'];
-    $serviceRevenueAmounts[] = (float)$row['total_amount'];
+if ($st) {
+    mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+    mysqli_stmt_execute($st);
+    $r = mysqli_stmt_get_result($st);
+    while ($row = mysqli_fetch_assoc($r)) {
+        $serviceRevenueLabels[] = $row["service_category"];
+        $serviceRevenueAmounts[] = (float)$row["total_amount"];
+    }
+    mysqli_stmt_close($st);
 }
 
-// Services Availed Count (based on sub_service)
-$servicesAvailedQuery = mysqli_query($con, "
-    SELECT s.sub_service, COUNT(*) as count
+// —— Services Availed Count (period)
+$servicesAvailedLabels = [];
+$servicesAvailedCounts = [];
+$st = mysqli_prepare($con, "
+    SELECT s.sub_service, COUNT(*) AS count
     FROM appointments a
     INNER JOIN services s ON a.service_id = s.service_id
+    WHERE COALESCE(a.is_archived, 0) = 0
+      AND a.appointment_date BETWEEN ? AND ?
     GROUP BY s.sub_service
     ORDER BY count DESC
 ");
-$servicesAvailedLabels = [];
-$servicesAvailedCounts = [];
-while ($row = mysqli_fetch_assoc($servicesAvailedQuery)) {
-    $servicesAvailedLabels[] = $row['sub_service'];
-    $servicesAvailedCounts[] = (int)$row['count'];
+if ($st) {
+    mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+    mysqli_stmt_execute($st);
+    $r = mysqli_stmt_get_result($st);
+    while ($row = mysqli_fetch_assoc($r)) {
+        $servicesAvailedLabels[] = $row["sub_service"];
+        $servicesAvailedCounts[] = (int)$row["count"];
+    }
+    mysqli_stmt_close($st);
 }
 
-// Monthly Service Distribution
+// —— Monthly Service Distribution (each calendar month overlapping the period)
+$reportMonths = reportsMonthsInRange($startStr, $endStr);
 $monthlyServiceData = [];
-$currentYear = date('Y');
-for ($month = 1; $month <= 12; $month++) {
-    $sql = "SELECT s.service_category, COUNT(*) AS count
-            FROM appointments a
-            LEFT JOIN services s ON a.service_id = s.service_id
-            WHERE MONTH(a.appointment_date) = $month 
-            AND YEAR(a.appointment_date) = $currentYear
-            GROUP BY s.service_category";
-    $result = mysqli_query($con, $sql);
-    $services = [];
-    $counts = [];
-    while ($row = mysqli_fetch_assoc($result)) {
-        $services[] = $row['service_category'];
-        $counts[] = (int)$row['count'];
-    }
-    $monthlyServiceData[$month] = [
-        'labels' => $services,
-        'counts' => $counts,
-        'total' => array_sum($counts)
+foreach ($reportMonths as $rm) {
+    $monthlyServiceData[$rm["key"]] = [
+        "labels" => [],
+        "counts" => [],
+        "total" => 0,
+        "chartLabel" => $rm["label"],
     ];
 }
+$st = mysqli_prepare($con, "
+    SELECT
+        YEAR(a.appointment_date) AS y,
+        MONTH(a.appointment_date) AS m,
+        COALESCE(s.service_category, 'N/A') AS service_category,
+        COUNT(*) AS cnt
+    FROM appointments a
+    LEFT JOIN services s ON a.service_id = s.service_id
+    WHERE COALESCE(a.is_archived, 0) = 0
+      AND a.appointment_date BETWEEN ? AND ?
+    GROUP BY YEAR(a.appointment_date), MONTH(a.appointment_date), COALESCE(s.service_category, 'N/A')
+");
+if ($st) {
+    mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+    mysqli_stmt_execute($st);
+    $r = mysqli_stmt_get_result($st);
+    while ($row = mysqli_fetch_assoc($r)) {
+        $key = sprintf("%04d-%02d", (int)$row["y"], (int)$row["m"]);
+        if (!isset($monthlyServiceData[$key])) {
+            continue;
+        }
+        $monthlyServiceData[$key]["labels"][] = $row["service_category"];
+        $monthlyServiceData[$key]["counts"][] = (int)$row["cnt"];
+    }
+    mysqli_stmt_close($st);
+}
+foreach ($monthlyServiceData as $k => $bucket) {
+    $monthlyServiceData[$k]["total"] = array_sum($bucket["counts"]);
+}
 
-// Appointments Per Day (Last 30 days)
-$sql = "SELECT appointment_date, COUNT(*) as count FROM appointments 
-        WHERE appointment_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-        GROUP BY appointment_date ORDER BY appointment_date";
-$result = mysqli_query($con, $sql);
+// —— Appointments Per Day (every day in selected period)
 $dates = [];
 $rawDates = [];
 $counts = [];
-while ($row = mysqli_fetch_assoc($result)) {
-    $dates[] = date('M j', strtotime($row['appointment_date']));
-    $rawDates[] = date('Y-m-d', strtotime($row['appointment_date']));
-    $counts[] = (int)$row['count'];
+$st = mysqli_prepare($con, "
+    SELECT appointment_date, COUNT(*) AS count
+    FROM appointments a
+    WHERE COALESCE(a.is_archived, 0) = 0
+      AND a.appointment_date BETWEEN ? AND ?
+    GROUP BY appointment_date
+    ORDER BY appointment_date
+");
+if ($st) {
+    mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+    mysqli_stmt_execute($st);
+    $r = mysqli_stmt_get_result($st);
+    while ($row = mysqli_fetch_assoc($r)) {
+        $dates[] = date("M j", strtotime($row["appointment_date"]));
+        $rawDates[] = date("Y-m-d", strtotime($row["appointment_date"]));
+        $counts[] = (int)$row["count"];
+    }
+    mysqli_stmt_close($st);
 }
 
-// Revenue by Services
-$revenueQuery = mysqli_query($con, "
-    SELECT 
-        th.treatment,
-        SUM(th.treatment_cost) as total_revenue,
-        COUNT(*) as treatment_count
-    FROM treatment_history th
-    WHERE th.treatment_cost > 0
-    GROUP BY th.treatment
-    ORDER BY total_revenue DESC
-");
-
+// —— Revenue by Services (period; total = sum of rows, matches PDF headline revenue)
 $serviceNames = [];
 $serviceRevenues = [];
 $treatmentCounts = [];
-$totalRevenue = 0;
-
-while ($row = mysqli_fetch_assoc($revenueQuery)) {
-    $serviceNames[] = $row['treatment'];
-    $serviceRevenues[] = (float)$row['total_revenue'];
-    $treatmentCounts[] = (int)$row['treatment_count'];
-    $totalRevenue += $row['total_revenue'];
-}
-
-// Monthly Revenue by Services (group by year/month/service)
-$currentMonth = (int)date('n');
-$monthlyRevenueByServicesData = []; // [month][service_name] => ['revenue' => float, 'count' => int]
-$monthlyRevenueServiceTotals = []; // [service_name] => total revenue across the year (for sorting)
-
-$monthlyRevenueQuery = mysqli_query($con, "
+$st = mysqli_prepare($con, "
     SELECT
-        YEAR(th.created_at) as year,
-        MONTH(th.created_at) as month,
-        th.treatment as service_name,
-        SUM(th.treatment_cost) as total_revenue,
-        COUNT(*) as treatment_count
+        th.treatment,
+        SUM(th.treatment_cost) AS total_revenue,
+        COUNT(*) AS treatment_count
     FROM treatment_history th
     WHERE th.treatment_cost > 0
       AND th.treatment IS NOT NULL AND th.treatment != ''
-      AND YEAR(th.created_at) = $currentYear
+      AND DATE(th.created_at) BETWEEN ? AND ?
+    GROUP BY th.treatment
+    ORDER BY total_revenue DESC
+");
+if ($st) {
+    mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+    mysqli_stmt_execute($st);
+    $r = mysqli_stmt_get_result($st);
+    while ($row = mysqli_fetch_assoc($r)) {
+        $serviceNames[] = $row["treatment"];
+        $tr = (float)$row["total_revenue"];
+        $serviceRevenues[] = $tr;
+        $treatmentCounts[] = (int)$row["treatment_count"];
+    }
+    mysqli_stmt_close($st);
+}
+$totalRevenue = array_sum($serviceRevenues);
+
+// —— Monthly Revenue by Services (variable month columns within period)
+$nReportMonths = count($reportMonths);
+$monthlyRevenueByServicesData = []; // [monthKey][service_name] => ['revenue'=>,'count'=>]
+$monthlyRevenueServiceTotals = [];
+
+$st = mysqli_prepare($con, "
+    SELECT
+        YEAR(th.created_at) AS year,
+        MONTH(th.created_at) AS month,
+        th.treatment AS service_name,
+        SUM(th.treatment_cost) AS total_revenue,
+        COUNT(*) AS treatment_count
+    FROM treatment_history th
+    WHERE th.treatment_cost > 0
+      AND th.treatment IS NOT NULL AND th.treatment != ''
+      AND DATE(th.created_at) BETWEEN ? AND ?
     GROUP BY YEAR(th.created_at), MONTH(th.created_at), th.treatment
     ORDER BY YEAR(th.created_at) ASC, MONTH(th.created_at) ASC, total_revenue DESC
 ");
-
-while ($row = mysqli_fetch_assoc($monthlyRevenueQuery)) {
-    $month = (int)$row['month'];
-    $serviceName = $row['service_name'];
-    $revenue = (float)$row['total_revenue'];
-    $count = (int)$row['treatment_count'];
-
-    if (!isset($monthlyRevenueByServicesData[$month])) {
-        $monthlyRevenueByServicesData[$month] = [];
+if ($st) {
+    mysqli_stmt_bind_param($st, "ss", $startStr, $endStr);
+    mysqli_stmt_execute($st);
+    $r = mysqli_stmt_get_result($st);
+    while ($row = mysqli_fetch_assoc($r)) {
+        $mk = sprintf("%04d-%02d", (int)$row["year"], (int)$row["month"]);
+        $serviceName = $row["service_name"];
+        $revenue = (float)$row["total_revenue"];
+        $count = (int)$row["treatment_count"];
+        if (!isset($monthlyRevenueByServicesData[$mk])) {
+            $monthlyRevenueByServicesData[$mk] = [];
+        }
+        $monthlyRevenueByServicesData[$mk][$serviceName] = [
+            "revenue" => $revenue,
+            "count" => $count,
+        ];
+        $monthlyRevenueServiceTotals[$serviceName] = ($monthlyRevenueServiceTotals[$serviceName] ?? 0) + $revenue;
     }
-
-    $monthlyRevenueByServicesData[$month][$serviceName] = [
-        'revenue' => $revenue,
-        'count' => $count
-    ];
-
-    $monthlyRevenueServiceTotals[$serviceName] = ($monthlyRevenueServiceTotals[$serviceName] ?? 0) + $revenue;
+    mysqli_stmt_close($st);
 }
 
 $monthlyRevenueServiceNames = array_keys($monthlyRevenueServiceTotals);
 arsort($monthlyRevenueServiceTotals);
-$monthlyRevenueServiceNames = array_keys($monthlyRevenueServiceTotals); // sorted by total revenue desc
+$monthlyRevenueServiceNames = array_keys($monthlyRevenueServiceTotals);
 
 $monthlyRevenueMonthLabels = [];
-$monthlyRevenueTotalsByMonth = array_fill(0, 12, 0.0); // index: 0=Jan
-for ($m = 1; $m <= 12; $m++) {
-    $monthlyRevenueMonthLabels[] = date('M', mktime(0, 0, 0, $m, 10));
+foreach ($reportMonths as $rm) {
+    $monthlyRevenueMonthLabels[] = $rm["label"];
 }
 
-$monthlyRevenueRevenuesMatrix = []; // [serviceIndex][monthIndex] => revenue
-$monthlyRevenueCountsMatrix = []; // [serviceIndex][monthIndex] => count
+$monthlyRevenueTotalsByMonth = array_fill(0, max(1, $nReportMonths), 0.0);
+$monthlyRevenueRevenuesMatrix = [];
+$monthlyRevenueCountsMatrix = [];
 
 foreach ($monthlyRevenueServiceNames as $serviceName) {
-    $revenues = array_fill(0, 12, 0.0);
-    $counts = array_fill(0, 12, 0);
-
-    for ($m = 1; $m <= 12; $m++) {
-        $idx = $m - 1;
-        $cell = $monthlyRevenueByServicesData[$m][$serviceName] ?? null;
+    $revenues = array_fill(0, max(1, $nReportMonths), 0.0);
+    $countsRow = array_fill(0, max(1, $nReportMonths), 0);
+    foreach ($reportMonths as $mi => $rm) {
+        $mk = $rm["key"];
+        $cell = $monthlyRevenueByServicesData[$mk][$serviceName] ?? null;
         if ($cell) {
-            $revenues[$idx] = (float)$cell['revenue'];
-            $counts[$idx] = (int)$cell['count'];
-            $monthlyRevenueTotalsByMonth[$idx] += (float)$cell['revenue'];
+            $revenues[$mi] = (float)$cell["revenue"];
+            $countsRow[$mi] = (int)$cell["count"];
+            $monthlyRevenueTotalsByMonth[$mi] += (float)$cell["revenue"];
         }
     }
-
     $monthlyRevenueRevenuesMatrix[] = $revenues;
-    $monthlyRevenueCountsMatrix[] = $counts;
+    $monthlyRevenueCountsMatrix[] = $countsRow;
 }
 
-$hasMonthlyRevenueData = array_sum($monthlyRevenueTotalsByMonth) > 0;
+$hasMonthlyRevenueData = $nReportMonths > 0 && array_sum($monthlyRevenueTotalsByMonth) > 0;
 
-// Pre-render current month details for default view
-$monthlyRevenueCurrentMonthTotal = $monthlyRevenueTotalsByMonth[$currentMonth - 1] ?? 0.0;
+// Default month column: last month in range with any revenue, else last index
+$defaultMonthIdx = max(0, $nReportMonths - 1);
+for ($mi = $nReportMonths - 1; $mi >= 0; $mi--) {
+    if (($monthlyRevenueTotalsByMonth[$mi] ?? 0) > 0) {
+        $defaultMonthIdx = $mi;
+        break;
+    }
+}
+
+$monthlyRevenueCurrentMonthTotal = $monthlyRevenueTotalsByMonth[$defaultMonthIdx] ?? 0.0;
 $monthlyRevenueCurrentMonthDetails = [];
-foreach ($monthlyRevenueServiceNames as $serviceName) {
-    $cell = $monthlyRevenueByServicesData[$currentMonth][$serviceName] ?? null;
-    if ($cell && (float)$cell['revenue'] > 0) {
-        $monthlyRevenueCurrentMonthDetails[] = [
-            'service_name' => $serviceName,
-            'revenue' => (float)$cell['revenue'],
-            'count' => (int)$cell['count']
-        ];
+if ($nReportMonths > 0 && isset($reportMonths[$defaultMonthIdx])) {
+    $defaultMk = $reportMonths[$defaultMonthIdx]["key"];
+    foreach ($monthlyRevenueServiceNames as $serviceName) {
+        $cell = $monthlyRevenueByServicesData[$defaultMk][$serviceName] ?? null;
+        if ($cell && (float)$cell["revenue"] > 0) {
+            $monthlyRevenueCurrentMonthDetails[] = [
+                "service_name" => $serviceName,
+                "revenue" => (float)$cell["revenue"],
+                "count" => (int)$cell["count"],
+            ];
+        }
     }
 }
 usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
-    return $b['revenue'] <=> $a['revenue'];
+    return $b["revenue"] <=> $a["revenue"];
 });
+
+$defaultMonthKey = $nReportMonths > 0 ? $reportMonths[$defaultMonthIdx]["key"] : "";
+$monthKeyToIndex = [];
+foreach ($reportMonths as $mi => $rm) {
+    $monthKeyToIndex[$rm["key"]] = $mi;
+}
+
+$defaultServiceMonthKey = $defaultMonthKey;
+if ($nReportMonths > 0) {
+    $defaultServiceMonthKey = $reportMonths[0]["key"];
+    for ($i = $nReportMonths - 1; $i >= 0; $i--) {
+        $k = $reportMonths[$i]["key"];
+        if (($monthlyServiceData[$k]["total"] ?? 0) > 0) {
+            $defaultServiceMonthKey = $k;
+            break;
+        }
+    }
+}
+
+// Chart title year for monthly service chart (first month in range)
+$currentYear = $nReportMonths > 0 ? (string)$reportMonths[0]["y"] : date("Y");
 
 ?>
 <!DOCTYPE html>
@@ -245,6 +389,63 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
 <body>
     <!-- Notification Container -->
     <div class="notification-container" id="notificationContainer"></div>
+
+    <!-- Export PDF: date range modal -->
+    <div id="pdfExportModal" class="pdf-export-modal" aria-hidden="true">
+        <div class="pdf-export-modal__backdrop" data-close-pdf-modal></div>
+        <div class="pdf-export-modal__panel" role="dialog" aria-modal="true" aria-labelledby="pdfExportModalTitle">
+            <div class="pdf-export-modal__header">
+                <h3 id="pdfExportModalTitle">Export clinic report</h3>
+                <button type="button" class="pdf-export-modal__close" data-close-pdf-modal aria-label="Close">&times;</button>
+            </div>
+            <p class="pdf-export-modal__intro">Choose a preset period or a custom date range. All PDF figures use the selected dates (end date inclusive).</p>
+            <div class="pdf-export-modal__options">
+                <label class="pdf-export-modal__option">
+                    <input type="radio" name="pdfExportRange" value="cy" <?php echo $period['range'] === 'cy' ? 'checked' : ''; ?>>
+                    <span class="pdf-export-modal__option-body">
+                        <span class="pdf-export-modal__option-title">This year</span>
+                        <span class="pdf-export-modal__option-hint">Jan 1 through today (<?php echo (int)date('Y'); ?>)</span>
+                    </span>
+                </label>
+                <label class="pdf-export-modal__option">
+                    <input type="radio" name="pdfExportRange" value="1y" <?php echo $period['range'] === '1y' ? 'checked' : ''; ?>>
+                    <span class="pdf-export-modal__option-body">
+                        <span class="pdf-export-modal__option-title">Past 1 year</span>
+                    </span>
+                </label>
+                <label class="pdf-export-modal__option">
+                    <input type="radio" name="pdfExportRange" value="6m" <?php echo $period['range'] === '6m' ? 'checked' : ''; ?>>
+                    <span class="pdf-export-modal__option-body">
+                        <span class="pdf-export-modal__option-title">Last 6 months</span>
+                    </span>
+                </label>
+                <label class="pdf-export-modal__option">
+                    <input type="radio" name="pdfExportRange" value="custom" id="pdfExportRangeCustom" <?php echo $period['range'] === 'custom' ? 'checked' : ''; ?>>
+                    <span class="pdf-export-modal__option-body">
+                        <span class="pdf-export-modal__option-title">Custom date range</span>
+                        <span class="pdf-export-modal__option-hint">Choose start and end dates</span>
+                    </span>
+                </label>
+            </div>
+            <div id="pdfExportCustomWrap" class="pdf-export-modal__custom-wrap" <?php echo $period['range'] !== 'custom' ? 'hidden' : ''; ?>>
+                <div class="pdf-export-modal__custom-fields">
+                    <label class="pdf-export-modal__date-label">From
+                        <input type="date" id="pdfExportDateFrom" class="pdf-export-modal__date-input" max="<?php echo htmlspecialchars(date('Y-m-d'), ENT_QUOTES, 'UTF-8'); ?>" value="<?php echo $period['range'] === 'custom' ? htmlspecialchars($startStr, ENT_QUOTES, 'UTF-8') : ''; ?>">
+                    </label>
+                    <label class="pdf-export-modal__date-label">To
+                        <input type="date" id="pdfExportDateTo" class="pdf-export-modal__date-input" max="<?php echo htmlspecialchars(date('Y-m-d'), ENT_QUOTES, 'UTF-8'); ?>" value="<?php echo $period['range'] === 'custom' ? htmlspecialchars($endStr, ENT_QUOTES, 'UTF-8') : ''; ?>">
+                    </label>
+                </div>
+                <p class="pdf-export-modal__custom-hint">Maximum span: 5 years. End date cannot be after today.</p>
+            </div>
+            <div class="pdf-export-modal__actions">
+                <button type="button" class="pdf-export-modal__btn pdf-export-modal__btn--secondary" data-close-pdf-modal>Cancel</button>
+                <button type="button" class="pdf-export-modal__btn pdf-export-modal__btn--primary" id="pdfExportConfirmBtn">
+                    <i class="fas fa-check"></i> Export PDF
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Reports Section -->
     <div class="main-content">
@@ -282,20 +483,31 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
                 <!-- Stats Cards Row -->
                 <div class="stats-grid">
                     <div class="report-stat-card">
-                        <div class="stat-label">Total Appointments</div>
-                        <div class="stat-value"><?php echo $totalAppointments; ?></div>
+                        <div class="report-stat-card__main">
+                            <div class="stat-label">Total Appointments</div>
+                            <div class="stat-value"><?php echo $totalAppointments; ?></div>
+                        </div>
                     </div>
                     <div class="report-stat-card">
-                        <div class="stat-label">Total Down Payment</div>
-                        <div class="stat-value">₱<?php echo number_format($totaldownPayment, 2); ?></div>
+                        <div class="report-stat-card__main">
+                            <div class="stat-label">Total Down Payment</div>
+                            <div class="stat-value">₱<?php echo number_format($totaldownPayment, 2); ?></div>
+                        </div>
+                        <div class="report-stat-card__footer report-stat-card__footer--spacer" aria-hidden="true"></div>
                     </div>
                     <div class="report-stat-card">
-                        <div class="stat-label">Today's Appointments</div>
-                        <div class="stat-value"><?php echo $todayAppointments; ?></div>
+                        <div class="report-stat-card__main">
+                            <div class="stat-label">Today's Appointments</div>
+                            <div class="stat-value"><?php echo $todayAppointments; ?></div>
+                        </div>
+                        <div class="report-stat-card__footer report-stat-card__footer--spacer" aria-hidden="true"></div>
                     </div>
                     <div class="report-stat-card">
-                        <div class="stat-label">Total Revenue By Services</div>
-                        <div class="stat-value">₱<?php echo number_format($totalRevenue, 2); ?></div>
+                        <div class="report-stat-card__main">
+                            <div class="stat-label">Total Revenue By Services</div>
+                            <div class="stat-value">₱<?php echo number_format($totalRevenue, 2); ?></div>
+                        </div>
+                        <div class="report-stat-card__footer report-stat-card__footer--spacer" aria-hidden="true"></div>
                     </div>
                 </div>
 
@@ -368,10 +580,9 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
                         <label for="monthSelect">Select Month:</label>
                         <select id="monthSelect" onchange="updateChart()">
                             <?php
-                            for ($m = 1; $m <= 12; $m++) {
-                                $monthName = date('F', mktime(0, 0, 0, $m, 10));
-                                $selected = $m == date('n') ? 'selected' : '';
-                                echo "<option value='$m' $selected>$monthName</option>";
+                            foreach ($reportMonths as $rm) {
+                                $sel = ($rm['key'] === $defaultServiceMonthKey) ? 'selected' : '';
+                                echo '<option value="' . htmlspecialchars($rm['key'], ENT_QUOTES, 'UTF-8') . '" ' . $sel . '>' . htmlspecialchars($rm['label'], ENT_QUOTES, 'UTF-8') . '</option>';
                             }
                             ?>
                         </select>
@@ -410,10 +621,9 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
                                     <label for="monthlyRevenueMonthSelect">Select Month:</label>
                                     <select id="monthlyRevenueMonthSelect" onchange="updateMonthlyRevenueDetails()">
                                         <?php
-                                        for ($m = 1; $m <= 12; $m++) {
-                                            $monthName = date('F', mktime(0, 0, 0, $m, 10));
-                                            $selected = $m === $currentMonth ? 'selected' : '';
-                                            echo "<option value='$m' $selected>$monthName</option>";
+                                        foreach ($reportMonths as $rm) {
+                                            $sel = ($rm['key'] === $defaultMonthKey) ? 'selected' : '';
+                                            echo '<option value="' . htmlspecialchars($rm['key'], ENT_QUOTES, 'UTF-8') . '" ' . $sel . '>' . htmlspecialchars($rm['label'], ENT_QUOTES, 'UTF-8') . '</option>';
                                         }
                                         ?>
                                     </select>
@@ -454,7 +664,7 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
                             <i class="fas fa-chart-bar"></i>
                         </div>
                         <h3>No data available</h3>
-                        <p>No Monthly Revenue data is available for <?php echo htmlspecialchars($currentYear); ?>.</p>
+                        <p>No Monthly Revenue data is available for <?php echo htmlspecialchars($dateRangeLabel, ENT_QUOTES, 'UTF-8'); ?>.</p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -528,9 +738,12 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
             'revenues' => $monthlyRevenueRevenuesMatrix,
             'counts' => $monthlyRevenueCountsMatrix,
             'totalsByMonth' => $monthlyRevenueTotalsByMonth,
-            'hasData' => $hasMonthlyRevenueData
+            'hasData' => $hasMonthlyRevenueData,
+            'monthKeys' => array_column($reportMonths, 'key'),
         ]); ?>;
         const monthlyRevenueColorPalette = ['#4F46E5', '#22C55E', '#F59E0B', '#EF4444', '#06B6D4', '#8B5CF6', '#84CC16', '#EC4899', '#F97316', '#0EA5E9'];
+
+        const monthKeyToIndex = <?php echo json_encode($monthKeyToIndex, JSON_UNESCAPED_UNICODE); ?>;
 
         const currentYear = <?php echo json_encode($currentYear); ?>;
 
@@ -546,6 +759,11 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
             'rawDates' => $rawDates,
             'counts' => $counts
         ]); ?>;
+        const dashboardPeriodForPdfExport = <?php echo json_encode([
+            'range' => $period['range'],
+            'date_from' => $startStr,
+            'date_to' => $endStr
+        ], JSON_UNESCAPED_UNICODE); ?>;
 
         let pieChart, appointmentsChart, revenueByServicesChart, appointmentStatusChart, serviceRevenueChart, servicesAvailedChart, monthlyRevenueByServicesChart;
 
@@ -761,10 +979,13 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
         }
 
         function updateChart() {
-            const selectedMonth = document.getElementById('monthSelect').value;
-            const data = monthlyData[selectedMonth];
+            const monthSelect = document.getElementById('monthSelect');
+            const selectedKey = monthSelect ? monthSelect.value : '';
+            const data = monthlyData[selectedKey];
+            if (!data) return;
             const serviceCtx = document.getElementById('servicePieChart').getContext('2d');
             const colorGuide = document.getElementById('colorGuide');
+            const titleSuffix = monthSelect && monthSelect.selectedOptions[0] ? monthSelect.selectedOptions[0].text : '';
 
             colorGuide.innerHTML = '';
             data.labels.forEach((label, index) => {
@@ -791,7 +1012,7 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
                     plugins: {
                         title: {
                             display: true,
-                            text: `Patients per Service - ${getMonthName(selectedMonth)} <?php echo $currentYear; ?>`
+                            text: `Patients per Service - ${titleSuffix}`
                         },
                         legend: { display: false }
                     },
@@ -806,11 +1027,6 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
                     }
                 }
             });
-        }
-
-        function getMonthName(m) {
-            const d = new Date(); d.setMonth(m - 1);
-            return d.toLocaleString('default', { month: 'long' });
         }
 
         function escapeHtml(str) {
@@ -831,8 +1047,9 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
             const list = document.getElementById('monthlyRevenueServiceDetailsList');
             if (!select || !list || !monthlyRevenueByServices?.hasData) return;
 
-            const selectedMonth = parseInt(select.value, 10);
-            const monthIdx = selectedMonth - 1;
+            const selectedKey = select.value;
+            const monthIdx = monthKeyToIndex[selectedKey];
+            if (monthIdx === undefined || monthIdx < 0) return;
             const totalRevenueForMonth = monthlyRevenueByServices.totalsByMonth[monthIdx] ?? 0;
 
             const services = monthlyRevenueByServices.services;
@@ -999,186 +1216,106 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
             alert('No data available to export.');
         }
 
-        function buildReportPdfExportPayload(reportType) {
-            const filenameSlugMap = {
-                financial: 'revenue_by_services',
-                monthlyRevenue: 'monthly_revenue_by_services',
-                service: 'monthly_service_distribution',
-                appointments: 'appointments_per_day',
-                all: 'reports_all'
-            };
-
-            const filenameSlug = filenameSlugMap[reportType] ?? 'report_export';
-
-            const formatRevenue = (value) => {
-                const num = Number(value ?? 0);
-                if (Number.isNaN(num)) return 'PHP 0.00';
-                return `PHP ${num.toFixed(2)}`;
-            };
-
-            const sections = [];
-
-            // Revenue by Services
-            const serviceNames = revenueByServicesExport?.serviceNames ?? [];
-            const treatmentCountsArr = revenueByServicesExport?.treatmentCounts ?? [];
-            const serviceRevenuesArr = revenueByServicesExport?.serviceRevenues ?? [];
-            const totalRevenueVal = Number(revenueByServicesExport?.totalRevenue ?? 0);
-
-            // Monthly Revenue by Services (selected month)
-            const monthlyRevenueMonthSelect = document.getElementById('monthlyRevenueMonthSelect');
-            const selectedMonthlyRevenueMonth = monthlyRevenueMonthSelect ? parseInt(monthlyRevenueMonthSelect.value, 10) : (new Date().getMonth() + 1);
-            const monthlyRevenueMonthStr = `${currentYear}-${pad2(selectedMonthlyRevenueMonth)}`;
-            const monthIdxForMonthlyRevenue = selectedMonthlyRevenueMonth - 1;
-            const monthlyRevenueServices = monthlyRevenueByServices?.services ?? [];
-            const monthlyRevenueRevenuesMatrix = monthlyRevenueByServices?.revenues ?? [];
-
-            // Monthly Service Distribution (selected month)
-            const monthSelect = document.getElementById('monthSelect');
-            const selectedServiceMonth = monthSelect ? parseInt(monthSelect.value, 10) : (new Date().getMonth() + 1);
-            const serviceMonthStr = `${currentYear}-${pad2(selectedServiceMonth)}`;
-            const monthData = monthlyData?.[selectedServiceMonth];
-            const serviceCategoryLabels = monthData?.labels ?? [];
-            const serviceCategoryCountsArr = monthData?.counts ?? [];
-
-            // Appointments Per Day
-            const dates = appointmentsPerDayExport?.rawDates ?? [];
-            const countsArr = appointmentsPerDayExport?.counts ?? [];
-
-            const shouldAddFinancial = () => {
-                if (!serviceNames.length) return false;
-                return totalRevenueVal >= 0;
-            };
-
-            const financialSectionRows = () => {
-                return serviceNames.map((name, idx) => {
-                    const treatments = Number(treatmentCountsArr[idx] ?? 0);
-                    const revenue = Number(serviceRevenuesArr[idx] ?? 0);
-                    const pct = totalRevenueVal > 0 ? ((revenue / totalRevenueVal) * 100).toFixed(1) : '0.0';
-                    return [name, treatments, formatRevenue(revenue), `${pct}%`];
-                });
-            };
-
-            const monthlyRevenueSectionRows = () => {
-                if (!monthlyRevenueByServices?.hasData) return [];
-                if (!monthlyRevenueServices.length) return [];
-
-                return monthlyRevenueServices.map((serviceName, serviceIdx) => {
-                    const revenue = Number(monthlyRevenueRevenuesMatrix[serviceIdx]?.[monthIdxForMonthlyRevenue] ?? 0);
-                    return revenue > 0 ? [monthlyRevenueMonthStr, serviceName, formatRevenue(revenue)] : null;
-                }).filter(Boolean);
-            };
-
-            const serviceSectionRows = () => {
-                if (!serviceCategoryLabels.length) return [];
-                return serviceCategoryLabels.map((label, idx) => [serviceMonthStr, label, Number(serviceCategoryCountsArr[idx] ?? 0)]);
-            };
-
-            const appointmentsSectionRows = () => {
-                if (!dates.length) return [];
-                return dates.map((d, idx) => [d, Number(countsArr[idx] ?? 0)]);
-            };
-
-            const addSectionIfRows = (title, columns, rows) => {
-                if (!rows || !rows.length) return;
-                sections.push({ title, columns, rows });
-            };
-
-            switch (reportType) {
-                case 'financial': {
-                    if (!shouldAddFinancial()) return null;
-                    addSectionIfRows(
-                        'Revenue by Services',
-                        ['Service Name', 'Total Treatments', 'Total Revenue', 'Percentage of Total Revenue'],
-                        financialSectionRows()
-                    );
-                    break;
-                }
-                case 'monthlyRevenue': {
-                    const rows = monthlyRevenueSectionRows();
-                    addSectionIfRows(
-                        'Monthly Revenue by Services',
-                        ['Month', 'Service Name', 'Total Revenue'],
-                        rows
-                    );
-                    break;
-                }
-                case 'service': {
-                    const rows = serviceSectionRows();
-                    addSectionIfRows(
-                        'Monthly Service Distribution',
-                        ['Month', 'Service Category', 'Patients Count'],
-                        rows
-                    );
-                    break;
-                }
-                case 'appointments': {
-                    const rows = appointmentsSectionRows();
-                    addSectionIfRows(
-                        'Appointments Per Day',
-                        ['Date', 'Appointments Count'],
-                        rows
-                    );
-                    break;
-                }
-                case 'all': {
-                    if (shouldAddFinancial()) {
-                        addSectionIfRows(
-                            'Revenue by Services',
-                            ['Service Name', 'Total Treatments', 'Total Revenue', 'Percentage of Total Revenue'],
-                            financialSectionRows()
-                        );
-                    }
-                    addSectionIfRows(
-                        'Monthly Revenue by Services',
-                        ['Month', 'Service Name', 'Total Revenue'],
-                        monthlyRevenueSectionRows()
-                    );
-                    addSectionIfRows(
-                        'Monthly Service Distribution',
-                        ['Month', 'Service Category', 'Patients Count'],
-                        serviceSectionRows()
-                    );
-                    addSectionIfRows(
-                        'Appointments Per Day',
-                        ['Date', 'Appointments Count'],
-                        appointmentsSectionRows()
-                    );
-                    break;
-                }
-                default:
-                    return null;
-            }
-
-            if (!sections.length) return null;
-
-            const reportTitle =
-                reportType === 'all' ? 'Reports & Analytics (Export)' :
-                reportType === 'financial' ? 'Revenue by Services' :
-                reportType === 'monthlyRevenue' ? 'Monthly Revenue by Services' :
-                reportType === 'service' ? 'Monthly Service Distribution' :
-                reportType === 'appointments' ? 'Appointments Per Day' :
-                'Report Export';
-
-            return {
-                slug: filenameSlug,
-                reportTitle,
-                sections
-            };
+        function pdfExportTodayYmd() {
+            return getLocalDateStamp();
         }
 
-        async function exportActiveReportToPDF() {
-            const reportType = document.getElementById('reportType')?.value ?? 'all';
-            const payload = buildReportPdfExportPayload(reportType);
-            if (!payload) return showNoDataExport();
+        function initPdfCustomDateDefaults() {
+            const fromEl = document.getElementById("pdfExportDateFrom");
+            const toEl = document.getElementById("pdfExportDateTo");
+            if (!fromEl || !toEl) return;
+            const today = pdfExportTodayYmd();
+            const d = new Date();
+            d.setDate(d.getDate() - 30);
+            const pad = (n) => String(n).padStart(2, "0");
+            const defFrom = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            if (!fromEl.value) fromEl.value = defFrom;
+            if (!toEl.value) toEl.value = today;
+            fromEl.max = today;
+            toEl.max = today;
+        }
 
-            const filename = `${payload.slug}_${getLocalDateStamp()}.pdf`;
+        function syncPdfCustomPanel() {
+            const wrap = document.getElementById("pdfExportCustomWrap");
+            const customRadio = document.getElementById("pdfExportRangeCustom");
+            if (!wrap || !customRadio) return;
+            const show = customRadio.checked;
+            wrap.hidden = !show;
+            if (show) initPdfCustomDateDefaults();
+        }
+
+        function openPdfExportModal() {
+            const modal = document.getElementById("pdfExportModal");
+            if (!modal) return;
+            modal.classList.add("is-open");
+            modal.setAttribute("aria-hidden", "false");
+            syncPdfCustomPanel();
+        }
+
+        function closePdfExportModal() {
+            const modal = document.getElementById("pdfExportModal");
+            if (!modal) return;
+            modal.classList.remove("is-open");
+            modal.setAttribute("aria-hidden", "true");
+        }
+
+        function getSelectedPdfExportRange() {
+            const sel = document.querySelector('input[name="pdfExportRange"]:checked');
+            return sel ? sel.value : "1y";
+        }
+
+        function buildPdfExportPayload() {
+            // Always export using the same dashboard period to keep totals consistent.
+            const range = dashboardPeriodForPdfExport?.range || "1y";
+            if (range === "custom") {
+                return {
+                    range: "custom",
+                    date_from: dashboardPeriodForPdfExport?.date_from || "",
+                    date_to: dashboardPeriodForPdfExport?.date_to || ""
+                };
+            }
+            return { range };
+        }
+
+        async function runAppointmentPdfExport() {
+            const range = dashboardPeriodForPdfExport?.range || "1y";
+            if (range === "custom") {
+                const dateFrom = dashboardPeriodForPdfExport?.date_from || "";
+                const dateTo = dashboardPeriodForPdfExport?.date_to || "";
+                if (!dateFrom || !dateTo) {
+                    alert("Please select both start and end dates for a custom range.");
+                    return;
+                }
+                if (dateFrom > dateTo) {
+                    alert("The start date must be on or before the end date.");
+                    return;
+                }
+                const today = pdfExportTodayYmd();
+                if (dateTo > today) {
+                    alert("The end date cannot be after today.");
+                    return;
+                }
+                if (dateFrom > today) {
+                    alert("The start date cannot be in the future.");
+                    return;
+                }
+                const startMs = new Date(dateFrom + "T12:00:00").getTime();
+                const endMs = new Date(dateTo + "T12:00:00").getTime();
+                const spanDays = Math.floor((endMs - startMs) / 86400000) + 1;
+                if (spanDays > 1826) {
+                    alert("Custom range cannot exceed 5 years. Please choose a shorter period.");
+                    return;
+                }
+            }
+
+            const filename = `clinic_report_${getLocalDateStamp()}.pdf`;
 
             try {
-                const response = await fetch("../controllers/exportReportsPdf.php", {
+                const response = await fetch("../controllers/exportAppointmentReportPdf.php", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(buildPdfExportPayload())
                 });
 
                 const contentType = (response.headers.get("content-type") || "").toLowerCase();
@@ -1196,6 +1333,7 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
 
                 const blob = await response.blob();
                 downloadPDF(filename, blob);
+                closePdfExportModal();
             } catch (err) {
                 console.error(err);
                 alert("Error exporting PDF. Please try again.");
@@ -1226,9 +1364,10 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
             if (!monthlyRevenueByServices?.hasData) return showNoDataExport();
 
             const monthSelect = document.getElementById('monthlyRevenueMonthSelect');
-            const selectedMonth = monthSelect ? parseInt(monthSelect.value, 10) : (new Date().getMonth() + 1);
-            const monthStr = `${currentYear}-${pad2(selectedMonth)}`;
-            const monthIdx = selectedMonth - 1;
+            const selectedKey = monthSelect ? monthSelect.value : '';
+            const monthIdx = monthKeyToIndex[selectedKey];
+            if (monthIdx === undefined || monthIdx < 0) return showNoDataExport();
+            const monthStr = selectedKey;
 
             const services = monthlyRevenueByServices.services ?? [];
             const revenuesMatrix = monthlyRevenueByServices.revenues ?? [];
@@ -1253,15 +1392,15 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
 
         function exportMonthlyServiceDistributionCSV() {
             const monthSelect = document.getElementById('monthSelect');
-            const selectedMonth = monthSelect ? parseInt(monthSelect.value, 10) : (new Date().getMonth() + 1);
+            const selectedKey = monthSelect ? monthSelect.value : '';
 
-            const monthData = monthlyData?.[selectedMonth];
+            const monthData = monthlyData?.[selectedKey];
             const labels = monthData?.labels ?? [];
             const countsArr = monthData?.counts ?? [];
 
             if (!labels.length) return showNoDataExport();
 
-            const monthStr = `${currentYear}-${pad2(selectedMonth)}`;
+            const monthStr = selectedKey;
 
             const headers = ['Month', 'Service Category', 'Patients Count'];
             const rows = labels.map((label, idx) => [monthStr, label, Number(countsArr[idx] ?? 0)]);
@@ -1316,29 +1455,29 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
             // Monthly Revenue by Services (use currently selected month in the month dropdown)
             if (monthlyRevenueByServices?.hasData) {
                 const monthSelect = document.getElementById('monthlyRevenueMonthSelect');
-                const selectedMonth = monthSelect ? parseInt(monthSelect.value, 10) : (new Date().getMonth() + 1);
-                const monthStr = `${currentYear}-${pad2(selectedMonth)}`;
-                const monthIdx = selectedMonth - 1;
-
-                const services = monthlyRevenueByServices.services ?? [];
-                const revenuesMatrix = monthlyRevenueByServices.revenues ?? [];
-
-                services.forEach((serviceName, serviceIdx) => {
-                    const revenue = Number(revenuesMatrix[serviceIdx]?.[monthIdx] ?? 0);
-                    if (revenue > 0) {
-                        rows.push(['Monthly Revenue by Services', monthStr, '', serviceName, '', '', revenue.toFixed(2), '', '', '']);
-                    }
-                });
+                const selectedKey = monthSelect ? monthSelect.value : '';
+                const monthIdx = monthKeyToIndex[selectedKey];
+                if (monthIdx !== undefined && monthIdx >= 0) {
+                    const monthStr = selectedKey;
+                    const services = monthlyRevenueByServices.services ?? [];
+                    const revenuesMatrix = monthlyRevenueByServices.revenues ?? [];
+                    services.forEach((serviceName, serviceIdx) => {
+                        const revenue = Number(revenuesMatrix[serviceIdx]?.[monthIdx] ?? 0);
+                        if (revenue > 0) {
+                            rows.push(['Monthly Revenue by Services', monthStr, '', serviceName, '', '', revenue.toFixed(2), '', '', '']);
+                        }
+                    });
+                }
             }
 
             // Monthly Service Distribution (use currently selected month)
             const serviceMonthSelect = document.getElementById('monthSelect');
-            const serviceSelectedMonth = serviceMonthSelect ? parseInt(serviceMonthSelect.value, 10) : (new Date().getMonth() + 1);
-            const monthData = monthlyData?.[serviceSelectedMonth];
+            const serviceSelectedKey = serviceMonthSelect ? serviceMonthSelect.value : '';
+            const monthData = monthlyData?.[serviceSelectedKey];
             const labels = monthData?.labels ?? [];
             const countsArr = monthData?.counts ?? [];
             if (labels.length) {
-                const monthStr = `${currentYear}-${pad2(serviceSelectedMonth)}`;
+                const monthStr = serviceSelectedKey;
                 labels.forEach((label, idx) => {
                     rows.push(['Monthly Service Distribution', monthStr, '', '', label, '', '', '', Number(countsArr[idx] ?? 0), '']);
                 });
@@ -1432,8 +1571,30 @@ usort($monthlyRevenueCurrentMonthDetails, function ($a, $b) {
 
             const exportPdfBtn = document.getElementById('exportPdfBtn');
             if (exportPdfBtn) {
-                exportPdfBtn.addEventListener('click', exportActiveReportToPDF);
+                exportPdfBtn.addEventListener('click', openPdfExportModal);
             }
+
+            const pdfModal = document.getElementById('pdfExportModal');
+            if (pdfModal) {
+                pdfModal.querySelectorAll('[data-close-pdf-modal]').forEach((el) => {
+                    el.addEventListener('click', closePdfExportModal);
+                });
+                pdfModal.addEventListener('click', (e) => {
+                    if (e.target === pdfModal) closePdfExportModal();
+                });
+                pdfModal.querySelectorAll('input[name="pdfExportRange"]').forEach((radio) => {
+                    radio.addEventListener('change', syncPdfCustomPanel);
+                });
+            }
+
+            const pdfExportConfirmBtn = document.getElementById('pdfExportConfirmBtn');
+            if (pdfExportConfirmBtn) {
+                pdfExportConfirmBtn.addEventListener('click', runAppointmentPdfExport);
+            }
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closePdfExportModal();
+            });
         });
     </script>
 </body>

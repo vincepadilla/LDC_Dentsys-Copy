@@ -1,7 +1,492 @@
 <?php
-session_start();
-require_once(__DIR__ . "/../database/config.php");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($con) || !$con) {
+    require_once(__DIR__ . "/../database/config.php");
+}
 
+/**
+ * Braces follow-up:
+ * - On admin add: auto-create follow-up for +21..+30 days from the booked date (addAppointment.php).
+ * - On this page load: if sub_service is braces and the visit date is 21–30 days in the past and no
+ *   auto follow-up exists yet, create one (same marker + slot rules; dates never in the past).
+ * - After any successful auto follow-up insert: email the patient (reason: adjustment), when email exists.
+ * Controllers load helpers with APPOINTMENT_PHP_INCLUDE_ONLY (no HTML).
+ */
+if (!function_exists('ldcdentsy_create_braces_auto_followup_after_booking')) {
+    function ldcdentsy_braces_followup_time_map() {
+        return [
+            'firstBatch' => '8:00AM-9:00AM',
+            'secondBatch' => '9:00AM-10:00AM',
+            'thirdBatch' => '10:00AM-11:00AM',
+            'fourthBatch' => '11:00AM-12:00PM',
+            'fifthBatch' => '1:00PM-2:00PM',
+            'sixthBatch' => '2:00PM-3:00PM',
+            'sevenBatch' => '3:00PM-4:00PM',
+            'eightBatch' => '4:00PM-5:00PM',
+            'nineBatch' => '5:00PM-6:00PM',
+            'tenBatch' => '6:00PM-7:00PM',
+            'lastBatch' => '7:00PM-8:00PM',
+        ];
+    }
+
+    function ldcdentsy_generate_next_appointment_id(mysqli $con) {
+        $query = "SELECT appointment_id FROM appointments ORDER BY appointment_id DESC LIMIT 1";
+        $result = mysqli_query($con, $query);
+        if ($result && mysqli_num_rows($result) > 0) {
+            $row = mysqli_fetch_assoc($result);
+            $lastID = $row['appointment_id'];
+            $number = intval(substr($lastID, 1));
+            $newNumber = $number + 1;
+            return 'A' . str_pad((string)$newNumber, 3, '0', STR_PAD_LEFT);
+        }
+        return 'A001';
+    }
+
+    function ldcdentsy_braces_followup_slot_is_free(mysqli $con, $dateYmd, $timeSlot, $teamId) {
+        $stmt = $con->prepare("
+            SELECT appointment_id FROM appointments
+            WHERE appointment_date = ?
+              AND time_slot = ?
+              AND team_id = ?
+              AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'no-show')
+            LIMIT 1
+        ");
+        if (!$stmt) {
+            return false;
+        }
+        $stmt->bind_param('sss', $dateYmd, $timeSlot, $teamId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $busy = ($res && $res->num_rows > 0);
+        $stmt->close();
+        return !$busy;
+    }
+
+    function ldcdentsy_pick_braces_followup_schedule(
+        mysqli $con,
+        $baseDateYmd,
+        $teamId,
+        $preferredTimeSlot,
+        $earliestBookableYmd = null
+    ) {
+        $base = DateTime::createFromFormat('Y-m-d', $baseDateYmd);
+        if (!$base instanceof DateTime) {
+            return null;
+        }
+        if ($earliestBookableYmd === null || $earliestBookableYmd === '') {
+            $earliestBookableYmd = date('Y-m-d');
+        }
+        $timeMap = ldcdentsy_braces_followup_time_map();
+        $slotOrder = array_keys($timeMap);
+
+        $tryReturn = function ($dateYmd) use ($con, $teamId, $preferredTimeSlot, $timeMap, $slotOrder) {
+            $trySlots = [];
+            if ($preferredTimeSlot && isset($timeMap[$preferredTimeSlot])) {
+                $trySlots[] = $preferredTimeSlot;
+            }
+            foreach ($slotOrder as $k) {
+                if (!in_array($k, $trySlots, true)) {
+                    $trySlots[] = $k;
+                }
+            }
+            foreach ($trySlots as $slot) {
+                if (ldcdentsy_braces_followup_slot_is_free($con, $dateYmd, $slot, $teamId)) {
+                    return [
+                        'date' => $dateYmd,
+                        'time_slot' => $slot,
+                        'appointment_time' => $timeMap[$slot],
+                    ];
+                }
+            }
+            return null;
+        };
+
+        $offsets = range(21, 30);
+        shuffle($offsets);
+        foreach ($offsets as $days) {
+            $d = clone $base;
+            $d->modify('+' . (int)$days . ' days');
+            $dateYmd = $d->format('Y-m-d');
+            if ($dateYmd < $earliestBookableYmd) {
+                continue;
+            }
+            $picked = $tryReturn($dateYmd);
+            if ($picked !== null) {
+                return $picked;
+            }
+        }
+
+        $start = DateTime::createFromFormat('Y-m-d', $earliestBookableYmd);
+        if (!$start instanceof DateTime) {
+            return null;
+        }
+        for ($i = 0; $i <= 21; $i++) {
+            $d = clone $start;
+            $d->modify('+' . $i . ' days');
+            $dateYmd = $d->format('Y-m-d');
+            $picked = $tryReturn($dateYmd);
+            if ($picked !== null) {
+                return $picked;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Braces visits dated 21–30 days ago: create auto follow-up if missing (runs on appointment admin load).
+     */
+    function ldcdentsy_backfill_braces_followups_past_window(mysqli $con) {
+        $sql = "
+            SELECT a.appointment_id, a.patient_id, a.team_id, a.service_id, a.branch,
+                   DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointment_date,
+                   a.time_slot
+            FROM appointments a
+            INNER JOIN services s ON s.service_id = a.service_id
+            WHERE COALESCE(a.is_archived, 0) = 0
+              AND LOWER(TRIM(COALESCE(s.sub_service, ''))) = 'braces'
+              AND a.appointment_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+              AND a.appointment_date <= DATE_SUB(CURDATE(), INTERVAL 21 DAY)
+              AND LOWER(COALESCE(a.status, '')) NOT IN ('cancelled', 'no-show', 'archived')
+              AND (a.request_note IS NULL OR a.request_note NOT LIKE 'Auto: braces follow-up from%')
+              AND NOT EXISTS (
+                  SELECT 1 FROM appointments f
+                  WHERE f.request_note = CONCAT('Auto: braces follow-up from ', a.appointment_id)
+                  LIMIT 1
+              )
+        ";
+        $res = mysqli_query($con, $sql);
+        if (!$res) {
+            return;
+        }
+        while ($row = mysqli_fetch_assoc($res)) {
+            ldcdentsy_create_braces_auto_followup_after_booking(
+                $con,
+                $row['appointment_id'],
+                $row['appointment_date'],
+                $row['patient_id'],
+                $row['team_id'],
+                $row['service_id'],
+                $row['branch'],
+                $row['time_slot'] ?? ''
+            );
+        }
+        mysqli_free_result($res);
+    }
+
+    function ldcdentsy_braces_auto_followup_ensure_phpmailer() {
+        if (class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+            return true;
+        }
+        $candidates = [
+            __DIR__ . '/../libraries/PhpMailer/src/',
+            __DIR__ . '/../PhpMailer/src/',
+        ];
+        foreach ($candidates as $dir) {
+            if (is_file($dir . 'Exception.php')) {
+                require_once $dir . 'Exception.php';
+                require_once $dir . 'PHPMailer.php';
+                require_once $dir . 'SMTP.php';
+                return class_exists('PHPMailer\\PHPMailer\\PHPMailer');
+            }
+        }
+        error_log('Braces follow-up email: PHPMailer not found.');
+        return false;
+    }
+
+    /**
+     * Notify patient when a braces auto follow-up is created (reason: adjustment).
+     */
+    function ldcdentsy_braces_auto_followup_send_adjustment_email(
+        mysqli $con,
+        $patientId,
+        $followAppointmentId,
+        $followDateYmd,
+        $followTimeDisplay,
+        $branch,
+        $serviceId,
+        $teamId
+    ) {
+        if (!ldcdentsy_braces_auto_followup_ensure_phpmailer()) {
+            return;
+        }
+
+        $pstmt = $con->prepare('SELECT first_name, last_name, email FROM patient_information WHERE patient_id = ? LIMIT 1');
+        if (!$pstmt) {
+            return;
+        }
+        $pstmt->bind_param('s', $patientId);
+        $pstmt->execute();
+        $prow = $pstmt->get_result()->fetch_assoc();
+        $pstmt->close();
+        if (!$prow) {
+            return;
+        }
+        $to = trim((string)($prow['email'] ?? ''));
+        if ($to === '') {
+            return;
+        }
+        $patientName = trim(($prow['first_name'] ?? '') . ' ' . ($prow['last_name'] ?? ''));
+        if ($patientName === '') {
+            $patientName = 'Patient';
+        }
+
+        $serviceName = 'Braces';
+        $sstmt = $con->prepare('SELECT service_category, sub_service FROM services WHERE service_id = ? LIMIT 1');
+        if ($sstmt) {
+            $sstmt->bind_param('s', $serviceId);
+            $sstmt->execute();
+            $srow = $sstmt->get_result()->fetch_assoc();
+            $sstmt->close();
+            if ($srow) {
+                $serviceName = !empty($srow['sub_service']) ? $srow['sub_service'] : ($srow['service_category'] ?? 'Braces');
+            }
+        }
+
+        $dentistName = 'your dentist';
+        $dstmt = $con->prepare('SELECT first_name, last_name FROM multidisciplinary_dental_team WHERE team_id = ? LIMIT 1');
+        if ($dstmt) {
+            $dstmt->bind_param('s', $teamId);
+            $dstmt->execute();
+            $drow = $dstmt->get_result()->fetch_assoc();
+            $dstmt->close();
+            if ($drow) {
+                $dentistName = 'Dr. ' . trim(($drow['first_name'] ?? '') . ' ' . ($drow['last_name'] ?? ''));
+            }
+        }
+
+        $dateFormatted = date('F j, Y', strtotime($followDateYmd));
+        $branchEsc = htmlspecialchars((string)$branch, ENT_QUOTES, 'UTF-8');
+        $reasonLabel = 'adjustment';
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'mlanderodentalclinic@gmail.com';
+            $mail->Password = 'xrfp cpvv ckdv jmht';
+            $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 587;
+
+            $mail->CharSet = 'UTF-8';
+            $mail->setFrom('mlanderodentalclinic@gmail.com', 'Landero Dental Clinic');
+            $mail->addAddress($to, $patientName);
+            $mail->isHTML(true);
+            $mail->Subject = 'Braces follow-up scheduled - adjustment';
+
+            $safeName = htmlspecialchars($patientName, ENT_QUOTES, 'UTF-8');
+            $safeService = htmlspecialchars($serviceName, ENT_QUOTES, 'UTF-8');
+            $safeDentist = htmlspecialchars($dentistName, ENT_QUOTES, 'UTF-8');
+            $safeTime = htmlspecialchars((string)$followTimeDisplay, ENT_QUOTES, 'UTF-8');
+            $safeId = htmlspecialchars((string)$followAppointmentId, ENT_QUOTES, 'UTF-8');
+
+            $mail->Body = '
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #166088;">Braces follow-up appointment</h2>
+                    <p>Dear ' . $safeName . ',</p>
+                    <p>A <strong>follow-up appointment</strong> has been scheduled for your braces care.</p>
+                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 18px 0;">
+                        <p style="margin: 6px 0;"><strong>Appointment ID:</strong> ' . $safeId . '</p>
+                        <p style="margin: 6px 0;"><strong>Service:</strong> ' . $safeService . '</p>
+                        <p style="margin: 6px 0;"><strong>Dentist:</strong> ' . $safeDentist . '</p>
+                        <p style="margin: 6px 0;"><strong>Date:</strong> ' . htmlspecialchars($dateFormatted, ENT_QUOTES, 'UTF-8') . '</p>
+                        <p style="margin: 6px 0;"><strong>Time:</strong> ' . $safeTime . '</p>
+                        <p style="margin: 6px 0;"><strong>Branch:</strong> ' . $branchEsc . '</p>
+                    </div>
+                    <p><strong>Reason for follow-up:</strong> ' . htmlspecialchars($reasonLabel, ENT_QUOTES, 'UTF-8') . '</p>
+                    <p>Please check your account for details or contact the clinic if you need to reschedule.</p>
+                    <p>Thank you for choosing Landero Dental Clinic.</p>
+                </div>';
+
+            $mail->send();
+        } catch (\Throwable $e) {
+            error_log('Braces auto follow-up email failed: ' . $mail->ErrorInfo . ' / ' . $e->getMessage());
+        }
+    }
+
+    function ldcdentsy_create_braces_auto_followup_after_booking(
+        mysqli $con,
+        $primaryAppointmentId,
+        $appointmentDateYmd,
+        $patientId,
+        $teamId,
+        $serviceId,
+        $branch,
+        $preferredTimeSlot
+    ) {
+        $svcStmt = $con->prepare("SELECT LOWER(TRIM(COALESCE(sub_service, ''))) AS ss FROM services WHERE service_id = ? LIMIT 1");
+        if (!$svcStmt) {
+            return;
+        }
+        $svcStmt->bind_param('s', $serviceId);
+        $svcStmt->execute();
+        $svcRes = $svcStmt->get_result();
+        $svcRow = $svcRes ? $svcRes->fetch_assoc() : null;
+        $svcStmt->close();
+        if (!$svcRow || ($svcRow['ss'] ?? '') !== 'braces') {
+            return;
+        }
+
+        $marker = 'Auto: braces follow-up from ' . $primaryAppointmentId;
+        $dup = $con->prepare('SELECT appointment_id FROM appointments WHERE request_note = ? LIMIT 1');
+        if ($dup) {
+            $dup->bind_param('s', $marker);
+            $dup->execute();
+            $dupRes = $dup->get_result();
+            if ($dupRes && $dupRes->num_rows > 0) {
+                $dup->close();
+                return;
+            }
+            $dup->close();
+        }
+
+        $pick = ldcdentsy_pick_braces_followup_schedule($con, $appointmentDateYmd, $teamId, $preferredTimeSlot);
+        if (!$pick) {
+            error_log('Braces auto follow-up: no free slot in +21 to +30 day window for appointment ' . $primaryAppointmentId);
+            return;
+        }
+
+        $followId = ldcdentsy_generate_next_appointment_id($con);
+        $followDate = $pick['date'];
+        $followSlot = $pick['time_slot'];
+        $followTime = $pick['appointment_time'];
+        $status = 'Follow-up';
+
+        $ins = $con->prepare('
+            INSERT INTO appointments
+            (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, request_note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ');
+        if (!$ins) {
+            error_log('Braces auto follow-up: insert prepare failed: ' . $con->error);
+            return;
+        }
+        $ins->bind_param(
+            'ssssssssss',
+            $followId,
+            $patientId,
+            $teamId,
+            $serviceId,
+            $branch,
+            $followDate,
+            $followTime,
+            $followSlot,
+            $status,
+            $marker
+        );
+        if ($ins->execute()) {
+            $ins->close();
+            ldcdentsy_braces_auto_followup_send_adjustment_email(
+                $con,
+                $patientId,
+                $followId,
+                $followDate,
+                $followTime,
+                $branch,
+                $serviceId,
+                $teamId
+            );
+            return;
+        }
+        $err = $ins->error;
+        $ins->close();
+
+        if (stripos($err, 'enum') !== false || stripos($err, 'status') !== false) {
+            @mysqli_query(
+                $con,
+                "ALTER TABLE appointments MODIFY status ENUM('Pending','Confirmed','Reschedule','Complete','Cancelled','No-show','Follow-up') DEFAULT NULL"
+            );
+            $status = 'Follow-up';
+            $ins2 = $con->prepare('
+                INSERT INTO appointments
+                (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, request_note, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ');
+            if ($ins2) {
+                $ins2->bind_param(
+                    'ssssssssss',
+                    $followId,
+                    $patientId,
+                    $teamId,
+                    $serviceId,
+                    $branch,
+                    $followDate,
+                    $followTime,
+                    $followSlot,
+                    $status,
+                    $marker
+                );
+                if ($ins2->execute()) {
+                    $ins2->close();
+                    ldcdentsy_braces_auto_followup_send_adjustment_email(
+                        $con,
+                        $patientId,
+                        $followId,
+                        $followDate,
+                        $followTime,
+                        $branch,
+                        $serviceId,
+                        $teamId
+                    );
+                    return;
+                }
+                $ins2->close();
+            }
+        }
+
+        $statusPending = 'Pending';
+        $ins3 = $con->prepare('
+            INSERT INTO appointments
+            (appointment_id, patient_id, team_id, service_id, branch, appointment_date, appointment_time, time_slot, status, request_note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ');
+        if ($ins3) {
+            $ins3->bind_param(
+                'ssssssssss',
+                $followId,
+                $patientId,
+                $teamId,
+                $serviceId,
+                $branch,
+                $followDate,
+                $followTime,
+                $followSlot,
+                $statusPending,
+                $marker
+            );
+            if ($ins3->execute()) {
+                ldcdentsy_braces_auto_followup_send_adjustment_email(
+                    $con,
+                    $patientId,
+                    $followId,
+                    $followDate,
+                    $followTime,
+                    $branch,
+                    $serviceId,
+                    $teamId
+                );
+            } else {
+                error_log('Braces auto follow-up: fallback insert failed: ' . $ins3->error);
+            }
+            $ins3->close();
+        }
+    }
+}
+
+if (!defined('APPOINTMENT_PHP_INCLUDE_ONLY')) {
+
+$autoUpdateSql = "UPDATE appointments
+                  SET status = 'Take-Action'
+                  WHERE LOWER(COALESCE(status, '')) = 'pending'
+                    AND appointment_date < CURDATE()
+                    AND COALESCE(is_archived, 0) = 0";
+mysqli_query($con, $autoUpdateSql);
+
+if (function_exists('ldcdentsy_backfill_braces_followups_past_window')) {
+    ldcdentsy_backfill_braces_followups_past_window($con);
+}
 
 $sql = "SELECT a.appointment_id, p.patient_id, p.first_name, p.last_name, s.service_category, s.sub_service,
                d.first_name as dentist_first, d.last_name as dentist_last,
@@ -11,7 +496,15 @@ $sql = "SELECT a.appointment_id, p.patient_id, p.first_name, p.last_name, s.serv
         LEFT JOIN services s ON a.service_id = s.service_id
         LEFT JOIN multidisciplinary_dental_team d ON a.team_id = d.team_id
         WHERE COALESCE(a.is_archived, 0) = 0 AND LOWER(COALESCE(a.status, '')) != 'archived'
-        ORDER BY a.appointment_date ASC";
+        ORDER BY 
+            CASE LOWER(COALESCE(a.status, ''))
+                WHEN 'pending' THEN 1
+                WHEN 'confirmed' THEN 2
+                WHEN 'completed' THEN 3
+                ELSE 4
+            END,
+            a.appointment_date ASC,
+            a.appointment_time ASC";
 $result = mysqli_query($con, $sql);
 
 // Get all services for follow-up modal
@@ -110,8 +603,6 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
             <i class="fas fa-arrow-left"></i> Back to Admin
         </a>
         <h2><i class="fas fa-calendar-alt"></i> APPOINTMENT MANAGEMENT</h2>
-        <p style="color: #6b7280; margin-bottom: 30px;">Manage patient appointments, confirm, reschedule, cancel, and mark as completed.</p>
-        
         <!-- Action Buttons -->
         <div class="action-buttons-container" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 30px;">
             <button class="btn btn-primary" onclick="openAddAppointmentModal()">
@@ -3207,3 +3698,5 @@ if ($dentistsResult && mysqli_num_rows($dentistsResult) > 0) {
 
 </body>
 </html>
+<?php
+}

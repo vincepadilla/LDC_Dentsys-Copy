@@ -753,6 +753,90 @@ if ($servicesRes && mysqli_num_rows($servicesRes) > 0) {
             }
         }
 
+        .table-footer-muted {
+            color: #9ca3af;
+            font-weight: 400;
+        }
+
+        /* Walk-in pagination (5 per page, max 3 page numbers) */
+        .walkin-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            gap: 10px 14px;
+            padding: 14px 8px 6px;
+            margin-top: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .walkin-page-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 36px;
+            padding: 0 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border-soft);
+            background: var(--bg-surface);
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .walkin-page-btn:hover:not(:disabled) {
+            background: var(--accent-soft);
+            border-color: #bfdbfe;
+            color: var(--accent);
+        }
+
+        .walkin-page-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .walkin-page-numbers {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .walkin-page-num {
+            min-width: 36px;
+            height: 36px;
+            padding: 0 8px;
+            border-radius: 8px;
+            border: 1px solid var(--border-soft);
+            background: var(--bg-surface);
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .walkin-page-num:hover {
+            background: #f9fafb;
+            border-color: #d1d5db;
+        }
+
+        .walkin-page-num.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            cursor: default;
+        }
+
+        .walkin-pagination.is-hidden {
+            display: none;
+        }
+
         @media (min-width: 1025px) {
             /* Desktop - show table, hide cards */
             .mobile-card-view {
@@ -1379,13 +1463,20 @@ if ($servicesRes && mysqli_num_rows($servicesRes) > 0) {
                 </tbody>
             </table>
         </div>
+        <div class="walkin-pagination<?php echo $totalRecords > 0 ? '' : ' is-hidden'; ?>" id="walkin-pagination" aria-label="Walk-in records pagination">
+            <button type="button" class="walkin-page-btn" id="walkin-page-prev" disabled>Previous</button>
+            <div class="walkin-page-numbers" id="walkin-page-numbers" role="group"></div>
+            <button type="button" class="walkin-page-btn" id="walkin-page-next" disabled>Next</button>
+        </div>
+
         <div class="table-footer">
             <div class="table-footer-left">
                 <span class="table-footer-label">Showing</span>
-                <span id="records-visible-count"><?php echo (int)$totalRecords; ?></span>
+                <span id="records-range"><?php echo (int)$totalRecords > 0 ? '1–' . min(5, (int)$totalRecords) : '0'; ?></span>
                 <span>of</span>
-                <span id="records-total-count"><?php echo (int)$totalRecords; ?></span>
-                <span>records</span>
+                <span id="records-filtered-count"><?php echo (int)$totalRecords; ?></span>
+                <span>matching</span>
+                <span class="table-footer-muted">(</span><span id="records-total-count"><?php echo (int)$totalRecords; ?></span><span class="table-footer-muted"> total in database)</span>
             </div>
             <div class="table-footer-right">
                 <span class="table-footer-label">Last updated:</span>
@@ -1859,107 +1950,252 @@ if ($servicesRes && mysqli_num_rows($servicesRes) > 0) {
         }
     }
 
-    // Filter Walk-in Records
-    function filterWalkinRecords() {
+    const WALKIN_DB_TOTAL = <?php echo (int)$totalRecords; ?>;
+    const WALKIN_PAGE_SIZE = 5;
+    const WALKIN_MAX_PAGE_BUTTONS = 3;
+    let walkinCurrentPage = 1;
+    let walkinLastFilterKey = '';
+
+    function getWalkinFilterKey() {
         const searchInput = document.getElementById('search-walkin');
         const branchFilter = document.getElementById('filter-branch');
-        
-        const searchTerm = searchInput.value.toLowerCase().trim();
-        const selectedBranch = branchFilter.value;
-        
-        // Get all rows (both table and cards)
-        const tableRows = document.querySelectorAll('#walkin-table tbody .walkin-row');
-        const cardRows = document.querySelectorAll('.mobile-card-view .walkin-card');
-        const visibleCountEl = document.getElementById('records-visible-count');
-        const totalCountEl = document.getElementById('records-total-count');
-        
-        let visibleCount = 0;
-        
-        // Filter table rows
-        tableRows.forEach(row => {
-            const branch = row.getAttribute('data-branch') || '';
-            const searchData = row.getAttribute('data-search') || '';
-            
-            const matchesBranch = !selectedBranch || branch === selectedBranch;
-            const matchesSearch = !searchTerm || searchData.includes(searchTerm);
-            
-            if (matchesBranch && matchesSearch) {
-                row.style.display = '';
-                visibleCount++;
+        const searchTerm = (searchInput && searchInput.value ? searchInput.value : '').toLowerCase().trim();
+        const selectedBranch = branchFilter ? branchFilter.value : '';
+        return searchTerm + '\n' + selectedBranch;
+    }
+
+    function rowMatchesWalkinFilters(row, searchTerm, selectedBranch) {
+        const branch = row.getAttribute('data-branch') || '';
+        const searchData = row.getAttribute('data-search') || '';
+        const matchesBranch = !selectedBranch || branch === selectedBranch;
+        const matchesSearch = !searchTerm || searchData.includes(searchTerm);
+        return matchesBranch && matchesSearch;
+    }
+
+    function walkinPageNumberWindow(current, total) {
+        const m = WALKIN_MAX_PAGE_BUTTONS;
+        if (total <= m) {
+            return Array.from({ length: total }, (_, i) => i + 1);
+        }
+        let start = current - Math.floor(m / 2);
+        if (start < 1) start = 1;
+        if (start + m - 1 > total) start = total - m + 1;
+        return Array.from({ length: m }, (_, i) => start + i);
+    }
+
+    function renderWalkinPaginationControls(totalMatched) {
+        const wrap = document.getElementById('walkin-pagination');
+        const prevBtn = document.getElementById('walkin-page-prev');
+        const nextBtn = document.getElementById('walkin-page-next');
+        const numsEl = document.getElementById('walkin-page-numbers');
+        if (!wrap || !prevBtn || !nextBtn || !numsEl) return;
+
+        if (WALKIN_DB_TOTAL <= 0) {
+            wrap.classList.add('is-hidden');
+            return;
+        }
+        wrap.classList.remove('is-hidden');
+
+        const totalPages = totalMatched > 0 ? Math.ceil(totalMatched / WALKIN_PAGE_SIZE) : 0;
+        if (totalPages === 0) {
+            walkinCurrentPage = 1;
+            prevBtn.disabled = true;
+            nextBtn.disabled = true;
+            numsEl.innerHTML = '';
+            return;
+        }
+        if (walkinCurrentPage > totalPages) walkinCurrentPage = totalPages;
+        if (walkinCurrentPage < 1) walkinCurrentPage = 1;
+
+        prevBtn.disabled = walkinCurrentPage <= 1;
+        nextBtn.disabled = walkinCurrentPage >= totalPages;
+
+        numsEl.innerHTML = '';
+        const pagesToShow = walkinPageNumberWindow(walkinCurrentPage, totalPages);
+        pagesToShow.forEach((p) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'walkin-page-num' + (p === walkinCurrentPage ? ' active' : '');
+            btn.textContent = String(p);
+            btn.setAttribute('aria-label', 'Page ' + p);
+            if (p !== walkinCurrentPage) {
+                btn.addEventListener('click', () => {
+                    walkinCurrentPage = p;
+                    syncWalkinListDisplay();
+                });
+            }
+            numsEl.appendChild(btn);
+        });
+    }
+
+    function goWalkinPrevPage() {
+        if (walkinCurrentPage > 1) {
+            walkinCurrentPage--;
+            syncWalkinListDisplay();
+        }
+    }
+
+    function goWalkinNextPage() {
+        const searchInput = document.getElementById('search-walkin');
+        const branchFilter = document.getElementById('filter-branch');
+        const searchTerm = (searchInput && searchInput.value ? searchInput.value : '').toLowerCase().trim();
+        const selectedBranch = branchFilter ? branchFilter.value : '';
+        const tableRows = Array.from(document.querySelectorAll('#walkin-table tbody tr.walkin-row'));
+        let totalMatched = 0;
+        tableRows.forEach((row) => {
+            if (rowMatchesWalkinFilters(row, searchTerm, selectedBranch)) totalMatched++;
+        });
+        const totalPages = totalMatched > 0 ? Math.ceil(totalMatched / WALKIN_PAGE_SIZE) : 0;
+        if (totalPages > 0 && walkinCurrentPage < totalPages) {
+            walkinCurrentPage++;
+            syncWalkinListDisplay();
+        }
+    }
+
+    function updateWalkinFooter(totalMatched, startIdx, countOnPage) {
+        const rangeEl = document.getElementById('records-range');
+        const filteredEl = document.getElementById('records-filtered-count');
+        const dbEl = document.getElementById('records-total-count');
+        if (filteredEl) filteredEl.textContent = String(totalMatched);
+        if (dbEl) dbEl.textContent = String(WALKIN_DB_TOTAL);
+        if (rangeEl) {
+            if (totalMatched === 0) {
+                rangeEl.textContent = '0';
             } else {
-                row.style.display = 'none';
+                const from = startIdx + 1;
+                const to = startIdx + countOnPage;
+                rangeEl.textContent = from + '–' + to;
+            }
+        }
+    }
+
+    /**
+     * Applies search/branch filters, paginates (5 per page), and syncs table + cards + footer.
+     */
+    function syncWalkinListDisplay() {
+        const searchInput = document.getElementById('search-walkin');
+        const branchFilter = document.getElementById('filter-branch');
+        const searchTerm = (searchInput && searchInput.value ? searchInput.value : '').toLowerCase().trim();
+        const selectedBranch = branchFilter ? branchFilter.value : '';
+
+        const filterKey = getWalkinFilterKey();
+        if (filterKey !== walkinLastFilterKey) {
+            walkinCurrentPage = 1;
+            walkinLastFilterKey = filterKey;
+        }
+
+        const tableRows = Array.from(document.querySelectorAll('#walkin-table tbody tr.walkin-row'));
+        const cardRows = Array.from(document.querySelectorAll('.mobile-card-view .walkin-card.walkin-row'));
+
+        const matchedIndices = [];
+        tableRows.forEach((row, idx) => {
+            if (rowMatchesWalkinFilters(row, searchTerm, selectedBranch)) {
+                matchedIndices.push(idx);
             }
         });
-        
-        // Filter card rows
-        cardRows.forEach(card => {
-            const branch = card.getAttribute('data-branch') || '';
-            const searchData = card.getAttribute('data-search') || '';
-            
-            const matchesBranch = !selectedBranch || branch === selectedBranch;
-            const matchesSearch = !searchTerm || searchData.includes(searchTerm);
-            
-            if (matchesBranch && matchesSearch) {
-                card.style.display = '';
-                visibleCount++;
-            } else {
-                card.style.display = 'none';
-            }
-        });
-        
-        // Show empty state if no results
-        const emptyStateTable = document.querySelector('#walkin-table tbody .empty-state');
+
+        const totalMatched = matchedIndices.length;
+        const matchedSet = new Set(matchedIndices);
+        const totalPages = totalMatched > 0 ? Math.ceil(totalMatched / WALKIN_PAGE_SIZE) : 1;
+        if (walkinCurrentPage > totalPages) walkinCurrentPage = totalPages;
+        if (walkinCurrentPage < 1) walkinCurrentPage = 1;
+
+        const startRank = (walkinCurrentPage - 1) * WALKIN_PAGE_SIZE;
+        const pageSlice = matchedIndices.slice(startRank, startRank + WALKIN_PAGE_SIZE);
+        const pageIndexSet = new Set(pageSlice);
+
+        const emptyStateTableRow = document.querySelector('#walkin-table tbody td.empty-state')?.closest('tr');
         const emptyStateCard = document.querySelector('.mobile-card-view .empty-state');
-        
-        if (visibleCount === 0) {
-            // Hide all rows first
-            tableRows.forEach(row => row.style.display = 'none');
-            cardRows.forEach(card => card.style.display = 'none');
-            
-            // Show empty state in table if it exists
-            if (emptyStateTable) {
-                emptyStateTable.style.display = '';
-            } else if (tableRows.length > 0) {
-                // Create empty state row if it doesn't exist
-                const tbody = document.querySelector('#walkin-table tbody');
-                if (tbody && !tbody.querySelector('.empty-state')) {
-                    const emptyRow = document.createElement('tr');
-                    emptyRow.className = 'empty-state';
-                    emptyRow.innerHTML = `
-                        <td colspan="8" style="text-align: center; padding: 60px 20px; color: #6B7280;">
+
+        if (totalMatched === 0) {
+            tableRows.forEach((row) => {
+                row.style.display = 'none';
+            });
+            cardRows.forEach((card) => {
+                card.style.display = 'none';
+            });
+
+            if (tableRows.length > 0) {
+                if (emptyStateTableRow) {
+                    emptyStateTableRow.style.display = '';
+                } else {
+                    const tbody = document.querySelector('#walkin-table tbody');
+                    if (tbody && !tbody.querySelector('td.empty-state')) {
+                        const emptyRow = document.createElement('tr');
+                        emptyRow.className = 'walkin-filter-empty-row';
+                        emptyRow.innerHTML = `
+                        <td colspan="8" class="empty-state" style="text-align: center; padding: 60px 20px; color: #6B7280;">
                             <i class="fas fa-clipboard-list" style="font-size: 64px; margin-bottom: 20px; opacity: 0.4; color: #9CA3AF;"></i>
                             <p style="font-size: 16px; font-weight: 500; margin: 0;">No walk-in records found matching your search</p>
                         </td>
                     `;
-                    tbody.appendChild(emptyRow);
+                        tbody.appendChild(emptyRow);
+                    }
                 }
+            } else if (emptyStateTableRow) {
+                emptyStateTableRow.style.display = '';
             }
-            
-            // Show empty state in cards if it exists
-            if (emptyStateCard) {
-                emptyStateCard.style.display = 'block';
-            } else if (cardRows.length > 0) {
-                // Create empty state card if it doesn't exist
-                const cardContainer = document.querySelector('.mobile-card-view');
-                if (cardContainer && !cardContainer.querySelector('.empty-state')) {
-                    const emptyCard = document.createElement('div');
-                    emptyCard.className = 'empty-state';
-                    emptyCard.innerHTML = `
+
+            if (cardRows.length > 0) {
+                if (emptyStateCard) {
+                    emptyStateCard.style.display = 'block';
+                } else {
+                    const cardContainer = document.querySelector('.mobile-card-view');
+                    if (cardContainer && !cardContainer.querySelector('.empty-state')) {
+                        const emptyCard = document.createElement('div');
+                        emptyCard.className = 'empty-state';
+                        emptyCard.innerHTML = `
                         <i class="fas fa-clipboard-list"></i>
                         <p>No walk-in records found matching your search</p>
                     `;
-                    cardContainer.appendChild(emptyCard);
+                        cardContainer.appendChild(emptyCard);
+                    }
                 }
+            } else if (emptyStateCard) {
+                emptyStateCard.style.display = 'block';
             }
-        } else {
-            // Hide empty states if results are found
-            if (emptyStateTable) {
-                emptyStateTable.style.display = 'none';
-            }
-            if (emptyStateCard) {
-                emptyStateCard.style.display = 'none';
-            }
+
+            updateWalkinFooter(0, 0, 0);
+            renderWalkinPaginationControls(0);
+            return;
         }
+
+        if (emptyStateTableRow) {
+            emptyStateTableRow.style.display = 'none';
+        }
+        document.querySelectorAll('#walkin-table tbody tr.walkin-filter-empty-row').forEach((r) => {
+            r.style.display = 'none';
+        });
+        if (emptyStateCard) {
+            emptyStateCard.style.display = 'none';
+        }
+
+        tableRows.forEach((row, idx) => {
+            if (!matchedSet.has(idx)) {
+                row.style.display = 'none';
+            } else if (!pageIndexSet.has(idx)) {
+                row.style.display = 'none';
+            } else {
+                row.style.display = '';
+            }
+        });
+
+        cardRows.forEach((card, idx) => {
+            if (!matchedSet.has(idx)) {
+                card.style.display = 'none';
+            } else if (!pageIndexSet.has(idx)) {
+                card.style.display = 'none';
+            } else {
+                card.style.display = '';
+            }
+        });
+
+        updateWalkinFooter(totalMatched, startRank, pageSlice.length);
+        renderWalkinPaginationControls(totalMatched);
+    }
+
+    function filterWalkinRecords() {
+        syncWalkinListDisplay();
     }
     
     // Event listeners for modal
@@ -1984,13 +2220,11 @@ if ($servicesRes && mysqli_num_rows($servicesRes) > 0) {
             });
         }
 
-        // Initialize footer counts on load
-        const initialVisibleCountEl = document.getElementById('records-visible-count');
-        const totalCountEl = document.getElementById('records-total-count');
-        if (initialVisibleCountEl && totalCountEl) {
-            // On initial load, visible count equals total records
-            initialVisibleCountEl.textContent = totalCountEl.textContent;
-        }
+        document.getElementById('walkin-page-prev')?.addEventListener('click', goWalkinPrevPage);
+        document.getElementById('walkin-page-next')?.addEventListener('click', goWalkinNextPage);
+
+        walkinLastFilterKey = '';
+        syncWalkinListDisplay();
     });
 </script>
 <script>
